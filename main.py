@@ -2,24 +2,28 @@ import pygame
 import sys
 import random
 import os
+import math
+import copy
 
-# --- Constants ---
-SCREEN_WIDTH = 800
-SCREEN_HEIGHT = 850
-BOARD_SIZE = 800
-SQUARE_SIZE = BOARD_SIZE // 8
+# --- Defaults ---
+DEFAULT_WIDTH = 950
+DEFAULT_HEIGHT = 650
 FPS = 60
 
-# Colors
+# --- COLORS ---
 WHITE_COLOR = (235, 236, 208)
 BLACK_SQ_COLOR = (119, 149, 86)
-HIGHLIGHT = (186, 202, 68)
+HIGHLIGHT = (186, 202, 68)  # Selection Green
+LAST_MOVE_COLOR = (245, 235, 110, 160)
 VALID_MOVE = (100, 200, 100, 150)
 TEXT_COLOR = (20, 20, 20)
-BG_COLOR = (240, 240, 240)
+BG_COLOR = (40, 44, 52)
+BOARD_BG_COLOR = (240, 240, 240)
+PANEL_BG_COLOR = (50, 53, 60)
 BUTTON_COLOR = (70, 130, 180)
 BUTTON_HOVER = (100, 149, 237)
 MENU_BG = (40, 44, 52)
+ACTIVE_MOVE_BG = (80, 85, 95)
 
 # Unicode Fallback
 UNICODE_PIECES = {
@@ -40,79 +44,149 @@ class Piece:
 class DuckChess:
     def __init__(self):
         pygame.init()
-        self.screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
-        pygame.display.set_caption("Duck Chess: Resized Duck")
+        self.screen = pygame.display.set_mode((DEFAULT_WIDTH, DEFAULT_HEIGHT), pygame.RESIZABLE)
+        pygame.display.set_caption("Duck Chess: Highlights Edition")
         self.clock = pygame.time.Clock()
 
-        self.font_large = pygame.font.SysFont("Segoe UI Symbol", int(SQUARE_SIZE * 0.8), bold=True)
-        self.font_ui = pygame.font.SysFont("Arial", 20)
-        self.font_menu = pygame.font.SysFont("Arial", 40, bold=True)
+        # Game State
+        self.game_mode = None
+        self.player_side = 'w'
+        self.state = 'menu'
 
-        self.restart_btn_rect = pygame.Rect(650, 810, 130, 30)
-        self.menu_btn_rect = pygame.Rect(500, 810, 130, 30)
+        # Layout Variables
+        self.sq_size = 0
+        self.board_x = 0
+        self.board_y = 0
+        self.ui_height = 60
+        self.panel_width = 300
 
-        # Game Config
-        self.game_mode = None  # 'white_ai', 'black_ai', 'pvp'
-        self.player_side = 'w'  # Perspective
-        self.state = 'menu'  # 'menu' or 'game'
+        # Nav Buttons
+        self.nav_btns = {
+            'start': pygame.Rect(0, 0, 0, 0),
+            'prev': pygame.Rect(0, 0, 0, 0),
+            'next': pygame.Rect(0, 0, 0, 0),
+            'end': pygame.Rect(0, 0, 0, 0)
+        }
 
-        # --- LOAD ASSETS ---
-        self.images = {}
+        # Menu Buttons
+        self.menu_btn_rect = pygame.Rect(0, 0, 0, 0)
+        self.flip_btn_rect = pygame.Rect(0, 0, 0, 0)
+        self.restart_btn_rect = pygame.Rect(0, 0, 0, 0)
+
+        # Assets
+        self.original_images = {}
+        self.scaled_images = {}
         self.load_assets()
 
-        # Initialize empty state
+        # History
+        self.move_log = []
+        self.current_move_str = ""
+        self.turn_number = 1
+
+        # Snapshot History
+        self.history = []
+        self.view_index = -1
+
+        self.resize_layout(DEFAULT_WIDTH, DEFAULT_HEIGHT)
         self.reset_game_state()
 
     def load_assets(self):
-        """Loads the spritesheet for pieces and the individual duck image."""
-        # 1. Load Pieces Spritesheet
         filename = "assets/pieces.png"
         if os.path.exists(filename):
             try:
                 sheet = pygame.image.load(filename).convert_alpha()
-                sheet_width, sheet_height = sheet.get_size()
+                w, h = sheet.get_size()
                 cols, rows = 6, 2
-                sprite_w = sheet_width // cols
-                sprite_h = sheet_height // rows
+                sw, sh = w // cols, h // rows
                 piece_order = [QUEEN, KING, ROOK, KNIGHT, BISHOP, PAWN]
-                row_map = {0: 'b', 1: 'w'}  # Top row black, bottom white
-
+                row_map = {0: 'b', 1: 'w'}
                 for row in range(rows):
                     color = row_map[row]
                     for col in range(cols):
-                        rect = pygame.Rect(col * sprite_w, row * sprite_h, sprite_w, sprite_h)
-                        image = sheet.subsurface(rect)
-                        image = pygame.transform.smoothscale(image, (SQUARE_SIZE, SQUARE_SIZE))
-                        self.images[f"{color}{piece_order[col]}"] = image
-            except pygame.error as e:
-                print(f"Error loading pieces.png: {e}")
-        else:
-            print(f"Sprite sheet not found at {filename}. Using text fallback for pieces.")
+                        rect = pygame.Rect(col * sw, row * sh, sw, sh)
+                        self.original_images[f"{color}{piece_order[col]}"] = sheet.subsurface(rect)
+            except Exception as e:
+                print(f"Error loading pieces: {e}")
 
-        # 2. Load Duck Image
         duck_file = "assets/duck.png"
         if os.path.exists(duck_file):
             try:
-                img = pygame.image.load(duck_file).convert_alpha()
-                # Scale duck to 80% of square size for a better fit
-                duck_size = int(SQUARE_SIZE * 0.8)
-                img = pygame.transform.smoothscale(img, (duck_size, duck_size))
-                self.images['duck'] = img
-            except pygame.error as e:
-                print(f"Error loading duck.png: {e}")
-        else:
-            print(f"Duck image not found at {duck_file}. Using procedural fallback.")
+                self.original_images['duck'] = pygame.image.load(duck_file).convert_alpha()
+            except:
+                pass
+
+    def resize_layout(self, w, h):
+        self.screen_w = w
+        self.screen_h = h
+
+        available_w = w - self.panel_width
+        available_h = h - self.ui_height
+        board_dim = min(available_w, available_h)
+        self.sq_size = board_dim // 8
+
+        self.board_x = (available_w - (self.sq_size * 8)) // 2
+        self.board_y = (available_h - (self.sq_size * 8)) // 2
+
+        # Fonts
+        self.font_large = pygame.font.SysFont("Segoe UI Symbol", int(self.sq_size * 0.8), bold=True)
+        self.font_ui = pygame.font.SysFont("Arial", 16)
+        self.font_history = pygame.font.SysFont("Consolas", 15)
+        self.font_nav = pygame.font.SysFont("Arial", 20, bold=True)
+        self.font_menu = pygame.font.SysFont("Arial", 30, bold=True)
+
+        # Scale Images
+        self.scaled_images = {}
+        for key, img in self.original_images.items():
+            if key == 'duck':
+                sz = int(self.sq_size * 0.8)
+                self.scaled_images[key] = pygame.transform.smoothscale(img, (sz, sz))
+            else:
+                self.scaled_images[key] = pygame.transform.smoothscale(img, (self.sq_size, self.sq_size))
+
+        # Position Navigation Buttons
+        panel_x = w - self.panel_width
+        btn_w = self.panel_width // 4 - 10
+        btn_h = 40
+        btn_y = h - 60
+
+        self.nav_btns['start'] = pygame.Rect(panel_x + 5, btn_y, btn_w, btn_h)
+        self.nav_btns['prev'] = pygame.Rect(panel_x + 5 + btn_w + 10, btn_y, btn_w, btn_h)
+        self.nav_btns['next'] = pygame.Rect(panel_x + 5 + (btn_w + 10) * 2, btn_y, btn_w, btn_h)
+        self.nav_btns['end'] = pygame.Rect(panel_x + 5 + (btn_w + 10) * 3, btn_y, btn_w, btn_h)
+
+    def save_snapshot(self):
+        # We need to save prev_duck_pos in snapshot to visualize history correctly later if desired
+        snapshot = {
+            'board': copy.deepcopy(self.board),
+            'duck_pos': self.duck_pos,
+            'prev_duck': self.prev_duck_pos,
+            'last_move': self.last_move_arrow,  # reusing this variable name for piece move coords
+            'log': list(self.move_log)
+        }
+        self.history.append(snapshot)
+        self.view_index = len(self.history) - 1
 
     def reset_game_state(self):
         self.board = [[None for _ in range(8)] for _ in range(8)]
         self.init_board()
         self.duck_pos = (-1, -1)
+        self.prev_duck_pos = (-1, -1)
         self.turn = 'w'
         self.phase = 'move_piece'
         self.selected_square = None
         self.valid_moves = []
         self.game_over = False
         self.winner = None
+        self.en_passant_target = None
+        self.waiting_for_ai = False
+
+        self.move_log = []
+        self.last_move_arrow = None  # Stores ((start_r, c), (end_r, c))
+        self.turn_number = 1
+        self.current_move_str = ""
+
+        self.history = []
+        self.save_snapshot()
 
     def init_board(self):
         setup = [
@@ -122,43 +196,28 @@ class DuckChess:
             (ROOK, 7, 7)
         ]
         for p_type, r, c in setup:
-            color = 'b' if r == 0 else 'w'
-            self.board[r][c] = Piece(color, p_type)
+            self.board[r][c] = Piece('b' if r == 0 else 'w', p_type)
         for c in range(8):
             self.board[1][c] = Piece('b', PAWN)
             self.board[6][c] = Piece('w', PAWN)
 
-    # --- Coordinate Transformation ---
-    def get_screen_pos(self, r, c):
-        """Converts board coords (r,c) to screen coords (x,y) based on player perspective."""
-        if self.player_side == 'b':
-            # Flip board: Row 0 is bottom, Col 0 is right
-            draw_r = 7 - r
-            draw_c = 7 - c
-        else:
-            # Standard White perspective
-            draw_r = r
-            draw_c = c
-        return draw_c * SQUARE_SIZE, draw_r * SQUARE_SIZE
+    def get_notation_coords(self, r, c):
+        cols = 'abcdefgh'
+        rows = '87654321'
+        return f"{cols[c]}{rows[r]}"
 
-    def get_board_pos(self, x, y):
-        """Converts screen coords (x,y) to board coords (r,c) based on player perspective."""
-        col = x // SQUARE_SIZE
-        row = y // SQUARE_SIZE
-        if self.player_side == 'b':
-            return 7 - row, 7 - col
-        return row, col
-
-    # --- Game Logic ---
+    # --- Logic ---
     def get_piece_legal_moves(self, r, c):
         piece = self.board[r][c]
         if not piece: return []
         moves = []
 
-        # Castling
+        def is_valid(nr, nc):
+            return 0 <= nr < 8 and 0 <= nc < 8
+
         if piece.type == KING and not piece.has_moved:
-            if self.can_castle(r, c, is_kingside=True): moves.append((r, 6))
-            if self.can_castle(r, c, is_kingside=False): moves.append((r, 2))
+            if self.can_castle(r, c, True): moves.append((r, 6))
+            if self.can_castle(r, c, False): moves.append((r, 2))
 
         directions = []
         if piece.type in [KING, QUEEN]:
@@ -170,32 +229,33 @@ class DuckChess:
         elif piece.type == KNIGHT:
             for dr, dc in [(2, 1), (2, -1), (-2, 1), (-2, -1), (1, 2), (1, -2), (-1, 2), (-1, -2)]:
                 nr, nc = r + dr, c + dc
-                if 0 <= nr < 8 and 0 <= nc < 8 and (nr, nc) != self.duck_pos:
+                if is_valid(nr, nc) and (nr, nc) != self.duck_pos:
                     target = self.board[nr][nc]
                     if target is None or target.color != piece.color: moves.append((nr, nc))
             return moves
         elif piece.type == PAWN:
             d = -1 if piece.color == 'w' else 1
-            if 0 <= r + d < 8 and not self.board[r + d][c] and (r + d, c) != self.duck_pos:
+            if is_valid(r + d, c) and not self.board[r + d][c] and (r + d, c) != self.duck_pos:
                 moves.append((r + d, c))
-                start_row = 6 if piece.color == 'w' else 1
-                if r == start_row and not self.board[r + d * 2][c] and (r + d * 2, c) != self.duck_pos:
+                start = 6 if piece.color == 'w' else 1
+                if r == start and is_valid(r + d * 2, c) and not self.board[r + d * 2][c] and (
+                r + d * 2, c) != self.duck_pos:
                     moves.append((r + d * 2, c))
             for dc in [-1, 1]:
-                nr, nc = r + d, c + dc
-                if 0 <= nr < 8 and 0 <= nc < 8:
-                    target = self.board[nr][nc]
-                    if target and target.color != piece.color and (nr, nc) != self.duck_pos:
-                        moves.append((nr, nc))
+                if is_valid(r + d, c + dc):
+                    target = self.board[r + d][c + dc]
+                    if target and target.color != piece.color and (r + d, c + dc) != self.duck_pos:
+                        moves.append((r + d, c + dc))
+                    elif target is None and (r + d, c + dc) == self.en_passant_target and (
+                    r + d, c + dc) != self.duck_pos:
+                        moves.append((r + d, c + dc))
             return moves
 
-        # Sliding Pieces
         max_dist = 1 if piece.type == KING else 8
         for dr, dc in directions:
             for dist in range(1, max_dist + 1):
                 nr, nc = r + dr * dist, c + dc * dist
-                if not (0 <= nr < 8 and 0 <= nc < 8): break
-                if (nr, nc) == self.duck_pos: break
+                if not is_valid(nr, nc) or (nr, nc) == self.duck_pos: break
                 target = self.board[nr][nc]
                 if target is None:
                     moves.append((nr, nc))
@@ -219,9 +279,25 @@ class DuckChess:
         piece = self.board[sr][sc]
         target = self.board[er][ec]
 
+        # Notation
+        piece_char = "" if piece.type == PAWN else piece.type
+        capture_char = "x" if (target or (piece.type == PAWN and sc != ec)) else ""
+        dest_str = self.get_notation_coords(er, ec)
+        if piece.type == PAWN and capture_char == "x": piece_char = self.get_notation_coords(sr, sc)[0]
+        self.current_move_str = f"{piece_char}{capture_char}{dest_str}"
+        self.last_move_arrow = (start, end)
+
+        # Logic
         if target and target.type == KING:
             self.game_over = True
             self.winner = self.turn
+
+        if piece.type == PAWN and target is None and sc != ec:
+            self.board[sr][ec] = None
+
+        next_ep = None
+        if piece.type == PAWN and abs(sr - er) == 2:
+            next_ep = ((sr + er) // 2, sc)
 
         if piece.type == KING and abs(sc - ec) == 2:
             is_kingside = (ec > sc)
@@ -234,56 +310,94 @@ class DuckChess:
         self.board[er][ec] = piece
         self.board[sr][sc] = None
         piece.has_moved = True
+        self.en_passant_target = next_ep
 
         if not self.game_over:
+            self.prev_duck_pos = self.duck_pos
             self.phase = 'move_duck'
 
     def place_duck(self, pos):
+        if self.board[pos[0]][pos[1]] is not None or pos == self.prev_duck_pos: return
+
+        duck_str = self.get_notation_coords(pos[0], pos[1])
+        full_log_entry = f"{self.current_move_str} @ {duck_str}"
+
+        if self.turn == 'w':
+            self.move_log.append(f"{self.turn_number}. {full_log_entry}")
+        else:
+            self.move_log.append(f"{self.turn_number}... {full_log_entry}")
+            self.turn_number += 1
+
         self.duck_pos = pos
         self.phase = 'move_piece'
         self.turn = 'b' if self.turn == 'w' else 'w'
 
-    # --- Interaction ---
+        self.save_snapshot()
+
+        next_turn_is_ai = (self.game_mode == 'white_ai' and self.turn == 'b') or \
+                          (self.game_mode == 'black_ai' and self.turn == 'w')
+        if next_turn_is_ai:
+            self.waiting_for_ai = True
+            self.ai_wait_start = pygame.time.get_ticks()
+        else:
+            self.waiting_for_ai = False
+
     def handle_click(self, pos):
-        # Always check bottom UI buttons
-        if self.restart_btn_rect.collidepoint(pos):
-            self.reset_game_state()
+        # Nav buttons
+        if self.nav_btns['start'].collidepoint(pos): self.view_index = 0; return
+        if self.nav_btns['prev'].collidepoint(pos): self.view_index = max(0, self.view_index - 1); return
+        if self.nav_btns['next'].collidepoint(pos): self.view_index = min(len(self.history) - 1,
+                                                                          self.view_index + 1); return
+        if self.nav_btns['end'].collidepoint(pos): self.view_index = len(self.history) - 1; return
+
+        # UI Buttons
+        if self.restart_btn_rect.collidepoint(pos): self.reset_game_state(); return
+        if self.menu_btn_rect.collidepoint(pos): self.state = 'menu'; return
+        if self.game_mode == 'pvp' and self.flip_btn_rect.collidepoint(pos):
+            self.player_side = 'b' if self.player_side == 'w' else 'w';
             return
-        if self.menu_btn_rect.collidepoint(pos):
-            self.state = 'menu'
-            return
 
-        if self.game_over: return
+        # Block moves if viewing history
+        is_live = (self.view_index == len(self.history) - 1)
+        if not is_live: return
 
-        # If AI turn (and we are not in PVP), ignore click
-        is_ai_turn = (self.game_mode == 'white_ai' and self.turn == 'b') or \
-                     (self.game_mode == 'black_ai' and self.turn == 'w')
-        if is_ai_turn: return
+        if self.game_over or self.waiting_for_ai: return
 
-        # Transform click to board coordinates
-        row, col = self.get_board_pos(pos[0], pos[1])
-        if row < 0 or row >= 8 or col < 0 or col >= 8: return
+        if pos[0] > self.screen_w - self.panel_width: return
+
+        r, c = self.get_board_pos(pos[0], pos[1])
+        if r == -1: return
 
         if self.phase == 'move_piece':
-            clicked = self.board[row][col]
+            clicked = self.board[r][c]
             if clicked and clicked.color == self.turn:
-                self.selected_square = (row, col)
-                self.valid_moves = self.get_piece_legal_moves(row, col)
-            elif self.selected_square and (row, col) in self.valid_moves:
-                self.execute_move(self.selected_square, (row, col))
+                self.selected_square = (r, c)
+                self.valid_moves = self.get_piece_legal_moves(r, c)
+            elif self.selected_square and (r, c) in self.valid_moves:
+                self.execute_move(self.selected_square, (r, c))
                 self.selected_square = None
                 self.valid_moves = []
         elif self.phase == 'move_duck':
-            if self.board[row][col] is None:
-                self.place_duck((row, col))
+            self.place_duck((r, c))
+
+    def handle_keyboard(self, event):
+        if event.key == pygame.K_LEFT:
+            self.view_index = max(0, self.view_index - 1)
+        elif event.key == pygame.K_RIGHT:
+            self.view_index = min(len(self.history) - 1, self.view_index + 1)
 
     def ai_turn(self):
-        if self.game_over: return
+        is_live = (self.view_index == len(self.history) - 1)
+        if not is_live: return
 
-        # Check if it's actually AI's turn based on mode
-        is_ai_turn = (self.game_mode == 'white_ai' and self.turn == 'b') or \
-                     (self.game_mode == 'black_ai' and self.turn == 'w')
-        if not is_ai_turn: return
+        if self.game_over: return
+        is_ai = (self.game_mode == 'white_ai' and self.turn == 'b') or \
+                (self.game_mode == 'black_ai' and self.turn == 'w')
+        if not is_ai: return
+
+        if self.waiting_for_ai:
+            if pygame.time.get_ticks() - self.ai_wait_start < 1000: return
+            self.waiting_for_ai = False
 
         if self.phase == 'move_piece':
             moves = []
@@ -291,161 +405,222 @@ class DuckChess:
                 for c in range(8):
                     p = self.board[r][c]
                     if p and p.color == self.turn:
-                        for m in self.get_piece_legal_moves(r, c):
-                            moves.append(((r, c), m))
+                        for m in self.get_piece_legal_moves(r, c): moves.append(((r, c), m))
+            if not moves: self.turn = 'w' if self.turn == 'b' else 'b'; return
 
-            if not moves:
-                self.turn = 'w' if self.turn == 'b' else 'b'  # Pass turn if stuck
-                return
-
+            pygame.time.wait(400)
             move = random.choice(moves)
-            pygame.time.wait(300)
             self.execute_move(move[0], move[1])
+            return
 
-        if self.phase == 'move_duck' and not self.game_over:
+        if self.phase == 'move_duck':
+            pygame.time.wait(400)
             empties = [(r, c) for r in range(8) for c in range(8) if self.board[r][c] is None]
-            if empties:
-                pygame.time.wait(200)
+            valid = [p for p in empties if p != self.prev_duck_pos]
+            if valid:
+                move = random.choice(valid)
+                self.duck_pos = move
+                self.draw_game()
+                pygame.display.flip()
+                pygame.time.wait(800)
+                self.place_duck(move)
+            elif empties:
                 self.place_duck(random.choice(empties))
 
-    # --- Rendering ---
-    def draw_duck(self, r, c):
-        """Draws the duck image if available, otherwise a static procedural duck."""
-        x, y = self.get_screen_pos(r, c)
+    # --- Drawing ---
+    def get_screen_pos(self, r, c):
+        dr, dc = (7 - r, 7 - c) if self.player_side == 'b' else (r, c)
+        return self.board_x + dc * self.sq_size, self.board_y + dr * self.sq_size
 
-        if 'duck' in self.images:
-            # Use the loaded image. Center it in the square.
-            duck_img = self.images['duck']
-            img_rect = duck_img.get_rect(center=(x + SQUARE_SIZE // 2, y + SQUARE_SIZE // 2))
-            self.screen.blit(duck_img, img_rect)
+    def get_board_pos(self, px, py):
+        rx, ry = px - self.board_x, py - self.board_y
+        if rx < 0 or ry < 0: return -1, -1
+        c, r = rx // self.sq_size, ry // self.sq_size
+        if c >= 8 or r >= 8: return -1, -1
+        return (7 - r, 7 - c) if self.player_side == 'b' else (r, c)
+
+    def draw_history_panel(self):
+        panel_rect = pygame.Rect(self.screen_w - self.panel_width, 0, self.panel_width, self.screen_h)
+        pygame.draw.rect(self.screen, PANEL_BG_COLOR, panel_rect)
+
+        title = self.font_ui.render("Game History", True, (255, 255, 255))
+        self.screen.blit(title, (self.screen_w - self.panel_width + 10, 15))
+
+        counter_str = f"{self.view_index} / {len(self.history) - 1}"
+        counter_surf = self.font_ui.render(counter_str, True, (180, 180, 180))
+        self.screen.blit(counter_surf, (self.screen_w - 70, 15))
+
+        full_log = self.history[-1]['log']
+        start_y = 50
+        line_height = 25
+        button_area_y = self.nav_btns['start'].top
+        max_lines = (button_area_y - start_y) // line_height
+
+        highlight_idx = self.view_index - 1
+        scroll_offset = 0
+        if highlight_idx > max_lines - 2:
+            scroll_offset = highlight_idx - (max_lines - 2)
+
+        moves_to_draw = full_log[scroll_offset: scroll_offset + max_lines]
+
+        for i, move_str in enumerate(moves_to_draw):
+            actual_idx = scroll_offset + i
+            if actual_idx == highlight_idx:
+                highlight_rect = pygame.Rect(self.screen_w - self.panel_width, start_y + i * line_height,
+                                             self.panel_width, line_height)
+                pygame.draw.rect(self.screen, ACTIVE_MOVE_BG, highlight_rect)
+            txt = self.font_history.render(move_str, True, (220, 220, 220))
+            self.screen.blit(txt, (self.screen_w - self.panel_width + 10, start_y + i * line_height + 4))
+
+        labels = [("<<", 'start'), ("<", 'prev'), (">", 'next'), (">>", 'end')]
+        mouse = pygame.mouse.get_pos()
+        for lbl, key in labels:
+            rect = self.nav_btns[key]
+            col = BUTTON_HOVER if rect.collidepoint(mouse) else BUTTON_COLOR
+            pygame.draw.rect(self.screen, col, rect, border_radius=5)
+            t = self.font_nav.render(lbl, True, (255, 255, 255))
+            self.screen.blit(t, t.get_rect(center=rect.center))
+
+    def draw_duck(self, r, c):
+        x, y = self.get_screen_pos(r, c)
+        if 'duck' in self.scaled_images:
+            img = self.scaled_images['duck']
+            offset = (self.sq_size - img.get_width()) // 2
+            self.screen.blit(img, (x + offset, y + offset))
         else:
-            # Static Procedural Duck Fallback (No animation)
-            pygame.draw.ellipse(self.screen, (135, 206, 235), (x + 5, y + 55, 90, 30))  # Water
-            pygame.draw.ellipse(self.screen, (255, 220, 0), (x + 15, y + 45, 70, 40))
-            pygame.draw.circle(self.screen, (255, 220, 0), (int(x + 70), int(y + 40)), 20)
-            pygame.draw.polygon(self.screen, (255, 165, 0), [(x + 85, y + 35), (x + 100, y + 40), (x + 85, y + 45)])
-            pygame.draw.circle(self.screen, (255, 255, 255), (int(x + 75), int(y + 35)), 6)
-            pygame.draw.circle(self.screen, (0, 0, 0), (int(x + 77), int(y + 35)), 3)
-            pygame.draw.ellipse(self.screen, (230, 200, 0), (x + 30, y + 55, 40, 20))
+            cx, cy = x + self.sq_size // 2, y + self.sq_size // 2
+            pygame.draw.circle(self.screen, (255, 220, 0), (cx, cy), self.sq_size // 3)
 
     def draw_game(self):
         self.screen.fill(BG_COLOR)
+        self.draw_history_panel()
 
-        # Board
+        is_live = (self.view_index == len(self.history) - 1)
+        if is_live:
+            draw_board = self.board
+            draw_duck_pos = self.duck_pos
+            last_move_info = self.last_move_arrow
+            prev_duck_info = self.prev_duck_pos
+        else:
+            snapshot = self.history[self.view_index]
+            draw_board = snapshot['board']
+            draw_duck_pos = snapshot['duck_pos']
+            last_move_info = snapshot.get('last_move')
+            prev_duck_info = snapshot.get('prev_duck')
+
+        # Draw Board
         for r in range(8):
             for c in range(8):
                 x, y = self.get_screen_pos(r, c)
                 color = WHITE_COLOR if (r + c) % 2 == 0 else BLACK_SQ_COLOR
-                pygame.draw.rect(self.screen, color, (x, y, SQUARE_SIZE, SQUARE_SIZE))
+                pygame.draw.rect(self.screen, color, (x, y, self.sq_size, self.sq_size))
 
-                # Selection
-                if self.selected_square == (r, c):
-                    pygame.draw.rect(self.screen, HIGHLIGHT, (x, y, SQUARE_SIZE, SQUARE_SIZE))
+                # 1. HIGHLIGHT LAST MOVE (Start & End squares of piece)
+                if last_move_info:
+                    start_move, end_move = last_move_info
+                    if (r, c) == start_move or (r, c) == end_move:
+                        s = pygame.Surface((self.sq_size, self.sq_size))
+                        s.set_alpha(LAST_MOVE_COLOR[3])  # Use alpha from constant
+                        s.fill(LAST_MOVE_COLOR[:3])  # Use RGB from constant
+                        self.screen.blit(s, (x, y))
 
-                # Valid Moves
-                if (r, c) in self.valid_moves:
-                    s = pygame.Surface((SQUARE_SIZE, SQUARE_SIZE))
-                    s.set_alpha(100)
-                    s.fill((0, 255, 0))
+                # 2. HIGHLIGHT PREVIOUS DUCK POSITION
+                if prev_duck_info and (r, c) == prev_duck_info:
+                    s = pygame.Surface((self.sq_size, self.sq_size))
+                    s.set_alpha(LAST_MOVE_COLOR[3])
+                    s.fill(LAST_MOVE_COLOR[:3])
                     self.screen.blit(s, (x, y))
 
-                # Duck
-                if self.duck_pos == (r, c):
-                    self.draw_duck(r, c)
+                # 3. SELECTION & VALID MOVES (Only Live)
+                if is_live:
+                    if self.selected_square == (r, c):
+                        pygame.draw.rect(self.screen, HIGHLIGHT, (x, y, self.sq_size, self.sq_size))
+                    if (r, c) in self.valid_moves:
+                        s = pygame.Surface((self.sq_size, self.sq_size))
+                        s.set_alpha(100)
+                        s.fill((0, 255, 0))
+                        self.screen.blit(s, (x, y))
 
-                # Pieces
-                piece = self.board[r][c]
+                if draw_duck_pos == (r, c): self.draw_duck(r, c)
+
+                piece = draw_board[r][c]
                 if piece:
                     key = f"{piece.color}{piece.type}"
-                    if key in self.images:
-                        self.screen.blit(self.images[key], (x, y))
+                    if key in self.scaled_images:
+                        self.screen.blit(self.scaled_images[key], (x, y))
                     else:
                         text = UNICODE_PIECES[piece.color][piece.type]
-                        p_color = (0, 0, 0) if piece.color == 'b' else (255, 255, 255)
-                        txt_surf = self.font_large.render(text, True, p_color)
-                        rect = txt_surf.get_rect(center=(x + SQUARE_SIZE // 2, y + SQUARE_SIZE // 2))
+                        col = (0, 0, 0) if piece.color == 'b' else (255, 255, 255)
+                        surf = self.font_large.render(text, True, col)
+                        rect = surf.get_rect(center=(x + self.sq_size // 2, y + self.sq_size // 2))
                         if piece.color == 'w':
                             outline = self.font_large.render(text, True, (0, 0, 0))
-                            out_rect = outline.get_rect(center=(x + SQUARE_SIZE // 2 + 2, y + SQUARE_SIZE // 2 + 2))
-                            self.screen.blit(outline, out_rect)
-                        self.screen.blit(txt_surf, rect)
+                            self.screen.blit(outline, outline.get_rect(center=(rect.centerx + 2, rect.centery + 2)))
+                        self.screen.blit(surf, rect)
 
-        # UI Bar
-        pygame.draw.rect(self.screen, (220, 220, 220), (0, 800, SCREEN_WIDTH, 50))
-        if self.game_over:
-            status = f"GAME OVER! {'White' if self.winner == 'w' else 'Black'} Wins!"
-        else:
-            status = f"{'White' if self.turn == 'w' else 'Black'} | {'Move Piece' if self.phase == 'move_piece' else 'Place Duck'}"
+        # Draw UI Bar
+        ui_y = self.screen_h - self.ui_height
+        pygame.draw.rect(self.screen, BOARD_BG_COLOR, (0, ui_y, self.screen_w - self.panel_width, self.ui_height))
+
+        status = f"WINNER: {self.winner}" if self.game_over else f"{'White' if self.turn == 'w' else 'Black'} | {'Move Piece' if self.phase == 'move_piece' else 'Place Duck'}"
+        if not is_live: status = "VIEWING HISTORY (Go to end to play)"
 
         txt = self.font_ui.render(status, True, TEXT_COLOR)
-        self.screen.blit(txt, (20, 812))
+        self.screen.blit(txt, (15, ui_y + 20))
 
-        # Buttons
-        mouse_pos = pygame.mouse.get_pos()
+        mouse = pygame.mouse.get_pos()
+        btns = [("Menu", self.menu_btn_rect), ("Restart", self.restart_btn_rect)]
+        if self.game_mode == 'pvp': btns.insert(1, ("Flip", self.flip_btn_rect))
 
-        # Restart Button
-        btn_col = BUTTON_HOVER if self.restart_btn_rect.collidepoint(mouse_pos) else BUTTON_COLOR
-        pygame.draw.rect(self.screen, btn_col, self.restart_btn_rect, border_radius=5)
-        btn_txt = self.font_ui.render("Restart", True, (255, 255, 255))
-        self.screen.blit(btn_txt, btn_txt.get_rect(center=self.restart_btn_rect.center))
+        area_w = self.screen_w - self.panel_width - 250
+        btn_w = 100
+        start_x = self.screen_w - self.panel_width - (len(btns) * 110) - 10
 
-        # Menu Button
-        btn_col = BUTTON_HOVER if self.menu_btn_rect.collidepoint(mouse_pos) else BUTTON_COLOR
-        pygame.draw.rect(self.screen, btn_col, self.menu_btn_rect, border_radius=5)
-        btn_txt = self.font_ui.render("Menu", True, (255, 255, 255))
-        self.screen.blit(btn_txt, btn_txt.get_rect(center=self.menu_btn_rect.center))
+        for i, (lbl, rect) in enumerate(btns):
+            rect.width, rect.height = btn_w, 40
+            rect.x, rect.centery = start_x + i * 110, ui_y + 30
+            col = BUTTON_HOVER if rect.collidepoint(mouse) else BUTTON_COLOR
+            pygame.draw.rect(self.screen, col, rect, border_radius=8)
+            t = self.font_ui.render(lbl, True, (255, 255, 255))
+            self.screen.blit(t, t.get_rect(center=rect.center))
+
+        self.draw_history_panel()
 
     def draw_menu(self):
         self.screen.fill(MENU_BG)
-
         title = self.font_menu.render("DUCK CHESS", True, (255, 215, 0))
-        self.screen.blit(title, title.get_rect(center=(SCREEN_WIDTH // 2, 200)))
-
-        # Menu Buttons
-        opts = [
-            ("Play as White (vs AI)", 'white_ai'),
-            ("Play as Black (vs AI)", 'black_ai'),
-            ("2 Player Mode", 'pvp')
-        ]
-
-        start_y = 350
-        mouse_pos = pygame.mouse.get_pos()
-
+        self.screen.blit(title, title.get_rect(center=(self.screen_w // 2, self.screen_h * 0.2)))
+        opts = [("Play as White", 'white_ai'), ("Play as Black", 'black_ai'), ("2 Player", 'pvp')]
+        mouse = pygame.mouse.get_pos()
         for i, (text, mode) in enumerate(opts):
-            rect = pygame.Rect(SCREEN_WIDTH // 2 - 150, start_y + i * 80, 300, 60)
-            col = BUTTON_HOVER if rect.collidepoint(mouse_pos) else BUTTON_COLOR
+            rect = pygame.Rect(0, 0, 300, 60)
+            rect.center = (self.screen_w // 2, self.screen_h * 0.4 + i * 80)
+            col = BUTTON_HOVER if rect.collidepoint(mouse) else BUTTON_COLOR
             pygame.draw.rect(self.screen, col, rect, border_radius=10)
-
-            txt_surf = self.font_ui.render(text, True, (255, 255, 255))
-            self.screen.blit(txt_surf, txt_surf.get_rect(center=rect.center))
-
-            # Check click inside draw loop (simple method for menu)
-            if pygame.mouse.get_pressed()[0] and rect.collidepoint(mouse_pos):
+            t = self.font_ui.render(text, True, (255, 255, 255))
+            self.screen.blit(t, t.get_rect(center=rect.center))
+            if pygame.mouse.get_pressed()[0] and rect.collidepoint(mouse):
                 self.game_mode = mode
                 self.player_side = 'b' if mode == 'black_ai' else 'w'
                 self.reset_game_state()
                 self.state = 'game'
-                pygame.time.wait(200)  # Debounce
+                pygame.time.wait(200)
 
     def run(self):
-        running = True
-        while running:
+        while True:
             for event in pygame.event.get():
-                if event.type == pygame.QUIT:
-                    running = False
-                elif event.type == pygame.MOUSEBUTTONDOWN and self.state == 'game':
-                    self.handle_click(event.pos)
+                if event.type == pygame.QUIT: pygame.quit(); sys.exit()
+                if event.type == pygame.VIDEORESIZE: self.resize_layout(event.w, event.h)
+                if event.type == pygame.MOUSEBUTTONDOWN and self.state == 'game': self.handle_click(event.pos)
+                if event.type == pygame.KEYDOWN and self.state == 'game': self.handle_keyboard(event)
 
             if self.state == 'menu':
                 self.draw_menu()
             else:
                 self.ai_turn()
                 self.draw_game()
-
             pygame.display.flip()
             self.clock.tick(FPS)
-        pygame.quit()
-        sys.exit()
 
 
 if __name__ == "__main__":
