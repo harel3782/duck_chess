@@ -1,37 +1,39 @@
 import pygame
 import sys
 import random
+import os
 
-# --- Constants & Configuration ---
+# --- Constants ---
 SCREEN_WIDTH = 800
-SCREEN_HEIGHT = 850  # Extra space for status text
+SCREEN_HEIGHT = 850
 BOARD_SIZE = 800
 SQUARE_SIZE = BOARD_SIZE // 8
 FPS = 60
 
 # Colors
-WHITE = (235, 236, 208)
-BLACK_SQ = (119, 149, 86)  # Greenish pleasant color
-HIGHLIGHT = (186, 202, 68)  # Selected piece square
-VALID_MOVE = (100, 200, 100, 150)  # Transparent green for moves
-DUCK_COLOR = (255, 215, 0)  # Gold/Yellow
+WHITE_COLOR = (235, 236, 208)
+BLACK_SQ_COLOR = (119, 149, 86)
+HIGHLIGHT = (186, 202, 68)
+VALID_MOVE = (100, 200, 100, 150)
 TEXT_COLOR = (20, 20, 20)
 BG_COLOR = (240, 240, 240)
+BUTTON_COLOR = (70, 130, 180)
+BUTTON_HOVER = (100, 149, 237)
+MENU_BG = (40, 44, 52)
 
-# Unicode Chess Pieces
+# Unicode Fallback
 UNICODE_PIECES = {
     'w': {'K': '♔', 'Q': '♕', 'R': '♖', 'B': '♗', 'N': '♘', 'P': '♙'},
     'b': {'K': '♚', 'Q': '♛', 'R': '♜', 'B': '♝', 'N': '♞', 'P': '♟'}
 }
 
-# Piece Types
 KING, QUEEN, ROOK, BISHOP, KNIGHT, PAWN = 'K', 'Q', 'R', 'B', 'N', 'P'
 
 
 class Piece:
     def __init__(self, color, type):
-        self.color = color  # 'w' or 'b'
-        self.type = type  # 'K', 'Q', 'R', 'B', 'N', 'P'
+        self.color = color
+        self.type = type
         self.has_moved = False
 
 
@@ -39,133 +41,155 @@ class DuckChess:
     def __init__(self):
         pygame.init()
         self.screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
-        pygame.display.set_caption("Duck Chess - Python Senior Dev Edition")
+        pygame.display.set_caption("Duck Chess: Resized Duck")
         self.clock = pygame.time.Clock()
-        self.font_large = pygame.font.SysFont("Segoe UI Symbol", int(SQUARE_SIZE * 0.8), bold=True)
-        self.font_ui = pygame.font.SysFont("Arial", 24)
 
-        # Game State
+        self.font_large = pygame.font.SysFont("Segoe UI Symbol", int(SQUARE_SIZE * 0.8), bold=True)
+        self.font_ui = pygame.font.SysFont("Arial", 20)
+        self.font_menu = pygame.font.SysFont("Arial", 40, bold=True)
+
+        self.restart_btn_rect = pygame.Rect(650, 810, 130, 30)
+        self.menu_btn_rect = pygame.Rect(500, 810, 130, 30)
+
+        # Game Config
+        self.game_mode = None  # 'white_ai', 'black_ai', 'pvp'
+        self.player_side = 'w'  # Perspective
+        self.state = 'menu'  # 'menu' or 'game'
+
+        # --- LOAD ASSETS ---
+        self.images = {}
+        self.load_assets()
+
+        # Initialize empty state
+        self.reset_game_state()
+
+    def load_assets(self):
+        """Loads the spritesheet for pieces and the individual duck image."""
+        # 1. Load Pieces Spritesheet
+        filename = "assets/pieces.png"
+        if os.path.exists(filename):
+            try:
+                sheet = pygame.image.load(filename).convert_alpha()
+                sheet_width, sheet_height = sheet.get_size()
+                cols, rows = 6, 2
+                sprite_w = sheet_width // cols
+                sprite_h = sheet_height // rows
+                piece_order = [QUEEN, KING, ROOK, KNIGHT, BISHOP, PAWN]
+                row_map = {0: 'b', 1: 'w'}  # Top row black, bottom white
+
+                for row in range(rows):
+                    color = row_map[row]
+                    for col in range(cols):
+                        rect = pygame.Rect(col * sprite_w, row * sprite_h, sprite_w, sprite_h)
+                        image = sheet.subsurface(rect)
+                        image = pygame.transform.smoothscale(image, (SQUARE_SIZE, SQUARE_SIZE))
+                        self.images[f"{color}{piece_order[col]}"] = image
+            except pygame.error as e:
+                print(f"Error loading pieces.png: {e}")
+        else:
+            print(f"Sprite sheet not found at {filename}. Using text fallback for pieces.")
+
+        # 2. Load Duck Image
+        duck_file = "assets/duck.png"
+        if os.path.exists(duck_file):
+            try:
+                img = pygame.image.load(duck_file).convert_alpha()
+                # Scale duck to 80% of square size for a better fit
+                duck_size = int(SQUARE_SIZE * 0.8)
+                img = pygame.transform.smoothscale(img, (duck_size, duck_size))
+                self.images['duck'] = img
+            except pygame.error as e:
+                print(f"Error loading duck.png: {e}")
+        else:
+            print(f"Duck image not found at {duck_file}. Using procedural fallback.")
+
+    def reset_game_state(self):
         self.board = [[None for _ in range(8)] for _ in range(8)]
-        self.duck_pos = None  # (row, col)
-        self.turn = 'w'  # 'w' or 'b'
-        self.phase = 'move_piece'  # 'move_piece' or 'move_duck'
+        self.init_board()
+        self.duck_pos = (-1, -1)
+        self.turn = 'w'
+        self.phase = 'move_piece'
         self.selected_square = None
         self.valid_moves = []
         self.game_over = False
         self.winner = None
 
-        self.init_board()
-        # Place duck initially off-board or at a specific spot. 
-        # Standard rules often have players place it first, but for simplicity, 
-        # we start without it on board or imply it's "in hand". 
-        # Here: The duck starts off-board, first player places it after move.
-        self.duck_pos = (-1, -1)
-
-    def draw_rubber_duck(self, r, c):
-        """Draws a cute procedural rubber duck at row r, col c."""
-        x = c * SQUARE_SIZE
-        y = r * SQUARE_SIZE
-        offset_x = x + SQUARE_SIZE // 2
-        offset_y = y + SQUARE_SIZE // 2
-
-        # 1. Body (Yellow Ellipse)
-        body_rect = pygame.Rect(x + 15, y + 45, 70, 40)
-        pygame.draw.ellipse(self.screen, (255, 220, 0), body_rect)
-
-        # 2. Head (Yellow Circle)
-        pygame.draw.circle(self.screen, (255, 220, 0), (x + 70, y + 40), 20)
-
-        # 3. Beak (Orange Triangle/Polygon)
-        beak_points = [(x + 85, y + 35), (x + 100, y + 40), (x + 85, y + 45)]
-        pygame.draw.polygon(self.screen, (255, 165, 0), beak_points)
-
-        # 4. Eye (White outer, Black pupil)
-        pygame.draw.circle(self.screen, (255, 255, 255), (x + 75, y + 35), 6)
-        pygame.draw.circle(self.screen, (0, 0, 0), (x + 77, y + 35), 3)
-
-        # 5. Wing (Darker Yellow Arc/Ellipse)
-        wing_rect = pygame.Rect(x + 30, y + 55, 40, 20)
-        pygame.draw.ellipse(self.screen, (230, 200, 0), wing_rect)
-
     def init_board(self):
-        """Sets up the standard chess board."""
         setup = [
             (ROOK, 0, 0), (KNIGHT, 0, 1), (BISHOP, 0, 2), (QUEEN, 0, 3), (KING, 0, 4), (BISHOP, 0, 5), (KNIGHT, 0, 6),
             (ROOK, 0, 7),
             (ROOK, 7, 0), (KNIGHT, 7, 1), (BISHOP, 7, 2), (QUEEN, 7, 3), (KING, 7, 4), (BISHOP, 7, 5), (KNIGHT, 7, 6),
             (ROOK, 7, 7)
         ]
-
-        # Place Pieces
         for p_type, r, c in setup:
             color = 'b' if r == 0 else 'w'
             self.board[r][c] = Piece(color, p_type)
-
-        # Pawns
         for c in range(8):
             self.board[1][c] = Piece('b', PAWN)
             self.board[6][c] = Piece('w', PAWN)
 
+    # --- Coordinate Transformation ---
+    def get_screen_pos(self, r, c):
+        """Converts board coords (r,c) to screen coords (x,y) based on player perspective."""
+        if self.player_side == 'b':
+            # Flip board: Row 0 is bottom, Col 0 is right
+            draw_r = 7 - r
+            draw_c = 7 - c
+        else:
+            # Standard White perspective
+            draw_r = r
+            draw_c = c
+        return draw_c * SQUARE_SIZE, draw_r * SQUARE_SIZE
+
+    def get_board_pos(self, x, y):
+        """Converts screen coords (x,y) to board coords (r,c) based on player perspective."""
+        col = x // SQUARE_SIZE
+        row = y // SQUARE_SIZE
+        if self.player_side == 'b':
+            return 7 - row, 7 - col
+        return row, col
+
+    # --- Game Logic ---
     def get_piece_legal_moves(self, r, c):
-        """
-        Returns a list of (r, c) tuples representing valid moves.
-        Includes Castling logic (King side & Queen side).
-        """
         piece = self.board[r][c]
         if not piece: return []
-
         moves = []
 
-        # --- CASTLING LOGIC (Specific to King) ---
+        # Castling
         if piece.type == KING and not piece.has_moved:
-            # Kingside Castling (Target: G-file, i.e., col 6)
-            # Conditions: Rook exists @ col 7, hasn't moved, path (5,6) is empty & no Duck
-            if self.can_castle(r, c, is_kingside=True):
-                moves.append((r, 6))
+            if self.can_castle(r, c, is_kingside=True): moves.append((r, 6))
+            if self.can_castle(r, c, is_kingside=False): moves.append((r, 2))
 
-            # Queenside Castling (Target: C-file, i.e., col 2)
-            # Conditions: Rook exists @ col 0, hasn't moved, path (1,2,3) is empty & no Duck
-            if self.can_castle(r, c, is_kingside=False):
-                moves.append((r, 2))
-
-        # --- STANDARD MOVES (Same as before) ---
         directions = []
-        if piece.type == KING:
-            directions = [(1, 0), (-1, 0), (0, 1), (0, -1), (1, 1), (1, -1), (-1, 1), (-1, -1)]
-        elif piece.type == QUEEN:
+        if piece.type in [KING, QUEEN]:
             directions = [(1, 0), (-1, 0), (0, 1), (0, -1), (1, 1), (1, -1), (-1, 1), (-1, -1)]
         elif piece.type == ROOK:
             directions = [(1, 0), (-1, 0), (0, 1), (0, -1)]
         elif piece.type == BISHOP:
             directions = [(1, 1), (1, -1), (-1, 1), (-1, -1)]
         elif piece.type == KNIGHT:
-            knight_moves = [(2, 1), (2, -1), (-2, 1), (-2, -1), (1, 2), (1, -2), (-1, 2), (-1, -2)]
-            for dr, dc in knight_moves:
+            for dr, dc in [(2, 1), (2, -1), (-2, 1), (-2, -1), (1, 2), (1, -2), (-1, 2), (-1, -2)]:
                 nr, nc = r + dr, c + dc
-                if 0 <= nr < 8 and 0 <= nc < 8:
-                    if (nr, nc) == self.duck_pos: continue
+                if 0 <= nr < 8 and 0 <= nc < 8 and (nr, nc) != self.duck_pos:
                     target = self.board[nr][nc]
-                    if target is None or target.color != piece.color:
-                        moves.append((nr, nc))
+                    if target is None or target.color != piece.color: moves.append((nr, nc))
             return moves
         elif piece.type == PAWN:
-            direction = -1 if piece.color == 'w' else 1
-            nr, nc = r + direction, c
-            if 0 <= nr < 8 and self.board[nr][nc] is None and (nr, nc) != self.duck_pos:
-                moves.append((nr, nc))
-                is_start = (r == 6 and piece.color == 'w') or (r == 1 and piece.color == 'b')
-                nr2 = r + (direction * 2)
-                if is_start and self.board[nr2][nc] is None and (nr2, nc) != self.duck_pos:
-                    moves.append((nr2, nc))
+            d = -1 if piece.color == 'w' else 1
+            if 0 <= r + d < 8 and not self.board[r + d][c] and (r + d, c) != self.duck_pos:
+                moves.append((r + d, c))
+                start_row = 6 if piece.color == 'w' else 1
+                if r == start_row and not self.board[r + d * 2][c] and (r + d * 2, c) != self.duck_pos:
+                    moves.append((r + d * 2, c))
             for dc in [-1, 1]:
-                nr, nc = r + direction, c + dc
+                nr, nc = r + d, c + dc
                 if 0 <= nr < 8 and 0 <= nc < 8:
                     target = self.board[nr][nc]
                     if target and target.color != piece.color and (nr, nc) != self.duck_pos:
                         moves.append((nr, nc))
             return moves
 
-        # Sliding Logic (R, B, Q, K)
+        # Sliding Pieces
         max_dist = 1 if piece.type == KING else 8
         for dr, dc in directions:
             for dist in range(1, max_dist + 1):
@@ -176,242 +200,253 @@ class DuckChess:
                 if target is None:
                     moves.append((nr, nc))
                 else:
-                    if target.color != piece.color:
-                        moves.append((nr, nc))
+                    if target.color != piece.color: moves.append((nr, nc))
                     break
         return moves
 
     def can_castle(self, r, c, is_kingside):
-        """Helper to check castling conditions including Duck block."""
         rook_col = 7 if is_kingside else 0
         rook = self.board[r][rook_col]
-
-        # 1. Check Rook
-        if not rook or rook.type != ROOK or rook.has_moved:
-            return False
-
-        # 2. Check Path Clearance (Pieces & Duck)
-        # Kingside path: cols 5, 6. Queenside path: cols 1, 2, 3
+        if not rook or rook.type != ROOK or rook.has_moved: return False
         path_cols = [5, 6] if is_kingside else [1, 2, 3]
-
         for col in path_cols:
-            # Check for Piece
-            if self.board[r][col] is not None:
-                return False
-            # Check for Duck
-            if (r, col) == self.duck_pos:
-                return False
-
+            if self.board[r][col] is not None or (r, col) == self.duck_pos: return False
         return True
-    def handle_click(self, pos):
-        """Handles mouse input for human player."""
-        if self.game_over or (self.turn == 'b'): return
-
-        col = pos[0] // SQUARE_SIZE
-        row = pos[1] // SQUARE_SIZE
-
-        # Validate click is within board
-        if row >= 8 or col >= 8: return
-
-        if self.phase == 'move_piece':
-            clicked_piece = self.board[row][col]
-
-            # Select a piece
-            if clicked_piece and clicked_piece.color == self.turn:
-                self.selected_square = (row, col)
-                self.valid_moves = self.get_piece_legal_moves(row, col)
-
-            # Move selected piece
-            elif self.selected_square:
-                if (row, col) in self.valid_moves:
-                    self.execute_move(self.selected_square, (row, col))
-                    self.selected_square = None
-                    self.valid_moves = []
-
-        elif self.phase == 'move_duck':
-            # Place duck on empty square
-            if self.board[row][col] is None:
-                # Duck cannot remain on same square (implied by "move" the duck, 
-                # but technically user could click the old duck pos if empty. 
-                # We simply allow any empty square.)
-                self.place_duck((row, col))
 
     def execute_move(self, start, end):
-        """Moves piece, checks win condition, handles Castling."""
         sr, sc = start
         er, ec = end
-
         piece = self.board[sr][sc]
         target = self.board[er][ec]
 
-        # Check Win Condition (King Capture)
         if target and target.type == KING:
             self.game_over = True
             self.winner = self.turn
 
-        # --- CASTLING EXECUTION ---
-        # If King moves 2 squares horizontally, it's a castle
         if piece.type == KING and abs(sc - ec) == 2:
-            is_kingside = (ec > sc)  # Moving right
-            rook_col = 7 if is_kingside else 0
-            new_rook_col = 5 if is_kingside else 3
-
-            # Move the Rook
+            is_kingside = (ec > sc)
+            rook_col, new_rook_col = (7, 5) if is_kingside else (0, 3)
             rook = self.board[sr][rook_col]
             self.board[sr][new_rook_col] = rook
             self.board[sr][rook_col] = None
             rook.has_moved = True
 
-        # Standard Move
         self.board[er][ec] = piece
         self.board[sr][sc] = None
         piece.has_moved = True
 
-        # Phase Change
         if not self.game_over:
             self.phase = 'move_duck'
+
     def place_duck(self, pos):
-        """Finalizes the turn."""
         self.duck_pos = pos
         self.phase = 'move_piece'
         self.turn = 'b' if self.turn == 'w' else 'w'
 
-    def ai_turn(self):
-        """Basic AI for Black Player."""
+    # --- Interaction ---
+    def handle_click(self, pos):
+        # Always check bottom UI buttons
+        if self.restart_btn_rect.collidepoint(pos):
+            self.reset_game_state()
+            return
+        if self.menu_btn_rect.collidepoint(pos):
+            self.state = 'menu'
+            return
+
         if self.game_over: return
 
-        # Phase 1: Move Piece
+        # If AI turn (and we are not in PVP), ignore click
+        is_ai_turn = (self.game_mode == 'white_ai' and self.turn == 'b') or \
+                     (self.game_mode == 'black_ai' and self.turn == 'w')
+        if is_ai_turn: return
+
+        # Transform click to board coordinates
+        row, col = self.get_board_pos(pos[0], pos[1])
+        if row < 0 or row >= 8 or col < 0 or col >= 8: return
+
         if self.phase == 'move_piece':
-            all_moves = []
-            # Gather all pieces
+            clicked = self.board[row][col]
+            if clicked and clicked.color == self.turn:
+                self.selected_square = (row, col)
+                self.valid_moves = self.get_piece_legal_moves(row, col)
+            elif self.selected_square and (row, col) in self.valid_moves:
+                self.execute_move(self.selected_square, (row, col))
+                self.selected_square = None
+                self.valid_moves = []
+        elif self.phase == 'move_duck':
+            if self.board[row][col] is None:
+                self.place_duck((row, col))
+
+    def ai_turn(self):
+        if self.game_over: return
+
+        # Check if it's actually AI's turn based on mode
+        is_ai_turn = (self.game_mode == 'white_ai' and self.turn == 'b') or \
+                     (self.game_mode == 'black_ai' and self.turn == 'w')
+        if not is_ai_turn: return
+
+        if self.phase == 'move_piece':
+            moves = []
             for r in range(8):
                 for c in range(8):
                     p = self.board[r][c]
-                    if p and p.color == 'b':
-                        moves = self.get_piece_legal_moves(r, c)
-                        for m in moves:
-                            all_moves.append(((r, c), m))
+                    if p and p.color == self.turn:
+                        for m in self.get_piece_legal_moves(r, c):
+                            moves.append(((r, c), m))
 
-            if not all_moves:
-                # No legal moves? Technically a stalemate or pass, but rare in Duck Chess.
-                # We just skip turn to avoid crash.
-                self.turn = 'w'
+            if not moves:
+                self.turn = 'w' if self.turn == 'b' else 'b'  # Pass turn if stuck
                 return
 
-            # Pick Random Move
-            move = random.choice(all_moves)
-
-            # Artificial delay for UX
-            pygame.time.wait(500)
+            move = random.choice(moves)
+            pygame.time.wait(300)
             self.execute_move(move[0], move[1])
 
-        # Phase 2: Place Duck (if game didn't end)
         if self.phase == 'move_duck' and not self.game_over:
-            empty_squares = []
-            for r in range(8):
-                for c in range(8):
-                    if self.board[r][c] is None:
-                        empty_squares.append((r, c))
+            empties = [(r, c) for r in range(8) for c in range(8) if self.board[r][c] is None]
+            if empties:
+                pygame.time.wait(200)
+                self.place_duck(random.choice(empties))
 
-            if empty_squares:
-                duck_dest = random.choice(empty_squares)
-                pygame.time.wait(300)
-                self.place_duck(duck_dest)
+    # --- Rendering ---
+    def draw_duck(self, r, c):
+        """Draws the duck image if available, otherwise a static procedural duck."""
+        x, y = self.get_screen_pos(r, c)
 
-    def draw_board(self):
-        """Renders the graphical state."""
+        if 'duck' in self.images:
+            # Use the loaded image. Center it in the square.
+            duck_img = self.images['duck']
+            img_rect = duck_img.get_rect(center=(x + SQUARE_SIZE // 2, y + SQUARE_SIZE // 2))
+            self.screen.blit(duck_img, img_rect)
+        else:
+            # Static Procedural Duck Fallback (No animation)
+            pygame.draw.ellipse(self.screen, (135, 206, 235), (x + 5, y + 55, 90, 30))  # Water
+            pygame.draw.ellipse(self.screen, (255, 220, 0), (x + 15, y + 45, 70, 40))
+            pygame.draw.circle(self.screen, (255, 220, 0), (int(x + 70), int(y + 40)), 20)
+            pygame.draw.polygon(self.screen, (255, 165, 0), [(x + 85, y + 35), (x + 100, y + 40), (x + 85, y + 45)])
+            pygame.draw.circle(self.screen, (255, 255, 255), (int(x + 75), int(y + 35)), 6)
+            pygame.draw.circle(self.screen, (0, 0, 0), (int(x + 77), int(y + 35)), 3)
+            pygame.draw.ellipse(self.screen, (230, 200, 0), (x + 30, y + 55, 40, 20))
+
+    def draw_game(self):
         self.screen.fill(BG_COLOR)
 
+        # Board
         for r in range(8):
             for c in range(8):
-                x = c * SQUARE_SIZE
-                y = r * SQUARE_SIZE
-
-                # Draw Tile
-                color = WHITE if (r + c) % 2 == 0 else BLACK_SQ
+                x, y = self.get_screen_pos(r, c)
+                color = WHITE_COLOR if (r + c) % 2 == 0 else BLACK_SQ_COLOR
                 pygame.draw.rect(self.screen, color, (x, y, SQUARE_SIZE, SQUARE_SIZE))
 
-                # Highlight Selected
+                # Selection
                 if self.selected_square == (r, c):
                     pygame.draw.rect(self.screen, HIGHLIGHT, (x, y, SQUARE_SIZE, SQUARE_SIZE))
 
-                # Highlight Duck
-                if self.duck_pos == (r, c):
-                    # Draw a water background for the duck (optional, looks nice)
-                    pygame.draw.rect(self.screen, (135, 206, 235), (x, y, SQUARE_SIZE, SQUARE_SIZE))
-                    self.draw_rubber_duck(r, c)
-
-                # Highlight Valid Moves
+                # Valid Moves
                 if (r, c) in self.valid_moves:
                     s = pygame.Surface((SQUARE_SIZE, SQUARE_SIZE))
-                    s.set_alpha(100)  # Transparency
-                    s.fill((0, 255, 0))  # Green
+                    s.set_alpha(100)
+                    s.fill((0, 255, 0))
                     self.screen.blit(s, (x, y))
 
-                # Draw Piece
+                # Duck
+                if self.duck_pos == (r, c):
+                    self.draw_duck(r, c)
+
+                # Pieces
                 piece = self.board[r][c]
                 if piece:
-                    text = UNICODE_PIECES[piece.color][piece.type]
-                    # Color check: Black pieces distinct from text color?
-                    p_color = (0, 0, 0) if piece.color == 'b' else (255, 255, 255)
-                    # Use a shadow/outline for visibility
+                    key = f"{piece.color}{piece.type}"
+                    if key in self.images:
+                        self.screen.blit(self.images[key], (x, y))
+                    else:
+                        text = UNICODE_PIECES[piece.color][piece.type]
+                        p_color = (0, 0, 0) if piece.color == 'b' else (255, 255, 255)
+                        txt_surf = self.font_large.render(text, True, p_color)
+                        rect = txt_surf.get_rect(center=(x + SQUARE_SIZE // 2, y + SQUARE_SIZE // 2))
+                        if piece.color == 'w':
+                            outline = self.font_large.render(text, True, (0, 0, 0))
+                            out_rect = outline.get_rect(center=(x + SQUARE_SIZE // 2 + 2, y + SQUARE_SIZE // 2 + 2))
+                            self.screen.blit(outline, out_rect)
+                        self.screen.blit(txt_surf, rect)
 
-                    # Render Glyph
-                    txt_surf = self.font_large.render(text, True, p_color)
-
-                    # Center text
-                    rect = txt_surf.get_rect(center=(x + SQUARE_SIZE // 2, y + SQUARE_SIZE // 2))
-
-                    # If white piece, add a black outline for contrast against white squares
-                    if piece.color == 'w':
-                        outline = self.font_large.render(text, True, (0, 0, 0))
-                        outline_rect = outline.get_rect(center=(x + SQUARE_SIZE // 2 + 1, y + SQUARE_SIZE // 2 + 1))
-                        self.screen.blit(outline, outline_rect)
-
-                    self.screen.blit(txt_surf, rect)
-
-    def draw_ui(self):
-        """Draws game status text."""
-        area = pygame.Rect(0, 800, SCREEN_WIDTH, 50)
-        pygame.draw.rect(self.screen, (220, 220, 220), area)
-
-        status_text = ""
+        # UI Bar
+        pygame.draw.rect(self.screen, (220, 220, 220), (0, 800, SCREEN_WIDTH, 50))
         if self.game_over:
-            winner_text = "White" if self.winner == 'w' else "Black"
-            status_text = f"GAME OVER! {winner_text} Wins! (King Captured)"
+            status = f"GAME OVER! {'White' if self.winner == 'w' else 'Black'} Wins!"
         else:
-            turn_text = "White's Turn" if self.turn == 'w' else "Black's Turn (AI)"
-            phase_text = "Select/Move Piece" if self.phase == 'move_piece' else "Place the DUCK"
-            status_text = f"{turn_text} | Phase: {phase_text}"
+            status = f"{'White' if self.turn == 'w' else 'Black'} | {'Move Piece' if self.phase == 'move_piece' else 'Place Duck'}"
 
-        txt = self.font_ui.render(status_text, True, TEXT_COLOR)
-        self.screen.blit(txt, (20, 810))
+        txt = self.font_ui.render(status, True, TEXT_COLOR)
+        self.screen.blit(txt, (20, 812))
+
+        # Buttons
+        mouse_pos = pygame.mouse.get_pos()
+
+        # Restart Button
+        btn_col = BUTTON_HOVER if self.restart_btn_rect.collidepoint(mouse_pos) else BUTTON_COLOR
+        pygame.draw.rect(self.screen, btn_col, self.restart_btn_rect, border_radius=5)
+        btn_txt = self.font_ui.render("Restart", True, (255, 255, 255))
+        self.screen.blit(btn_txt, btn_txt.get_rect(center=self.restart_btn_rect.center))
+
+        # Menu Button
+        btn_col = BUTTON_HOVER if self.menu_btn_rect.collidepoint(mouse_pos) else BUTTON_COLOR
+        pygame.draw.rect(self.screen, btn_col, self.menu_btn_rect, border_radius=5)
+        btn_txt = self.font_ui.render("Menu", True, (255, 255, 255))
+        self.screen.blit(btn_txt, btn_txt.get_rect(center=self.menu_btn_rect.center))
+
+    def draw_menu(self):
+        self.screen.fill(MENU_BG)
+
+        title = self.font_menu.render("DUCK CHESS", True, (255, 215, 0))
+        self.screen.blit(title, title.get_rect(center=(SCREEN_WIDTH // 2, 200)))
+
+        # Menu Buttons
+        opts = [
+            ("Play as White (vs AI)", 'white_ai'),
+            ("Play as Black (vs AI)", 'black_ai'),
+            ("2 Player Mode", 'pvp')
+        ]
+
+        start_y = 350
+        mouse_pos = pygame.mouse.get_pos()
+
+        for i, (text, mode) in enumerate(opts):
+            rect = pygame.Rect(SCREEN_WIDTH // 2 - 150, start_y + i * 80, 300, 60)
+            col = BUTTON_HOVER if rect.collidepoint(mouse_pos) else BUTTON_COLOR
+            pygame.draw.rect(self.screen, col, rect, border_radius=10)
+
+            txt_surf = self.font_ui.render(text, True, (255, 255, 255))
+            self.screen.blit(txt_surf, txt_surf.get_rect(center=rect.center))
+
+            # Check click inside draw loop (simple method for menu)
+            if pygame.mouse.get_pressed()[0] and rect.collidepoint(mouse_pos):
+                self.game_mode = mode
+                self.player_side = 'b' if mode == 'black_ai' else 'w'
+                self.reset_game_state()
+                self.state = 'game'
+                pygame.time.wait(200)  # Debounce
 
     def run(self):
         running = True
         while running:
-            # Event Handling
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     running = False
-                elif event.type == pygame.MOUSEBUTTONDOWN:
-                    if self.turn == 'w':
-                        self.handle_click(pygame.mouse.get_pos())
+                elif event.type == pygame.MOUSEBUTTONDOWN and self.state == 'game':
+                    self.handle_click(event.pos)
 
-            # AI Logic
-            if self.turn == 'b' and not self.game_over:
+            if self.state == 'menu':
+                self.draw_menu()
+            else:
                 self.ai_turn()
+                self.draw_game()
 
-            # Drawing
-            self.draw_board()
-            self.draw_ui()
             pygame.display.flip()
             self.clock.tick(FPS)
-
         pygame.quit()
         sys.exit()
 
 
 if __name__ == "__main__":
-    game = DuckChess()
-    game.run()
+    DuckChess().run()
