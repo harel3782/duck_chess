@@ -66,7 +66,7 @@ class DuckChess(GameLogicMixin, RenderingMixin):
         self.resize_layout(DEFAULT_WIDTH, DEFAULT_HEIGHT)
         self.reset_game_state()
 
-    def save_snapshot(self):
+    def save_snapshot(self): 
         self.history.append({
             'board': copy.deepcopy(self.board),
             'duck_pos': self.duck_pos,
@@ -125,7 +125,7 @@ class DuckChess(GameLogicMixin, RenderingMixin):
         if self.restart_btn_rect.collidepoint(pos): self.reset_game_state(); return
         if self.menu_btn_rect.collidepoint(pos): self.state = 'menu'; return
         if self.game_mode == 'pvp' and self.flip_btn_rect.collidepoint(pos):
-            self.player_side = 'b' if self.player_side == 'w' else 'w';
+            self.player_side = 'b' if self.player_side == 'w' else 'w'
             return
 
         # 2. Game Interaction Check

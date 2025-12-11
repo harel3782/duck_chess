@@ -280,23 +280,23 @@ class RenderingMixin:
 
                 # Highlights
                 if last_mv and ((r, c) == last_mv[0] or (r, c) == last_mv[1]):
-                    s = pygame.Surface((self.sq_size, self.sq_size));
-                    s.set_alpha(LAST_MOVE_COLOR[3]);
-                    s.fill(LAST_MOVE_COLOR[:3]);
+                    s = pygame.Surface((self.sq_size, self.sq_size))
+                    s.set_alpha(LAST_MOVE_COLOR[3])
+                    s.fill(LAST_MOVE_COLOR[:3])
                     self.screen.blit(s, (x, y))
                 if prev_d and (r, c) == prev_d:
-                    s = pygame.Surface((self.sq_size, self.sq_size));
-                    s.set_alpha(LAST_MOVE_COLOR[3]);
-                    s.fill(LAST_MOVE_COLOR[:3]);
+                    s = pygame.Surface((self.sq_size, self.sq_size))
+                    s.set_alpha(LAST_MOVE_COLOR[3])
+                    s.fill(LAST_MOVE_COLOR[:3])
                     self.screen.blit(s, (x, y))
 
                 if is_live and not self.promotion_pending:
                     if self.selected_square == (r, c): pygame.draw.rect(self.screen, HIGHLIGHT,
                                                                         (x, y, self.sq_size, self.sq_size))
                     if (r, c) in self.valid_moves:
-                        s = pygame.Surface((self.sq_size, self.sq_size));
-                        s.set_alpha(100);
-                        s.fill((100, 255, 100));
+                        s = pygame.Surface((self.sq_size, self.sq_size))
+                        s.set_alpha(100)
+                        s.fill((100, 255, 100))
                         self.screen.blit(s, (x, y))
                         pygame.draw.circle(self.screen, (50, 150, 50), (x + self.sq_size // 2, y + self.sq_size // 2),
                                            6)
@@ -414,7 +414,7 @@ class RenderingMixin:
         rects = self.get_promotion_rects()
         if not rects: return
         container = rects[0][0].unionall([r[0] for r in rects])
-        pygame.draw.rect(self.screen, EVAL_WHITE, container);
+        pygame.draw.rect(self.screen, EVAL_WHITE, container)
         pygame.draw.rect(self.screen, BTN_BORDER, container, width=2)
         m = pygame.mouse.get_pos()
         for r, p in rects:
