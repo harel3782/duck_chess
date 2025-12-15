@@ -401,15 +401,30 @@ class RenderingMixin:
         if not self.promotion_coords: return []
         r, c = self.promotion_coords
         bx, by = self.get_screen_pos(r, c)
-        direction = 1 if self.turn == 'w' else -1
-        menu_h = self.sq_size * 4
-        start_y = by + (self.sq_size * direction) if direction == 1 else by - menu_h
-        start_y = max(self.board_y, min(start_y, self.board_y + self.sq_size * 8 - menu_h))
-        opts = [QUEEN, KNIGHT, ROOK, BISHOP]
-        if direction == -1: opts.reverse()
-        return [(pygame.Rect(bx, start_y + i * self.sq_size, self.sq_size, self.sq_size), p) for i, p in
-                enumerate(opts)]
 
+        # 1. Force the order: Queen (Top), Rook, Bishop, Knight (Bottom)
+        opts = [QUEEN, ROOK, BISHOP, KNIGHT]
+
+        # 2. Center the menu vertically over the pawn
+        menu_h = self.sq_size * len(opts)
+        start_y = by + (self.sq_size - menu_h) // 2
+
+        # 3. Clamp to board edges (so it doesn't fly off screen)
+        board_top = self.board_y
+        board_bottom = self.board_y + self.sq_size * 8
+
+        if start_y < board_top:
+            start_y = board_top
+        elif start_y + menu_h > board_bottom:
+            start_y = board_bottom - menu_h
+
+        # 4. Generate Rects
+        rects = []
+        for i, p in enumerate(opts):
+            rect = pygame.Rect(bx, start_y + i * self.sq_size, self.sq_size, self.sq_size)
+            rects.append((rect, p))
+
+        return rects
     def draw_promotion_ui(self):
         rects = self.get_promotion_rects()
         if not rects: return

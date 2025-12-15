@@ -3,20 +3,20 @@ from settings import *
 
 
 class DuckAI:
-    def __init__(self, depth=1):
-        self.depth = depth  # Use this later for Minimax depth
+    def __init__(self, depth=2):
+        self.depth = depth
+        # TODO: Initialize Bitboards here for the CS Project optimization
 
     def get_piece_move(self, board, turn_color, legal_moves_generator):
         """
         Decides which piece to move.
-        :param board: The current 8x8 board array
-        :param turn_color: 'w' or 'b'
-        :param legal_moves_generator: A function (r, c) -> list of moves
-        :return: Tuple ((start_r, start_c), (end_r, end_c)) or None
+        Input: 2D Array Board
+        Output: Tuple ((start_r, start_c), (end_r, end_c))
         """
         all_moves = []
 
-        # 1. Find all possible moves
+        # 1. Generate all possible moves for the AI
+        # (Later, we will replace this loop with Bitboard generation)
         for r in range(8):
             for c in range(8):
                 p = board[r][c]
@@ -28,30 +28,30 @@ class DuckAI:
         if not all_moves:
             return None
 
-        # --- REPLACE THIS BLOCK WITH YOUR SMART AI LOGIC LATER ---
-        # Currently: Random Choice
+        # --- AI DECISION LOGIC ---
+        # Current: Random (Baseline)
+        # TODO: Implement Minimax / Alpha-Beta Pruning here
         chosen_move = random.choice(all_moves)
+
         return chosen_move
-        # ---------------------------------------------------------
 
     def get_duck_move(self, board, current_duck_pos, prev_duck_pos):
         """
         Decides where to place the duck.
-        :param board: The current 8x8 board array
-        :param current_duck_pos: (r, c) tuple
-        :param prev_duck_pos: (r, c) tuple (cannot place here)
-        :return: (r, c) tuple
+        Output: Tuple (r, c)
         """
-        empties = [(r, c) for r in range(8) for c in range(8) if not board[r][c]]
+        empties = []
+        for r in range(8):
+            for c in range(8):
+                if not board[r][c]:
+                    empties.append((r, c))
 
-        # Filter out the square the duck was just on (illegal in Duck Chess)
+        # Filter out the square the duck was just on
         valid_squares = [pos for pos in empties if pos != prev_duck_pos]
 
         if not valid_squares:
-            # Fallback if board is full (rare)
-            return random.choice(empties) if empties else None
+            return None
 
-        # --- REPLACE THIS BLOCK WITH YOUR SMART AI LOGIC LATER ---
-        # Currently: Random Choice
+        # Current: Random placement
+        # TODO: Heuristic - Place duck to block enemy sliding pieces?
         return random.choice(valid_squares)
-        # ---------------------------------------------------------
