@@ -10,6 +10,7 @@ class GameLogicMixin:
     """Handles Game Rules, Move Generation, and AI Integration"""
 
     def init_ai(self):
+        # We stick to the standard array-based AI for now
         self.ai = DuckAI(depth=2)
 
     def init_board(self):
@@ -148,11 +149,8 @@ class GameLogicMixin:
                         if p.type == BISHOP and (dr != 0 and dc != 0): return True
                     break
 
-        # --- FIX: Pawn Directions ---
-        # If I am White King, I look "Up" (row-1) for Black Pawns.
-        # If I am Black King, I look "Down" (row+1) for White Pawns.
+        # Pawns (Fixed Direction)
         pawn_dir = -1 if color == 'w' else 1
-
         for dc in [-1, 1]:
             nr, nc = kr + pawn_dir, kc + dc
             if 0 <= nr < 8 and 0 <= nc < 8:
@@ -198,14 +196,17 @@ class GameLogicMixin:
         target = self.board[er][ec]
         sound = 'move'
 
+        # 1. Sound Logic
         if target:
             sound = 'capture'
         elif p.type == PAWN and not target and sc != ec:
             sound = 'capture'
 
+        # 2. Animation
         if animated and hasattr(self, 'animate_move_visual'):
             self.animate_move_visual(start, end, p, is_duck=False)
 
+        # 3. Notation Generation
         move_str = ""
         if p.type == KING and abs(sc - ec) == 2:
             move_str = "O-O" if ec > sc else "O-O-O"
@@ -221,6 +222,7 @@ class GameLogicMixin:
                 sound = 'capture'
             move_str += self.get_notation_coords(er, ec)
 
+        # 4. Board Updates
         if p.type == PAWN and not target and sc != ec:
             self.board[sr][ec] = None
 
@@ -243,19 +245,32 @@ class GameLogicMixin:
         self.current_move_str = move_str
         self.last_move_arrow = (start, end)
 
+        # 5. King Capture / Game Over Handling
         if target and target.type == KING:
             self.game_over = True
             self.winner = self.turn
             sound = 'game_over'
-            self.current_move_str = move_str.replace("+", "#")
+
+            # --- FIX: LOG WINNING MOVE IMMEDIATELY ---
+            final_move_str = move_str.replace("x", "") + "#"
+            self.current_move_str = final_move_str
+
+            if self.turn == 'w':
+                self.move_log.append(f"{self.turn_number}. {final_move_str}")
+            else:
+                self.move_log.append(f"{self.turn_number}... {final_move_str}")
+
+            self.save_snapshot()
+            # -----------------------------------------
 
         if hasattr(self, 'play_sound'): self.play_sound(sound)
 
+        # 6. Promotion / Next Phase
         if not self.game_over:
             promote_rank = 0 if p.color == 'w' else 7
             if p.type == PAWN and er == promote_rank:
-                is_ai_turn = (self.game_mode == 'white_ai' and self.turn == 'b') or \
-                             (self.game_mode == 'black_ai' and self.turn == 'w')
+                is_ai_turn = (self.game_mode == 'white_ai' and self.turn == 'w') or \
+                             (self.game_mode == 'black_ai' and self.turn == 'b')
 
                 if is_ai_turn:
                     p.type = random.choice([QUEEN, ROOK, BISHOP, KNIGHT])
@@ -270,7 +285,6 @@ class GameLogicMixin:
             else:
                 self.prev_duck_pos = self.duck_pos
                 self.phase = 'move_duck'
-
     def promote_pawn(self, type_char):
         r, c = self.promotion_coords
         self.board[r][c].type = type_char

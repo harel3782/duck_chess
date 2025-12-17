@@ -203,37 +203,77 @@ class RenderingMixin:
         self.screen.blit(txt_surf, txt_surf.get_rect(center=(bar_x + bar_w // 2, bar_y + 15)))
 
     def draw_history_panel(self):
+        # 1. Background & Title
         self.draw_glass_panel(pygame.Rect(self.screen_w - self.panel_width, 0, self.panel_width, self.screen_h))
         title = self.font_status.render("Move History", True, MENU_ACCENT)
         self.screen.blit(title, (self.screen_w - self.panel_width + 15, 15))
+
+        # Turn Counter
         counter = self.font_ui.render(f"{self.view_index} / {len(self.history) - 1}", True, (150, 150, 150))
         self.screen.blit(counter, (self.screen_w - 90, 18))
         pygame.draw.line(self.screen, BTN_BORDER, (self.screen_w - self.panel_width + 10, 45), (self.screen_w - 10, 45))
 
+        # 2. Setup Dimensions
         full_log = self.history[-1]['log']
-        start_y, line_height = 55, 24
-        max_lines = (self.nav_btns['start'].top - start_y - 10) // line_height
-        highlight_idx = self.view_index - 1
-        scroll_offset = max(0, highlight_idx - (max_lines - 2)) if highlight_idx > max_lines - 2 else 0
+        start_y = 55
+        line_height = 24
+        col_white_x = self.screen_w - self.panel_width + 10
+        col_black_x = self.screen_w - self.panel_width + 155  # Adjusted spacing
 
-        for i, m_str in enumerate(full_log[scroll_offset: scroll_offset + max_lines]):
-            y_pos = start_y + i * line_height
-            if (scroll_offset + i) == highlight_idx:
-                pygame.draw.rect(self.screen, BTN_NORMAL,
-                                 (self.screen_w - self.panel_width + 5, y_pos, self.panel_width - 10, line_height),
-                                 border_radius=4)
-                txt_col = MENU_ACCENT
-            else:
-                txt_col = (200, 200, 200)
-            self.screen.blit(self.font_history.render(m_str, True, txt_col),
-                             (self.screen_w - self.panel_width + 15, y_pos + 4))
+        available_height = self.nav_btns['start'].top - start_y - 10
+        max_rows = available_height // line_height
+        total_rows = (len(full_log) + 1) // 2
 
+        # Scroll Calculation
+        current_ply_idx = self.view_index - 1
+        current_row_idx = current_ply_idx // 2
+        scroll_row = max(0, current_row_idx - (max_rows - 2)) if current_row_idx > max_rows - 2 else 0
+
+        # 3. Draw Loop
+        for row in range(scroll_row, min(total_rows, scroll_row + max_rows)):
+            y_pos = start_y + (row - scroll_row) * line_height
+
+            # --- White's Move (Left) ---
+            w_idx = row * 2
+            if w_idx < len(full_log):
+                move_str = full_log[w_idx]
+                is_active = (w_idx == current_ply_idx)
+
+                if is_active:
+                    bg_rect = pygame.Rect(col_white_x - 2, y_pos, 140, line_height)
+                    pygame.draw.rect(self.screen, BTN_NORMAL, bg_rect, border_radius=4)
+
+                color = MENU_ACCENT if is_active else (220, 220, 220)
+                self.screen.blit(self.font_history.render(move_str, True, color), (col_white_x, y_pos + 4))
+
+            # --- Black's Move (Right) ---
+            b_idx = row * 2 + 1
+            if b_idx < len(full_log):
+                raw_str = full_log[b_idx]
+
+                # --- FIX: ROBUST STRING CLEANING ---
+                # Safely remove "1... " prefix by splitting on space and taking the last part(s)
+                # If split fails, it defaults to printing the raw string.
+                if "..." in raw_str:
+                    parts = raw_str.split(' ', 1)
+                    clean_str = parts[1] if len(parts) > 1 else raw_str
+                else:
+                    clean_str = raw_str
+                # -----------------------------------
+
+                is_active = (b_idx == current_ply_idx)
+                if is_active:
+                    bg_rect = pygame.Rect(col_black_x - 2, y_pos, 140, line_height)
+                    pygame.draw.rect(self.screen, BTN_NORMAL, bg_rect, border_radius=4)
+
+                color = MENU_ACCENT if is_active else (220, 220, 220)
+                self.screen.blit(self.font_history.render(clean_str, True, color), (col_black_x, y_pos + 4))
+
+        # 4. Draw Navigation Buttons
         mouse = pygame.mouse.get_pos()
         labels = [("<<", 'start'), ("<", 'prev'), (">", 'next'), (">>", 'end')]
         for lbl, key in labels:
-            self.draw_styled_button(self.nav_btns[key], lbl, self.nav_btns[key].collidepoint(mouse), self.font_nav)
-
-    # --- NEW: GRAVEYARD METHOD ---
+            self.draw_styled_button(self.nav_btns[key], lbl, self.nav_btns[key].collidepoint(mouse), self.font_nav)    # --- NEW: GRAVEYARD METHOD ---
     def draw_game(self, hidden_square=None):
         self.draw_menu_background()
 
