@@ -10,7 +10,6 @@ class GameLogicMixin:
     """Handles Game Rules, Move Generation, and AI Integration"""
 
     def init_ai(self):
-        # We stick to the standard array-based AI for now
         self.ai = DuckAI(depth=2)
 
     def init_board(self):
@@ -21,6 +20,7 @@ class GameLogicMixin:
         for t, r, c in setup: self.board[r][c] = Piece('b' if r == 0 else 'w', t)
         for c in range(8): self.board[1][c], self.board[6][c] = Piece('b', PAWN), Piece('w', PAWN)
 
+    # --- HELPERS ---
     def get_rank_file(self, r, c):
         return "87654321"[r], "abcdefgh"[c]
 
@@ -35,6 +35,22 @@ class GameLogicMixin:
                 if p: score += PIECE_VALUES[p.type] * (1 if p.color == 'w' else -1)
         return score
 
+    # --- STATE HASHING (For 3-Fold Repetition) ---
+    def generate_fen_signature(self):
+        """Generates a unique string representing the current board state + duck + turn."""
+        board_str = ""
+        for r in range(8):
+            for c in range(8):
+                p = self.board[r][c]
+                if p:
+                    board_str += f"{p.color}{p.type}"
+                else:
+                    board_str += "."
+
+        # We must include the Duck, En Passant, and Turn in the hash
+        return f"{board_str}|{self.duck_pos}|{self.turn}|{self.en_passant_target}"
+
+    # --- MOVE GENERATION ---
     def get_piece_legal_moves(self, r, c):
         p = self.board[r][c]
         if not p: return []
@@ -43,6 +59,7 @@ class GameLogicMixin:
         def ok(nr, nc):
             return 0 <= nr < 8 and 0 <= nc < 8
 
+        # 1. King Moves
         if p.type == KING:
             dirs = [(1, 0), (-1, 0), (0, 1), (0, -1), (1, 1), (1, -1), (-1, 1), (-1, -1)]
             for dr, dc in dirs:
@@ -50,11 +67,13 @@ class GameLogicMixin:
                 if ok(nr, nc) and (nr, nc) != self.duck_pos:
                     t = self.board[nr][nc]
                     if not t or t.color != p.color: moves.append((nr, nc))
+            # Castling
             if not p.has_moved:
                 if self.can_castle(r, c, True): moves.append((r, 6))
                 if self.can_castle(r, c, False): moves.append((r, 2))
             return moves
 
+        # 2. Sliding Pieces (Queen, Rook, Bishop)
         dirs = []
         if p.type == QUEEN:
             dirs = [(1, 0), (-1, 0), (0, 1), (0, -1), (1, 1), (1, -1), (-1, 1), (-1, -1)]
@@ -76,6 +95,7 @@ class GameLogicMixin:
                         break
             return moves
 
+        # 3. Knight Moves
         if p.type == KNIGHT:
             for dr, dc in [(2, 1), (2, -1), (-2, 1), (-2, -1), (1, 2), (1, -2), (-1, 2), (-1, -2)]:
                 nr, nc = r + dr, c + dc
@@ -84,20 +104,26 @@ class GameLogicMixin:
                     if not t or t.color != p.color: moves.append((nr, nc))
             return moves
 
+        # 4. Pawn Moves
         if p.type == PAWN:
             d = -1 if p.color == 'w' else 1
+            # Forward 1
             if ok(r + d, c) and not self.board[r + d][c] and (r + d, c) != self.duck_pos:
                 moves.append((r + d, c))
+                # Forward 2
                 start_rank = 6 if p.color == 'w' else 1
                 if r == start_rank and ok(r + d * 2, c) and not self.board[r + d * 2][c] and (
                 r + d * 2, c) != self.duck_pos:
                     moves.append((r + d * 2, c))
+            # Captures
             for dc in [-1, 1]:
                 nr, nc = r + d, c + dc
                 if ok(nr, nc):
                     t = self.board[nr][nc]
+                    # Normal Capture
                     if t and t.color != p.color and (nr, nc) != self.duck_pos:
                         moves.append((nr, nc))
+                    # En Passant
                     elif not t and (nr, nc) == self.en_passant_target and (nr, nc) != self.duck_pos:
                         moves.append((nr, nc))
             return moves
@@ -113,6 +139,7 @@ class GameLogicMixin:
         return True
 
     def is_in_check(self, color, board_state=None):
+        """Checks if the King is under attack. Note: In Duck Chess, check is valid but not game-ending."""
         if board_state is None: board_state = self.board
         king_pos = None
         for r in range(8):
@@ -122,25 +149,25 @@ class GameLogicMixin:
                     king_pos = (r, c)
                     break
             if king_pos: break
-        if not king_pos: return False
+        if not king_pos: return False  # King captured?
 
         enemy = 'b' if color == 'w' else 'w'
         kr, kc = king_pos
 
-        # Knights
+        # Check Knights
         for dr, dc in [(2, 1), (2, -1), (-2, 1), (-2, -1), (1, 2), (1, -2), (-1, 2), (-1, -2)]:
             nr, nc = kr + dr, kc + dc
             if 0 <= nr < 8 and 0 <= nc < 8:
                 p = board_state[nr][nc]
                 if p and p.color == enemy and p.type == KNIGHT: return True
 
-        # Sliding
+        # Check Sliding
         dirs = [(1, 0), (-1, 0), (0, 1), (0, -1), (1, 1), (1, -1), (-1, 1), (-1, -1)]
         for dr, dc in dirs:
             for i in range(1, 8):
                 nr, nc = kr + dr * i, kc + dc * i
                 if not (0 <= nr < 8 and 0 <= nc < 8): break
-                if (nr, nc) == self.duck_pos: break
+                if (nr, nc) == self.duck_pos: break  # Duck blocks checks!
                 p = board_state[nr][nc]
                 if p:
                     if p.color == enemy:
@@ -149,7 +176,7 @@ class GameLogicMixin:
                         if p.type == BISHOP and (dr != 0 and dc != 0): return True
                     break
 
-        # Pawns (Fixed Direction)
+        # Check Pawns
         pawn_dir = -1 if color == 'w' else 1
         for dc in [-1, 1]:
             nr, nc = kr + pawn_dir, kc + dc
@@ -157,7 +184,7 @@ class GameLogicMixin:
                 p = board_state[nr][nc]
                 if p and p.color == enemy and p.type == PAWN: return True
 
-        # Kings
+        # Check Enemy King
         for dr in [-1, 0, 1]:
             for dc in [-1, 0, 1]:
                 if dr == 0 and dc == 0: continue
@@ -189,6 +216,7 @@ class GameLogicMixin:
         if ranks_differ: return start_rank
         return start_file + start_rank
 
+    # --- MAIN MOVE EXECUTION ---
     def execute_move(self, start, end, animated=True):
         sr, sc = start
         er, ec = end
@@ -196,17 +224,23 @@ class GameLogicMixin:
         target = self.board[er][ec]
         sound = 'move'
 
-        # 1. Sound Logic
+        # --- 50-Move Rule Logic: Reset on Pawn move or Capture ---
+        if p.type == PAWN or target is not None:
+            self.half_move_clock = 0
+        else:
+            self.half_move_clock += 1
+
+        # Sound Logic
         if target:
             sound = 'capture'
         elif p.type == PAWN and not target and sc != ec:
             sound = 'capture'
 
-        # 2. Animation
+        # Animation
         if animated and hasattr(self, 'animate_move_visual'):
             self.animate_move_visual(start, end, p, is_duck=False)
 
-        # 3. Notation Generation
+        # Notation
         move_str = ""
         if p.type == KING and abs(sc - ec) == 2:
             move_str = "O-O" if ec > sc else "O-O-O"
@@ -222,9 +256,9 @@ class GameLogicMixin:
                 sound = 'capture'
             move_str += self.get_notation_coords(er, ec)
 
-        # 4. Board Updates
+        # Update Board
         if p.type == PAWN and not target and sc != ec:
-            self.board[sr][ec] = None
+            self.board[sr][ec] = None  # En Passant Capture
 
         if p.type == KING and abs(sc - ec) == 2:
             ks = (ec > sc)
@@ -245,27 +279,22 @@ class GameLogicMixin:
         self.current_move_str = move_str
         self.last_move_arrow = (start, end)
 
-        # 5. King Capture / Game Over Handling
+        # King Capture Check
         if target and target.type == KING:
             self.game_over = True
             self.winner = self.turn
             sound = 'game_over'
-
-            # --- FIX: LOG WINNING MOVE IMMEDIATELY ---
             final_move_str = move_str.replace("x", "") + "#"
             self.current_move_str = final_move_str
-
             if self.turn == 'w':
                 self.move_log.append(f"{self.turn_number}. {final_move_str}")
             else:
                 self.move_log.append(f"{self.turn_number}... {final_move_str}")
-
             self.save_snapshot()
-            # -----------------------------------------
 
         if hasattr(self, 'play_sound'): self.play_sound(sound)
 
-        # 6. Promotion / Next Phase
+        # Promotion / Next Phase
         if not self.game_over:
             promote_rank = 0 if p.color == 'w' else 7
             if p.type == PAWN and er == promote_rank:
@@ -285,19 +314,17 @@ class GameLogicMixin:
             else:
                 self.prev_duck_pos = self.duck_pos
                 self.phase = 'move_duck'
+
     def promote_pawn(self, type_char):
         r, c = self.promotion_coords
         self.board[r][c].type = type_char
         self.current_move_str += f"={type_char}"
-
         enemy_color = 'b' if self.turn == 'w' else 'w'
         if self.is_in_check(enemy_color):
             if "+" not in self.current_move_str: self.current_move_str += "+"
-
         self.promotion_pending = False
         self.promotion_coords = None
         if hasattr(self, 'play_sound'): self.play_sound('promote')
-
         self.prev_duck_pos = self.duck_pos
         self.phase = 'move_duck'
 
@@ -317,17 +344,60 @@ class GameLogicMixin:
         self.duck_pos = pos
         if hasattr(self, 'play_sound'): self.play_sound('notify')
 
+        # --- UPDATE STATE ---
         self.phase = 'move_piece'
         self.turn = 'b' if self.turn == 'w' else 'w'
         self.save_snapshot()
 
+        # --- CHECK 3-FOLD, 50-MOVE, AND STALEMATE ---
+        self.check_game_end_conditions()
+
+        # AI Turn Trigger
         is_ai_next = (self.game_mode == 'white_ai' and self.turn == 'b') or \
                      (self.game_mode == 'black_ai' and self.turn == 'w')
-        if is_ai_next:
+        if is_ai_next and not self.game_over:
             self.waiting_for_ai = True
             self.ai_wait_start = pygame.time.get_ticks()
         else:
             self.waiting_for_ai = False
+
+    def check_game_end_conditions(self):
+        """Checks for 50-move rule, 3-fold repetition, and Stalemate (Loss)."""
+        if self.game_over: return
+
+        # 1. 50-Move Rule (100 half-moves)
+        if self.half_move_clock >= 100:
+            self.game_over = True
+            self.winner = 'draw'
+            print("Game Over: 50-Move Rule")
+            return
+
+        # 2. 3-Fold Repetition
+        # Create a unique hash for the current situation (Board + Duck + Turn)
+        signature = self.generate_fen_signature()
+        self.rep_history[signature] = self.rep_history.get(signature, 0) + 1
+        if self.rep_history[signature] >= 3:
+            self.game_over = True
+            self.winner = 'draw'
+            print("Game Over: 3-Fold Repetition")
+            return
+
+        # 3. Stalemate Logic (Player has no legal moves -> LOSS)
+        has_moves = False
+        for r in range(8):
+            for c in range(8):
+                p = self.board[r][c]
+                if p and p.color == self.turn:
+                    if self.get_piece_legal_moves(r, c):
+                        has_moves = True
+                        break
+            if has_moves: break
+
+        if not has_moves:
+            self.game_over = True
+            # Winner is the person who JUST moved (the previous turn)
+            self.winner = 'b' if self.turn == 'w' else 'w'
+            print(f"Game Over: Stalemate (Win for {self.winner.upper()})")
 
     def ai_turn(self):
         if self.view_index != len(self.history) - 1: return
@@ -340,10 +410,36 @@ class GameLogicMixin:
             if move:
                 self.execute_move(move[0], move[1], animated=True)
             else:
-                print("No moves available - Stalemate/Mate")
+                # This should technically be caught by check_game_end_conditions,
+                # but we keep it as a fallback.
                 self.game_over = True
                 self.winner = 'b' if self.turn == 'w' else 'w'
 
         elif self.phase == 'move_duck':
             target = self.ai.get_duck_move(self.board, self.duck_pos, self.prev_duck_pos)
             if target: self.place_duck(target, animated=True)
+
+    def clear_board(self):
+        """Removes all pieces from the board."""
+        self.board = [[None] * 8 for _ in range(8)]
+        self.duck_pos = (-1, -1)
+        self.turn = 'w'
+        self.move_log = []
+        self.history = []
+
+    def set_piece(self, r, c, piece_type, color):
+        """Manually places a piece."""
+        if piece_type == 'duck':
+            self.duck_pos = (r, c)
+            self.board[r][c] = None  # Duck cannot share square
+        else:
+            if self.duck_pos == (r, c): self.duck_pos = (-1, -1)
+            self.board[r][c] = Piece(color, piece_type)
+
+    def validate_editor_board(self):
+        """Ensures the custom board is playable (Kings exist)."""
+        w_king = sum(1 for r in range(8) for c in range(8) if
+                     self.board[r][c] and self.board[r][c].type == KING and self.board[r][c].color == 'w')
+        b_king = sum(1 for r in range(8) for c in range(8) if
+                     self.board[r][c] and self.board[r][c].type == KING and self.board[r][c].color == 'b')
+        return w_king == 1 and b_king == 1

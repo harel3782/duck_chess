@@ -7,6 +7,110 @@ from settings import *
 class RenderingMixin:
     """Handles Assets, Drawing, Audio, and Layout"""
 
+    def draw_editor(self):
+        self.draw_menu_background()
+
+        # 1. Draw Board (Static)
+        pygame.draw.rect(self.screen, (20, 20, 20),
+                         (self.board_x - 2, self.board_y - 2, self.sq_size * 8 + 4, self.sq_size * 8 + 4), width=2)
+
+        font_coord = pygame.font.SysFont("Arial", 12, bold=True)
+        for r in range(8):
+            for c in range(8):
+                x, y = self.get_screen_pos(r, c)
+                color = WHITE_COLOR if (r + c) % 2 == 0 else BLACK_SQ_COLOR
+                pygame.draw.rect(self.screen, color, (x, y, self.sq_size, self.sq_size))
+
+                # Coords
+                text_color = WHITE_COLOR if (r + c) % 2 != 0 else BLACK_SQ_COLOR
+                if r == 7:
+                    self.screen.blit(font_coord.render("abcdefgh"[c], True, text_color),
+                                     (x + self.sq_size - 12, y + self.sq_size - 14))
+                if c == 0:
+                    self.screen.blit(font_coord.render("87654321"[r], True, text_color), (x + 3, y + 2))
+
+                # Draw Pieces
+                if self.duck_pos == (r, c): self.draw_duck(r, c)
+                p = self.board[r][c]
+                if p:
+                    key = f"{p.color}{p.type}"
+                    if key in self.scaled_images:
+                        self.screen.blit(self.scaled_images[key], (x, y))
+
+        # 2. Draw Palette (Side Panel)
+        palette_x = self.board_x + self.sq_size * 8 + 40
+        start_y = self.board_y
+
+        # White Pieces Column
+        white_pieces = [KING, QUEEN, ROOK, BISHOP, KNIGHT, PAWN]
+        for i, p_type in enumerate(white_pieces):
+            y = start_y + i * (self.sq_size + 10)
+            key = f"w{p_type}"
+            if key in self.scaled_images:
+                r = pygame.Rect(palette_x, y, self.sq_size, self.sq_size)
+                # Highlight if hovering
+                if r.collidepoint(pygame.mouse.get_pos()):
+                    pygame.draw.rect(self.screen, (255, 255, 255, 50), r)
+                self.screen.blit(self.scaled_images[key], (palette_x, y))
+
+        # Black Pieces Column
+        for i, p_type in enumerate(white_pieces):
+            y = start_y + i * (self.sq_size + 10)
+            key = f"b{p_type}"
+            if key in self.scaled_images:
+                r = pygame.Rect(palette_x + self.sq_size + 10, y, self.sq_size, self.sq_size)
+                if r.collidepoint(pygame.mouse.get_pos()):
+                    pygame.draw.rect(self.screen, (255, 255, 255, 50), r)
+                self.screen.blit(self.scaled_images[key], (palette_x + self.sq_size + 10, y))
+
+        # Duck & Trash
+        y_misc = start_y + 6 * (self.sq_size + 10)
+
+        # Duck
+        if 'duck' in self.scaled_images:
+            r = pygame.Rect(palette_x, y_misc, self.sq_size, self.sq_size)
+            self.screen.blit(self.scaled_images['duck'], (palette_x, y_misc))
+
+        # Trash Can (Red Square for now)
+        trash_rect = pygame.Rect(palette_x + self.sq_size + 10, y_misc, self.sq_size, self.sq_size)
+        pygame.draw.rect(self.screen, (200, 50, 50), trash_rect, border_radius=4)
+        trash_txt = self.font_ui.render("CLR", True, (255, 255, 255))
+        self.screen.blit(trash_txt, trash_txt.get_rect(center=trash_rect.center))
+
+        # 3. Floating Piece (Dragging)
+        if hasattr(self, 'dragging') and self.dragging and self.drag_piece:
+            mx, my = pygame.mouse.get_pos()
+            key = self.drag_piece
+            if key == 'duck' and 'duck' in self.scaled_images:
+                self.screen.blit(self.scaled_images['duck'], (mx - self.sq_size // 2, my - self.sq_size // 2))
+            elif key in self.scaled_images:
+                self.screen.blit(self.scaled_images[key], (mx - self.sq_size // 2, my - self.sq_size // 2))
+
+        # 4. UI Controls (Start Game / Clear)
+        # We reuse the bottom HUD area
+        hud_rect = pygame.Rect(20, self.screen_h - 70, self.screen_w - 40, 60)
+        self.draw_glass_panel(hud_rect)
+
+        valid = self.validate_editor_board()
+        status_txt = "EDITOR MODE: Place Kings to Start" if not valid else "EDITOR MODE: Ready"
+        col = (200, 50, 50) if not valid else (50, 200, 50)
+        self.screen.blit(self.font_status.render(status_txt, True, col), (40, self.screen_h - 50))
+
+        # Buttons
+        mouse = pygame.mouse.get_pos()
+
+        # Play Button
+        self.editor_play_btn = pygame.Rect(self.screen_w - 150, self.screen_h - 58, 120, 36)
+        if valid:
+            self.draw_styled_button(self.editor_play_btn, "PLAY", self.editor_play_btn.collidepoint(mouse))
+
+        # Clear Button
+        self.editor_clear_btn = pygame.Rect(self.screen_w - 280, self.screen_h - 58, 120, 36)
+        self.draw_styled_button(self.editor_clear_btn, "CLEAR ALL", self.editor_clear_btn.collidepoint(mouse))
+
+        # Menu Button
+        self.editor_menu_btn = pygame.Rect(self.screen_w - 410, self.screen_h - 58, 120, 36)
+        self.draw_styled_button(self.editor_menu_btn, "MENU", self.editor_menu_btn.collidepoint(mouse))
     def load_assets(self):
         # 1. Paths
         base_path = os.path.dirname(os.path.abspath(__file__))
@@ -175,17 +279,23 @@ class RenderingMixin:
         self.screen.blit(txt_surf, txt_surf.get_rect(center=rect.center))
 
     def draw_eval_bar(self, current_board):
+        # 1. Determine Target Score
         if self.game_over:
-            self.target_eval_score = 20 if self.winner == 'w' else -20
+            if self.winner == 'draw':
+                self.target_eval_score = 0  # Center the bar for a Draw
+            else:
+                self.target_eval_score = 20 if self.winner == 'w' else -20
         else:
             self.target_eval_score = self.calculate_material_score(current_board)
 
+        # 2. Smoothing Animation (Existing Logic)
         diff = self.target_eval_score - self.current_eval_score
         if abs(diff) < 0.05:
             self.current_eval_score = self.target_eval_score
         else:
             self.current_eval_score += diff * 0.1
 
+        # 3. Drawing Logic (Existing Logic)
         max_adv = 20
         normalized = (max(-max_adv, min(max_adv, self.current_eval_score)) + max_adv) / (2 * max_adv)
         bar_h, bar_y, bar_x, bar_w = self.sq_size * 8, self.board_y, self.eval_bar_x, self.eval_bar_width
@@ -194,14 +304,21 @@ class RenderingMixin:
         mid_y = bar_y + bar_h * (1 - normalized)
         pygame.draw.rect(self.screen, EVAL_BLACK, (bar_x, bar_y, bar_w, mid_y - bar_y))
         pygame.draw.rect(self.screen, EVAL_WHITE, (bar_x, mid_y, bar_w, bar_y + bar_h - mid_y))
-        if self.game_over and self.winner in ['w', 'b']:
-            pygame.draw.rect(self.screen, EVAL_WHITE if self.winner == 'w' else EVAL_BLACK,
-                             (bar_x, bar_y, bar_w, bar_h))
+
+        # Draw "Winner" indicator on bar if game over
+        if self.game_over:
+            color = (150, 150, 150)  # Grey for Draw
+            if self.winner == 'w':
+                color = EVAL_WHITE
+            elif self.winner == 'b':
+                color = EVAL_BLACK
+
+            # Fill the whole bar with the winner's color (or grey for draw)
+            pygame.draw.rect(self.screen, color, (bar_x, bar_y, bar_w, bar_h))
 
         score_txt = f"{abs(int(round(self.current_eval_score)))}"
         txt_surf = self.font_eval.render(score_txt, True, TEXT_COLOR if normalized > 0.95 else EVAL_WHITE)
         self.screen.blit(txt_surf, txt_surf.get_rect(center=(bar_x + bar_w // 2, bar_y + 15)))
-
     def draw_history_panel(self):
         # 1. Background & Title
         self.draw_glass_panel(pygame.Rect(self.screen_w - self.panel_width, 0, self.panel_width, self.screen_h))
@@ -274,6 +391,7 @@ class RenderingMixin:
         labels = [("<<", 'start'), ("<", 'prev'), (">", 'next'), (">>", 'end')]
         for lbl, key in labels:
             self.draw_styled_button(self.nav_btns[key], lbl, self.nav_btns[key].collidepoint(mouse), self.font_nav)    # --- NEW: GRAVEYARD METHOD ---
+
     def draw_game(self, hidden_square=None):
         self.draw_menu_background()
 
@@ -294,8 +412,6 @@ class RenderingMixin:
         pygame.draw.rect(self.screen, BTN_BORDER, border_rect, width=0, border_radius=4)
         pygame.draw.rect(self.screen, (20, 20, 20),
                          (self.board_x - 2, self.board_y - 2, self.sq_size * 8 + 4, self.sq_size * 8 + 4), width=2)
-
-        # --- GRAVEYARD CALL REMOVED HERE ---
 
         font_coord = pygame.font.SysFont("Arial", 12, bold=True)
 
@@ -318,29 +434,58 @@ class RenderingMixin:
                     txt = font_coord.render(rank_char, True, text_color)
                     self.screen.blit(txt, (x + 3, y + 2))
 
-                # Highlights
+                # Highlights: Last Move
                 if last_mv and ((r, c) == last_mv[0] or (r, c) == last_mv[1]):
                     s = pygame.Surface((self.sq_size, self.sq_size))
                     s.set_alpha(LAST_MOVE_COLOR[3])
                     s.fill(LAST_MOVE_COLOR[:3])
                     self.screen.blit(s, (x, y))
+
+                # Highlight: Previous Duck Position (Cannot place here)
                 if prev_d and (r, c) == prev_d:
                     s = pygame.Surface((self.sq_size, self.sq_size))
                     s.set_alpha(LAST_MOVE_COLOR[3])
                     s.fill(LAST_MOVE_COLOR[:3])
                     self.screen.blit(s, (x, y))
+                    # Optional: Draw a small 'X' to show it's forbidden
+                    # pygame.draw.line(self.screen, (200,50,50), (x+10, y+10), (x+self.sq_size-10, y+self.sq_size-10), 2)
+                    # pygame.draw.line(self.screen, (200,50,50), (x+self.sq_size-10, y+10), (x+10, y+self.sq_size-10), 2)
 
                 if is_live and not self.promotion_pending:
-                    if self.selected_square == (r, c): pygame.draw.rect(self.screen, HIGHLIGHT,
-                                                                        (x, y, self.sq_size, self.sq_size))
-                    if (r, c) in self.valid_moves:
-                        s = pygame.Surface((self.sq_size, self.sq_size))
-                        s.set_alpha(100)
-                        s.fill((100, 255, 100))
-                        self.screen.blit(s, (x, y))
-                        pygame.draw.circle(self.screen, (50, 150, 50), (x + self.sq_size // 2, y + self.sq_size // 2),
-                                           6)
+                    # 1. Piece Movement Highlights
+                    if self.phase == 'move_piece':
+                        if self.selected_square == (r, c):
+                            # Selected Piece Highlight (Yellow-ish background)
+                            pygame.draw.rect(self.screen, HIGHLIGHT, (x, y, self.sq_size, self.sq_size))
 
+                        if (r, c) in self.valid_moves:
+                            s = pygame.Surface((self.sq_size, self.sq_size), pygame.SRCALPHA)
+
+                            # CHECK: Is this a capture? (Is there a piece on the target square?)
+                            if board[r][c]:
+                                # --- CAPTURE VISUAL (Thick Ring) ---
+                                # We draw a large hollow ring so it's visible AROUND the piece sprite
+                                color = (100, 255, 100, 180)  # Semi-transparent Green
+                                radius = self.sq_size // 2 - 2
+                                thickness = 6
+                                pygame.draw.circle(s, color, (self.sq_size // 2, self.sq_size // 2), radius, thickness)
+                            else:
+                                # --- QUIET MOVE VISUAL (Small Dot) ---
+                                color = (100, 255, 100, 150)
+                                radius = self.sq_size // 6
+                                pygame.draw.circle(s, color, (self.sq_size // 2, self.sq_size // 2), radius)
+
+                            self.screen.blit(s, (x, y))
+
+                    # 2. Duck Placement Highlights (No changes needed here)
+                    elif self.phase == 'move_duck':
+                        if board[r][c] is None and (r, c) != prev_d:
+                            s = pygame.Surface((self.sq_size, self.sq_size), pygame.SRCALPHA)
+                            pygame.draw.circle(s, (255, 215, 0, 100), (self.sq_size // 2, self.sq_size // 2),
+                                               self.sq_size // 5)
+                            self.screen.blit(s, (x, y))
+
+                # Draw Pieces
                 if hide_pos and (r, c) == hide_pos: continue
                 if d_pos == (r, c): self.draw_duck(r, c)
 
@@ -357,17 +502,17 @@ class RenderingMixin:
                     if key in self.scaled_images:
                         self.screen.blit(self.scaled_images[key], (x, y))
                     else:
+                        # Fallback for missing images
                         txt = UNICODE_PIECES[p.color][p.type]
                         tc = (0, 0, 0) if p.color == 'b' else (255, 255, 255)
                         sf = self.font_large.render(txt, True, tc)
                         rc = sf.get_rect(center=(x + self.sq_size // 2, y + self.sq_size // 2))
-                        if p.color == 'w': ol = self.font_large.render(txt, True, (0, 0, 0)); self.screen.blit(ol,
-                                                                                                               ol.get_rect(
-                                                                                                                   center=(
-                                                                                                                   rc.centerx + 2,
-                                                                                                                   rc.centery + 2)))
+                        if p.color == 'w':
+                            ol = self.font_large.render(txt, True, (0, 0, 0))
+                            self.screen.blit(ol, ol.get_rect(center=(rc.centerx + 2, rc.centery + 2)))
                         self.screen.blit(sf, rc)
 
+        # Dragging Render
         if hasattr(self, 'dragging') and self.dragging and self.drag_piece and is_live:
             mx, my = pygame.mouse.get_pos()
             draw_x, draw_y = mx - self.drag_offset[0], my - self.drag_offset[1]
@@ -377,12 +522,16 @@ class RenderingMixin:
         self.draw_eval_bar(board)
         self.draw_history_panel()
 
+        # HUD Rendering
         hud_w = self.screen_w - self.panel_width - 40
         hud_rect = pygame.Rect(20, self.screen_h - 70, hud_w, 60)
         self.draw_glass_panel(hud_rect)
 
         if self.game_over:
-            status, status_col = f"WINNER: {'WHITE' if self.winner == 'w' else 'BLACK'}", MENU_ACCENT
+            if self.winner == 'draw':
+                status, status_col = "GAME OVER: DRAW", (200, 200, 200)  # Grey text for Draw
+            else:
+                status, status_col = f"WINNER: {'WHITE' if self.winner == 'w' else 'BLACK'}", MENU_ACCENT
         elif not is_live:
             status, status_col = "VIEWING HISTORY", (200, 200, 255)
         elif self.promotion_pending:
@@ -393,6 +542,7 @@ class RenderingMixin:
 
         self.screen.blit(self.font_status.render(status, True, status_col), (40, self.screen_h - 50))
 
+        # Bottom Buttons
         mouse = pygame.mouse.get_pos()
         btns = [("Menu", self.menu_btn_rect), ("Restart", self.restart_btn_rect)]
         if self.game_mode == 'pvp': btns.insert(1, ("Flip Board", self.flip_btn_rect))
@@ -402,8 +552,11 @@ class RenderingMixin:
             self.draw_styled_button(r, lbl, r.collidepoint(mouse))
 
         if self.promotion_pending and is_live: self.draw_promotion_ui()
+
     def draw_menu(self):
         self.draw_menu_background()
+
+        # Title
         t_shadow = self.font_menu_title.render("DUCK CHESS", True, (0, 0, 0))
         self.screen.blit(t_shadow, t_shadow.get_rect(center=(self.screen_w // 2 + 3, self.screen_h * 0.2 + 3)))
         t_main = self.font_menu_title.render("DUCK CHESS", True, MENU_ACCENT)
@@ -411,20 +564,44 @@ class RenderingMixin:
         ver = self.font_ui.render("Pro Edition v1.0", True, (150, 160, 170))
         self.screen.blit(ver, ver.get_rect(center=(self.screen_w // 2, self.screen_h * 0.26)))
 
-        panel_rect = pygame.Rect((self.screen_w - 400) // 2, (self.screen_h - 320) // 2 + 40, 400, 320)
+        # Menu Panel
+        panel_rect = pygame.Rect((self.screen_w - 400) // 2, (self.screen_h - 400) // 2 + 40, 400, 400)
         self.draw_glass_panel(panel_rect)
 
-        opts = [("Play as White", 'white_ai'), ("Play as Black", 'black_ai'), ("2 Player (PvP)", 'pvp')]
+        # Options
+        opts = [
+            ("Play as White", 'white_ai'),
+            ("Play as Black", 'black_ai'),
+            ("2 Player (PvP)", 'pvp'),
+            ("Edit Board", 'edit')  # <--- New Option
+        ]
+
         mouse = pygame.mouse.get_pos()
+        click = pygame.mouse.get_pressed()[0]  # Check click state
+
         for i, (txt, mode) in enumerate(opts):
             r = pygame.Rect(0, 0, 300, 55)
             r.centerx, r.top = self.screen_w // 2, panel_rect.top + 50 + i * 80
-            self.draw_styled_button(r, txt, r.collidepoint(mouse))
-            if pygame.mouse.get_pressed()[0] and r.collidepoint(mouse):
-                self.game_mode, self.player_side, self.state = mode, 'b' if mode == 'black_ai' else 'w', 'game'
-                self.reset_game_state()
-                pygame.time.wait(200)
 
+            # Draw Button
+            self.draw_styled_button(r, txt, r.collidepoint(mouse))
+
+            # --- INTERACTION LOGIC ---
+            if click and r.collidepoint(mouse):
+                # Wait a bit to prevent double-clicks
+                pygame.time.wait(150)
+
+                if mode == 'edit':
+                    self.state = 'edit'
+                    self.reset_game_state()
+                    self.clear_board()
+                    self.init_board()  # Initialize standard pieces for editor
+                else:
+                    self.game_mode = mode
+                    self.player_side = 'b' if mode == 'black_ai' else 'w'
+                    self.state = 'game'
+                    self.reset_game_state()
+                return  # Exit loop after handling click
     # ... Helper methods ...
     def get_screen_pos(self, r, c):
         dr, dc = (7 - r, 7 - c) if self.player_side == 'b' else (r, c)

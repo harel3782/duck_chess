@@ -2,6 +2,7 @@ import pygame
 import sys
 import copy
 import asyncio  # <--- REQUIRED FOR WEB
+from pieces import Piece
 from settings import *
 from logic import GameLogicMixin
 from rendering import RenderingMixin
@@ -79,6 +80,8 @@ class DuckChess(GameLogicMixin, RenderingMixin):
     def reset_game_state(self):
         self.board = [[None] * 8 for _ in range(8)]
         self.init_board()
+        self.half_move_clock = 0
+        self.rep_history = {}
         self.duck_pos = (-1, -1)
         self.prev_duck_pos = (-1, -1)
         self.turn = 'w'
@@ -194,16 +197,37 @@ class DuckChess(GameLogicMixin, RenderingMixin):
     # --- ASYNC MAIN LOOP (Required for Web/Pygbag) ---
     async def run(self):
         while True:
+            # 1. EVENT HANDLING
             for event in pygame.event.get():
-                if event.type == pygame.QUIT: pygame.quit(); sys.exit()
-                if event.type == pygame.VIDEORESIZE: self.resize_layout(event.w, event.h)
+                if event.type == pygame.QUIT:
+                    pygame.quit()
+                    sys.exit()
 
-                if self.state == 'game':
+                if event.type == pygame.VIDEORESIZE:
+                    self.resize_layout(event.w, event.h)
+
+                # --- STATE: MENU ---
+                if self.state == 'menu':
+                    # Menu interactions are currently handled inside draw_menu()
+                    # via direct mouse polling (legacy style), so we pass here.
+                    # Ideally, move button logic here in the future.
+                    pass
+
+                # --- STATE: EDITOR ---
+                elif self.state == 'edit':
+                    # Pass specific events to the editor handler
+                    self.handle_editor_input(event)
+
+                # --- STATE: GAME ---
+                elif self.state == 'game':
                     if event.type == pygame.MOUSEBUTTONDOWN:
                         if self.promotion_pending:
+                            # Handle Promotion Clicks
                             for rect, p_type in self.get_promotion_rects():
-                                if rect.collidepoint(event.pos): self.promote_pawn(p_type)
+                                if rect.collidepoint(event.pos):
+                                    self.promote_pawn(p_type)
                         else:
+                            # Handle Normal Game Clicks
                             self.handle_mouse_down(event.pos)
 
                     elif event.type == pygame.MOUSEBUTTONUP:
@@ -212,18 +236,108 @@ class DuckChess(GameLogicMixin, RenderingMixin):
                     elif event.type == pygame.KEYDOWN:
                         self.handle_keyboard(event)
 
+            # 2. DRAWING & UPDATES
             if self.state == 'menu':
                 self.draw_menu()
-            else:
+
+            elif self.state == 'edit':
+                self.draw_editor()
+
+            else:  # self.state == 'game'
                 self.ai_turn()
                 self.draw_game()
 
+            # 3. REFRESH
             pygame.display.flip()
             self.clock.tick(FPS)
 
-            # This line yields control to the browser loop
+            # This line yields control to the browser loop (critical for web builds)
             await asyncio.sleep(0)
 
+    def handle_editor_input(self, event):
+        mx, my = pygame.mouse.get_pos()
+
+        if event.type == pygame.MOUSEBUTTONDOWN:
+            # 1. UI Buttons
+            if hasattr(self, 'editor_play_btn') and self.editor_play_btn.collidepoint((mx, my)):
+                if self.validate_editor_board():
+                    self.state = 'game'
+                    self.game_mode = 'pvp'  # Default to PvP, can change later
+                    self.save_snapshot()  # Save start state
+                    return
+
+            if hasattr(self, 'editor_clear_btn') and self.editor_clear_btn.collidepoint((mx, my)):
+                self.clear_board()
+                return
+
+            if hasattr(self, 'editor_menu_btn') and self.editor_menu_btn.collidepoint((mx, my)):
+                self.state = 'menu'
+                return
+
+            # 2. Check Palette Clicks (Pick up new piece)
+            palette_x = self.board_x + self.sq_size * 8 + 40
+            start_y = self.board_y
+            white_pieces = [KING, QUEEN, ROOK, BISHOP, KNIGHT, PAWN]
+
+            # Check White Column
+            for i, p_type in enumerate(white_pieces):
+                r = pygame.Rect(palette_x, start_y + i * (self.sq_size + 10), self.sq_size, self.sq_size)
+                if r.collidepoint((mx, my)):
+                    self.dragging = True
+                    self.drag_piece = f"w{p_type}"
+                    return
+
+            # Check Black Column
+            for i, p_type in enumerate(white_pieces):
+                r = pygame.Rect(palette_x + self.sq_size + 10, start_y + i * (self.sq_size + 10), self.sq_size,
+                                self.sq_size)
+                if r.collidepoint((mx, my)):
+                    self.dragging = True
+                    self.drag_piece = f"b{p_type}"
+                    return
+
+            # Check Duck
+            y_duck = start_y + 6 * (self.sq_size + 10)
+            r_duck = pygame.Rect(palette_x, y_duck, self.sq_size, self.sq_size)
+            if r_duck.collidepoint((mx, my)):
+                self.dragging = True
+                self.drag_piece = "duck"
+                return
+
+            # Check Trash (Clear specific square logic handled by dropping off board)
+
+            # 3. Check Board Clicks (Pick up existing piece to move/delete)
+            r, c = self.get_board_pos(mx, my)
+            if r != -1:
+                p = self.board[r][c]
+                if self.duck_pos == (r, c):
+                    self.dragging = True
+                    self.drag_piece = "duck"
+                    self.duck_pos = (-1, -1)  # Remove from board while dragging
+                elif p:
+                    self.dragging = True
+                    self.drag_piece = f"{p.color}{p.type}"
+                    self.board[r][c] = None  # Remove from board while dragging
+
+        elif event.type == pygame.MOUSEBUTTONUP:
+            if self.dragging:
+                r, c = self.get_board_pos(mx, my)
+
+                # If dropped on board
+                if r != -1:
+                    if self.drag_piece == 'duck':
+                        self.duck_pos = (r, c)
+                        self.board[r][c] = None  # Clear any piece under duck
+                    else:
+                        color = self.drag_piece[0]
+                        ptype = self.drag_piece[1:]
+                        self.board[r][c] = Piece(color, ptype)
+                        if self.duck_pos == (r, c): self.duck_pos = (-1, -1)
+
+                # If dropped off board -> It's deleted (Trash behavior)
+
+                self.dragging = False
+                self.drag_piece = None
 
 if __name__ == "__main__":
     asyncio.run(DuckChess().run())
