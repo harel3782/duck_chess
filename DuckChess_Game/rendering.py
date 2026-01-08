@@ -41,19 +41,18 @@ class RenderingMixin:
         palette_x = self.board_x + self.sq_size * 8 + 40
         start_y = self.board_y
 
-        # White Pieces Column
         white_pieces = [KING, QUEEN, ROOK, BISHOP, KNIGHT, PAWN]
+        # White Pieces
         for i, p_type in enumerate(white_pieces):
             y = start_y + i * (self.sq_size + 10)
             key = f"w{p_type}"
             if key in self.scaled_images:
                 r = pygame.Rect(palette_x, y, self.sq_size, self.sq_size)
-                # Highlight if hovering
                 if r.collidepoint(pygame.mouse.get_pos()):
                     pygame.draw.rect(self.screen, (255, 255, 255, 50), r)
                 self.screen.blit(self.scaled_images[key], (palette_x, y))
 
-        # Black Pieces Column
+        # Black Pieces
         for i, p_type in enumerate(white_pieces):
             y = start_y + i * (self.sq_size + 10)
             key = f"b{p_type}"
@@ -65,13 +64,10 @@ class RenderingMixin:
 
         # Duck & Trash
         y_misc = start_y + 6 * (self.sq_size + 10)
-
-        # Duck
         if 'duck' in self.scaled_images:
             r = pygame.Rect(palette_x, y_misc, self.sq_size, self.sq_size)
             self.screen.blit(self.scaled_images['duck'], (palette_x, y_misc))
 
-        # Trash Can (Red Square for now)
         trash_rect = pygame.Rect(palette_x + self.sq_size + 10, y_misc, self.sq_size, self.sq_size)
         pygame.draw.rect(self.screen, (200, 50, 50), trash_rect, border_radius=4)
         trash_txt = self.font_ui.render("CLR", True, (255, 255, 255))
@@ -86,31 +82,43 @@ class RenderingMixin:
             elif key in self.scaled_images:
                 self.screen.blit(self.scaled_images[key], (mx - self.sq_size // 2, my - self.sq_size // 2))
 
-        # 4. UI Controls (Start Game / Clear)
-        # We reuse the bottom HUD area
+        # 4. UI Controls
         hud_rect = pygame.Rect(20, self.screen_h - 70, self.screen_w - 40, 60)
         self.draw_glass_panel(hud_rect)
 
         valid = self.validate_editor_board()
-        status_txt = "EDITOR MODE: Place Kings to Start" if not valid else "EDITOR MODE: Ready"
+        status_txt = "EDITOR MODE" if not valid else "EDITOR MODE: Ready"
         col = (200, 50, 50) if not valid else (50, 200, 50)
         self.screen.blit(self.font_status.render(status_txt, True, col), (40, self.screen_h - 50))
 
-        # Buttons
         mouse = pygame.mouse.get_pos()
 
-        # Play Button
-        self.editor_play_btn = pygame.Rect(self.screen_w - 150, self.screen_h - 58, 120, 36)
-        if valid:
-            self.draw_styled_button(self.editor_play_btn, "PLAY", self.editor_play_btn.collidepoint(mouse))
+        # --- NEW: Turn Toggle Button ---
+        self.editor_turn_btn = pygame.Rect(self.screen_w - 560, self.screen_h - 58, 140, 36)
 
-        # Clear Button
+        # Visuals for the toggle
+        is_white = (self.turn == 'w')
+        btn_col = EVAL_WHITE if is_white else EVAL_BLACK
+        txt_col = (0, 0, 0) if is_white else (255, 255, 255)
+        label = "Turn: WHITE" if is_white else "Turn: BLACK"
+
+        # Draw Toggle
+        pygame.draw.rect(self.screen, btn_col, self.editor_turn_btn, border_radius=6)
+        pygame.draw.rect(self.screen, BTN_BORDER, self.editor_turn_btn, width=1, border_radius=6)
+        t_surf = self.font_ui.render(label, True, txt_col)
+        self.screen.blit(t_surf, t_surf.get_rect(center=self.editor_turn_btn.center))
+        # -------------------------------
+
+        # Other Buttons
+        self.editor_menu_btn = pygame.Rect(self.screen_w - 410, self.screen_h - 58, 120, 36)
+        self.draw_styled_button(self.editor_menu_btn, "MENU", self.editor_menu_btn.collidepoint(mouse))
+
         self.editor_clear_btn = pygame.Rect(self.screen_w - 280, self.screen_h - 58, 120, 36)
         self.draw_styled_button(self.editor_clear_btn, "CLEAR ALL", self.editor_clear_btn.collidepoint(mouse))
 
-        # Menu Button
-        self.editor_menu_btn = pygame.Rect(self.screen_w - 410, self.screen_h - 58, 120, 36)
-        self.draw_styled_button(self.editor_menu_btn, "MENU", self.editor_menu_btn.collidepoint(mouse))
+        self.editor_play_btn = pygame.Rect(self.screen_w - 150, self.screen_h - 58, 120, 36)
+        if valid:
+            self.draw_styled_button(self.editor_play_btn, "PLAY", self.editor_play_btn.collidepoint(mouse))
     def load_assets(self):
         # 1. Paths
         base_path = os.path.dirname(os.path.abspath(__file__))
@@ -519,7 +527,8 @@ class RenderingMixin:
             key = 'duck' if self.drag_piece == 'duck' else f"{self.drag_piece.color}{self.drag_piece.type}"
             if key in self.scaled_images: self.screen.blit(self.scaled_images[key], (draw_x, draw_y))
 
-        self.draw_eval_bar(board)
+        if self.show_eval:
+            self.draw_eval_bar(board)
         self.draw_history_panel()
 
         # HUD Rendering
@@ -544,8 +553,17 @@ class RenderingMixin:
 
         # Bottom Buttons
         mouse = pygame.mouse.get_pos()
-        btns = [("Menu", self.menu_btn_rect), ("Restart", self.restart_btn_rect)]
-        if self.game_mode == 'pvp': btns.insert(1, ("Flip Board", self.flip_btn_rect))
+
+        # Determine text: "Hide Eval" or "Show Eval"
+        eval_txt = "Hide Eval" if self.show_eval else "Show Eval"
+
+        btns = [("Menu", self.menu_btn_rect),
+                (eval_txt, self.eval_btn_rect),  # <--- Added here
+                ("Restart", self.restart_btn_rect)]
+
+        if self.game_mode == 'pvp':
+            btns.insert(2, ("Flip Board", self.flip_btn_rect))
+
         start_x = hud_rect.right - 20 - (len(btns) * 110)
         for i, (lbl, r) in enumerate(btns):
             r.width, r.height, r.x, r.centery = 100, 36, start_x + i * 110, hud_rect.centery
