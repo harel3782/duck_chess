@@ -298,8 +298,13 @@ class GameLogicMixin:
         if not self.game_over:
             promote_rank = 0 if p.color == 'w' else 7
             if p.type == PAWN and er == promote_rank:
-                is_ai_turn = (self.game_mode == 'white_ai' and self.turn == 'w') or \
-                             (self.game_mode == 'black_ai' and self.turn == 'b')
+
+                # --- BUG FIX: Check if it is actually the AI's turn ---
+                # If mode is 'white_ai' (User=White), AI plays Black ('b')
+                # If mode is 'black_ai' (User=Black), AI plays White ('w')
+                is_ai_turn = (self.game_mode == 'white_ai' and self.turn == 'b') or \
+                             (self.game_mode == 'black_ai' and self.turn == 'w')
+                # -----------------------------------------------------
 
                 if is_ai_turn:
                     p.type = random.choice([QUEEN, ROOK, BISHOP, KNIGHT])

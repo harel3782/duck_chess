@@ -12,7 +12,7 @@ class DuckChess(GameLogicMixin, RenderingMixin):
     def __init__(self):
         pygame.init()
         self.screen = pygame.display.set_mode((DEFAULT_WIDTH, DEFAULT_HEIGHT), pygame.RESIZABLE)
-        pygame.display.set_caption("Duck Chess: Final Pro Edition")
+        pygame.display.set_caption("Duck Chess")
         self.clock = pygame.time.Clock()
 
         self.game_mode = None
@@ -88,36 +88,10 @@ class DuckChess(GameLogicMixin, RenderingMixin):
         self.view_index = len(self.history) - 1
 
     def reset_game_state(self):
-        self.board = [[None] * 8 for _ in range(8)]
-
-        # 1. Board Setup
-        # Only init standard board if NOT coming from editor with custom setup
-        if self.state != 'game':
-            self.init_board()
-
-        if self.state == 'menu':
-            self.init_board()
-        elif self.state == 'game' and self.game_mode != 'pvp':
-            self.init_board()
-        elif self.state == 'game' and not self.history:
-            # Fresh start check
-            if not any(any(row) for row in self.board):
-                self.init_board()
-
-        # 2. Duck & Logic Initialization (The Fix)
-        # Ensure variables exist first to prevent AttributeErrors
-        if not hasattr(self, 'duck_pos'):
-            self.duck_pos = (-1, -1)
-            self.prev_duck_pos = (-1, -1)
-
-        # If we are NOT in edit mode, we generally want to reset the duck
-        if self.state != 'edit':
-            self.duck_pos = (-1, -1)
-            self.prev_duck_pos = (-1, -1)
-
-        if self.state != 'game':
-            self.turn = 'w'
-
+        # 1. Initialize Variables FIRST (Prevents AttributeErrors)
+        self.duck_pos = (-1, -1)
+        self.prev_duck_pos = (-1, -1)
+        self.turn = 'w'
         self.phase = 'move_piece'
         self.selected_square = None
         self.valid_moves = []
@@ -132,21 +106,30 @@ class DuckChess(GameLogicMixin, RenderingMixin):
         self.turn_number = 1
         self.current_move_str = ""
         self.history = []
+        self.view_index = -1
 
         self.captured = {'w': [], 'b': []}
-
         self.promotion_pending = False
         self.target_eval_score = 0
         self.current_eval_score = 0.0
 
+        # 2. Setup the Board
+        self.board = [[None] * 8 for _ in range(8)]
+
+        # FIX: Always initialize the pieces when resetting.
+        # (This fixes the empty board bug in PvP)
+        self.init_board()
+
+        # 3. AI Setup
         if self.game_mode == 'black_ai':
             self.waiting_for_ai = True
             self.ai_wait_start = pygame.time.get_ticks()
         else:
             self.waiting_for_ai = False
 
-        # Save initial state
+        # 4. Save the initial state to history
         self.save_snapshot()
+
     def handle_mouse_down(self, pos):
         if self.promotion_pending: return
 
@@ -159,7 +142,6 @@ class DuckChess(GameLogicMixin, RenderingMixin):
 
         # Control Buttons
         if self.restart_btn_rect.collidepoint(pos):
-            self.init_board()  # Force standard reset
             self.reset_game_state()
             return
         # --- NEW: Eval Toggle Click ---

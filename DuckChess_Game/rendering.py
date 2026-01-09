@@ -579,8 +579,6 @@ class RenderingMixin:
         self.screen.blit(t_shadow, t_shadow.get_rect(center=(self.screen_w // 2 + 3, self.screen_h * 0.2 + 3)))
         t_main = self.font_menu_title.render("DUCK CHESS", True, MENU_ACCENT)
         self.screen.blit(t_main, t_main.get_rect(center=(self.screen_w // 2, self.screen_h * 0.2)))
-        ver = self.font_ui.render("Pro Edition v1.0", True, (150, 160, 170))
-        self.screen.blit(ver, ver.get_rect(center=(self.screen_w // 2, self.screen_h * 0.26)))
 
         # Menu Panel
         panel_rect = pygame.Rect((self.screen_w - 400) // 2, (self.screen_h - 400) // 2 + 40, 400, 400)
