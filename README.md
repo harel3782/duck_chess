@@ -53,4 +53,4 @@ This UI is the first step towards a complete Chess Engine. The next phases inclu
 
 ### 📷 Screenshots
 
-*(Add a screenshot of the game board here)*
+<img src="game_play.png">
