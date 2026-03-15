@@ -1,6 +1,4 @@
 import random
-from settings import *
-
 
 class DuckAI:
     def __init__(self, depth=2):

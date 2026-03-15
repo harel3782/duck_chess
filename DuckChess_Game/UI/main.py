@@ -2,10 +2,10 @@ import pygame
 import sys
 import copy
 import asyncio
-from settings import *
-from logic import GameLogicMixin
-from rendering import RenderingMixin
-from pieces import Piece
+from DuckChess_Game.UI.settings import *
+from DuckChess_Game.Logic.logic import GameLogicMixin
+from DuckChess_Game.UI.rendering import RenderingMixin
+from DuckChess_Game.UI.pieces import Piece
 
 
 class DuckChess(GameLogicMixin, RenderingMixin):
@@ -136,8 +136,7 @@ class DuckChess(GameLogicMixin, RenderingMixin):
         # Navigation
         if self.nav_btns['start'].collidepoint(pos): self.view_index = 0; return
         if self.nav_btns['prev'].collidepoint(pos): self.view_index = max(0, self.view_index - 1); return
-        if self.nav_btns['next'].collidepoint(pos): self.view_index = min(len(self.history) - 1,
-                                                                          self.view_index + 1); return
+        if self.nav_btns['next'].collidepoint(pos): self.view_index = min(len(self.history) - 1, self.view_index + 1); return
         if self.nav_btns['end'].collidepoint(pos): self.view_index = len(self.history) - 1; return
 
         # Control Buttons
