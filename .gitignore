@@ -1,8 +1,13 @@
 # Python environment and caches
 __pycache__/
+*.pyc
 .venv/
 venv/
 .idea/
+models/
+*.zip
+*.pkl
+.vscode/
 
 # PyGame compiled builds
 build/
