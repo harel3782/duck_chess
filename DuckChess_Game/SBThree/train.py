@@ -1,7 +1,7 @@
 import os
 from sb3_contrib import MaskablePPO
 from sb3_contrib.common.wrappers import ActionMasker
-from duck_env import DuckChessEnv
+from .duck_env import DuckChessEnv
 
 
 def mask_fn(env: DuckChessEnv):

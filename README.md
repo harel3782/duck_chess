@@ -23,7 +23,7 @@ This project implements the full rules of the game and provides a graphical envi
 * **Full Rules Implementation:** Legal move generation including Duck placement, castling, and en passant.
 * **Interactive UI:** Drag-and-drop mechanics for pieces and the Duck.
 * **Visual Validations:** Highlights legal moves and prevents illegal placements.
-* **Modular Design:** Separated logic for the Board, Pieces, and Graphics to easily plug in an AI engine later
+* **Modular Design:** Separated logic for the Board, Pieces, and Graphics to easily plug in an AI engine later.
 
 ### 🚀 Roadmap (Final Project Goals)
 

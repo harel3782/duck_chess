@@ -1,0 +1,2297 @@
+DIRECTORY STRUCTURE:
+DuckChess_Game/
+├── Logic
+│	├── ai.py
+│	└── logic.py
+├── SBThree
+│	├── Logic
+│	│	└── logic.py
+│	├── duck_env.py
+│	├── read_replay.py
+│	└── train.py
+├── UI
+│	├── main.py
+│	├── pieces.py
+│	├── rendering.py
+│	├── rendering_base.py
+│	├── rendering_board.py
+│	├── rendering_ui.py
+│	└── settings.py
+└── build
+	├── lib.win-amd64-cpython-312
+	│	└── duck_engine.cp312-win_amd64.pyd
+	└── temp.win-amd64-cpython-312
+		└── Release
+			├── duck_engine.cp312-win_amd64.exp
+			├── duck_engine.cp312-win_amd64.lib
+			└── engine.obj
+
+============================================================
+
+
+============================================================
+FILE: Logic\ai.py
+============================================================
+
+import random
+
+class DuckAI:
+    def __init__(self, depth=2):
+        self.depth = depth
+        # TODO: Initialize Bitboards here for the CS Project optimization
+
+    def get_piece_move(self, board, turn_color, legal_moves_generator):
+        """
+        Decides which piece to move.
+        Input: 2D Array Board
+        Output: Tuple ((start_r, start_c), (end_r, end_c))
+        """
+        all_moves = []
+
+        # 1. Generate all possible moves for the AI
+        # (Later, we will replace this loop with Bitboard generation)
+        for r in range(8):
+            for c in range(8):
+                p = board[r][c]
+                if p and p.color == turn_color:
+                    valid_destinations = legal_moves_generator(r, c)
+                    for dest in valid_destinations:
+                        all_moves.append(((r, c), dest))
+
+        if not all_moves:
+            return None
+
+        # --- AI DECISION LOGIC ---
+        # Current: Random (Baseline)
+        # TODO: Implement Minimax / Alpha-Beta Pruning here
+        chosen_move = random.choice(all_moves)
+
+        return chosen_move
+
+    def get_duck_move(self, board, current_duck_pos, prev_duck_pos):
+        """
+        Decides where to place the duck.
+        Output: Tuple (r, c)
+        """
+        empties = []
+        for r in range(8):
+            for c in range(8):
+                if not board[r][c]:
+                    empties.append((r, c))
+
+        # Filter out the square the duck was just on
+        valid_squares = [pos for pos in empties if pos != prev_duck_pos]
+
+        if not valid_squares:
+            return None
+
+        # Current: Random placement
+        # TODO: Heuristic - Place duck to block enemy sliding pieces?
+        return random.choice(valid_squares)
+
+============================================================
+FILE: Logic\logic.py
+============================================================
+
+import pygame
+import random
+import numpy as np
+from DuckChess_Game.UI.settings import *
+from DuckChess_Game.UI.pieces import Piece
+from DuckChess_Game.Logic.ai import DuckAI
+
+
+class GameLogicMixin:
+    """Handles Game Rules, Move Generation, and AI Integration"""
+
+    def init_ai(self):
+        self.ai = DuckAI(depth=2)
+
+    def init_board(self):
+        setup = [(ROOK, 0, 0), (KNIGHT, 0, 1), (BISHOP, 0, 2), (QUEEN, 0, 3), (KING, 0, 4), (BISHOP, 0, 5),
+                 (KNIGHT, 0, 6), (ROOK, 0, 7),
+                 (ROOK, 7, 0), (KNIGHT, 7, 1), (BISHOP, 7, 2), (QUEEN, 7, 3), (KING, 7, 4), (BISHOP, 7, 5),
+                 (KNIGHT, 7, 6), (ROOK, 7, 7)]
+        for t, r, c in setup: self.board[r][c] = Piece('b' if r == 0 else 'w', t)
+        for c in range(8): self.board[1][c], self.board[6][c] = Piece('b', PAWN), Piece('w', PAWN)
+
+    # --- HELPERS ---
+    def get_rank_file(self, r, c):
+        return "87654321"[r], "abcdefgh"[c]
+
+    def get_notation_coords(self, r, c):
+        return f"{'abcdefgh'[c]}{'87654321'[r]}"
+
+    def calculate_material_score(self, board_state):
+        score = 0
+        for r in range(8):
+            for c in range(8):
+                p = board_state[r][c]
+                if p: score += PIECE_VALUES[p.type] * (1 if p.color == 'w' else -1)
+        return score
+
+    # --- STATE HASHING (For 3-Fold Repetition) ---
+    def generate_fen_signature(self):
+        """Generates a unique string representing the current board state + duck + turn."""
+        board_str = ""
+        for r in range(8):
+            for c in range(8):
+                p = self.board[r][c]
+                if p:
+                    board_str += f"{p.color}{p.type}"
+                else:
+                    board_str += "."
+
+        # We must include the Duck, En Passant, and Turn in the hash
+        return f"{board_str}|{self.duck_pos}|{self.turn}|{self.en_passant_target}"
+
+    # --- MOVE GENERATION ---
+    def get_piece_legal_moves(self, r, c):
+        p = self.board[r][c]
+        if not p: return []
+        moves = []
+
+        def ok(nr, nc):
+            return 0 <= nr < 8 and 0 <= nc < 8
+
+        # 1. King Moves
+        if p.type == KING:
+            dirs = [(1, 0), (-1, 0), (0, 1), (0, -1), (1, 1), (1, -1), (-1, 1), (-1, -1)]
+            for dr, dc in dirs:
+                nr, nc = r + dr, c + dc
+                if ok(nr, nc) and (nr, nc) != self.duck_pos:
+                    t = self.board[nr][nc]
+                    if not t or t.color != p.color: moves.append((nr, nc))
+            # Castling
+            if not p.has_moved:
+                if self.can_castle(r, c, True): moves.append((r, 6))
+                if self.can_castle(r, c, False): moves.append((r, 2))
+            return moves
+
+        # 2. Sliding Pieces (Queen, Rook, Bishop)
+        dirs = []
+        if p.type == QUEEN:
+            dirs = [(1, 0), (-1, 0), (0, 1), (0, -1), (1, 1), (1, -1), (-1, 1), (-1, -1)]
+        elif p.type == ROOK:
+            dirs = [(1, 0), (-1, 0), (0, 1), (0, -1)]
+        elif p.type == BISHOP:
+            dirs = [(1, 1), (1, -1), (-1, 1), (-1, -1)]
+
+        if dirs:
+            for dr, dc in dirs:
+                for i in range(1, 8):
+                    nr, nc = r + dr * i, c + dc * i
+                    if not ok(nr, nc) or (nr, nc) == self.duck_pos: break
+                    t = self.board[nr][nc]
+                    if not t:
+                        moves.append((nr, nc))
+                    else:
+                        if t.color != p.color: moves.append((nr, nc))
+                        break
+            return moves
+
+        # 3. Knight Moves
+        if p.type == KNIGHT:
+            for dr, dc in [(2, 1), (2, -1), (-2, 1), (-2, -1), (1, 2), (1, -2), (-1, 2), (-1, -2)]:
+                nr, nc = r + dr, c + dc
+                if ok(nr, nc) and (nr, nc) != self.duck_pos:
+                    t = self.board[nr][nc]
+                    if not t or t.color != p.color: moves.append((nr, nc))
+            return moves
+
+        # 4. Pawn Moves
+        if p.type == PAWN:
+            d = -1 if p.color == 'w' else 1
+            # Forward 1
+            if ok(r + d, c) and not self.board[r + d][c] and (r + d, c) != self.duck_pos:
+                moves.append((r + d, c))
+                # Forward 2
+                start_rank = 6 if p.color == 'w' else 1
+                if r == start_rank and ok(r + d * 2, c) and not self.board[r + d * 2][c] and (
+                        r + d * 2, c) != self.duck_pos:
+                    moves.append((r + d * 2, c))
+            # Captures
+            for dc in [-1, 1]:
+                nr, nc = r + d, c + dc
+                if ok(nr, nc):
+                    t = self.board[nr][nc]
+                    # Normal Capture
+                    if t and t.color != p.color and (nr, nc) != self.duck_pos:
+                        moves.append((nr, nc))
+                    # En Passant
+                    elif not t and (nr, nc) == self.en_passant_target and (nr, nc) != self.duck_pos:
+                        moves.append((nr, nc))
+            return moves
+        return []
+
+    def can_castle(self, r, c, is_ks):
+        rc = 7 if is_ks else 0
+        rook = self.board[r][rc]
+        if not rook or rook.type != ROOK or rook.has_moved: return False
+        path_cols = [5, 6] if is_ks else [1, 2, 3]
+        for cl in path_cols:
+            if self.board[r][cl] or (r, cl) == self.duck_pos: return False
+        return True
+
+    def is_in_check(self, color, board_state=None):
+        """Checks if the King is under attack. Note: In Duck Chess, check is valid but not game-ending."""
+        if board_state is None: board_state = self.board
+        king_pos = None
+        for r in range(8):
+            for c in range(8):
+                p = board_state[r][c]
+                if p and p.type == KING and p.color == color:
+                    king_pos = (r, c)
+                    break
+            if king_pos: break
+        if not king_pos: return False  # King captured?
+
+        enemy = 'b' if color == 'w' else 'w'
+        kr, kc = king_pos
+
+        # Check Knights
+        for dr, dc in [(2, 1), (2, -1), (-2, 1), (-2, -1), (1, 2), (1, -2), (-1, 2), (-1, -2)]:
+            nr, nc = kr + dr, kc + dc
+            if 0 <= nr < 8 and 0 <= nc < 8:
+                p = board_state[nr][nc]
+                if p and p.color == enemy and p.type == KNIGHT: return True
+
+        # Check Sliding
+        dirs = [(1, 0), (-1, 0), (0, 1), (0, -1), (1, 1), (1, -1), (-1, 1), (-1, -1)]
+        for dr, dc in dirs:
+            for i in range(1, 8):
+                nr, nc = kr + dr * i, kc + dc * i
+                if not (0 <= nr < 8 and 0 <= nc < 8): break
+                if (nr, nc) == self.duck_pos: break  # Duck blocks checks!
+                p = board_state[nr][nc]
+                if p:
+                    if p.color == enemy:
+                        if p.type == QUEEN: return True
+                        if p.type == ROOK and (dr == 0 or dc == 0): return True
+                        if p.type == BISHOP and (dr != 0 and dc != 0): return True
+                    break
+
+        # Check Pawns
+        pawn_dir = -1 if color == 'w' else 1
+        for dc in [-1, 1]:
+            nr, nc = kr + pawn_dir, kc + dc
+            if 0 <= nr < 8 and 0 <= nc < 8:
+                p = board_state[nr][nc]
+                if p and p.color == enemy and p.type == PAWN: return True
+
+        # Check Enemy King
+        for dr in [-1, 0, 1]:
+            for dc in [-1, 0, 1]:
+                if dr == 0 and dc == 0: continue
+                nr, nc = kr + dr, kc + dc
+                if 0 <= nr < 8 and 0 <= nc < 8:
+                    p = board_state[nr][nc]
+                    if p and p.color == enemy and p.type == KING: return True
+        return False
+
+    def get_disambiguation(self, start, end, piece):
+        if piece.type == PAWN: return ""
+        duplicates = []
+        sr, sc = start
+        for r in range(8):
+            for c in range(8):
+                if (r, c) == start: continue
+                p = self.board[r][c]
+                if p and p.type == piece.type and p.color == piece.color:
+                    moves = self.get_piece_legal_moves(r, c)
+                    if end in moves: duplicates.append((r, c))
+        if not duplicates: return ""
+        files_differ = True
+        ranks_differ = True
+        for (dr, dc) in duplicates:
+            if dc == sc: files_differ = False
+            if dr == sr: ranks_differ = False
+        start_rank, start_file = self.get_rank_file(sr, sc)
+        if files_differ: return start_file
+        if ranks_differ: return start_rank
+        return start_file + start_rank
+
+    # --- MAIN MOVE EXECUTION ---
+    def execute_move(self, start, end, animated=True):
+        sr, sc = start
+        er, ec = end
+        p = self.board[sr][sc]
+        target = self.board[er][ec]
+        sound = 'move'
+
+        # --- 50-Move Rule Logic: Reset on Pawn move or Capture ---
+        if p.type == PAWN or target is not None:
+            self.half_move_clock = 0
+        else:
+            self.half_move_clock += 1
+
+        # Sound Logic
+        if target:
+            sound = 'capture'
+        elif p.type == PAWN and not target and sc != ec:
+            sound = 'capture'
+
+        # Animation
+        if animated and hasattr(self, 'animate_move_visual'):
+            self.animate_move_visual(start, end, p, is_duck=False)
+
+        # Notation
+        move_str = ""
+        if p.type == KING and abs(sc - ec) == 2:
+            move_str = "O-O" if ec > sc else "O-O-O"
+            sound = 'castle'
+        else:
+            if p.type != PAWN:
+                move_str += p.type
+                move_str += self.get_disambiguation(start, end, p)
+            is_capture = (target is not None) or (p.type == PAWN and sc != ec and not target)
+            if is_capture:
+                if p.type == PAWN: move_str += self.get_notation_coords(sr, sc)[0]
+                move_str += "x"
+                sound = 'capture'
+            move_str += self.get_notation_coords(er, ec)
+
+        # Update Board
+        if p.type == PAWN and not target and sc != ec:
+            self.board[sr][ec] = None  # En Passant Capture
+
+        if p.type == KING and abs(sc - ec) == 2:
+            ks = (ec > sc)
+            rc, nrc = (7, 5) if ks else (0, 3)
+            self.board[sr][nrc], self.board[sr][rc] = self.board[sr][rc], None
+            self.board[sr][nrc].has_moved = True
+
+        self.board[er][ec], self.board[sr][sc] = p, None
+        p.has_moved = True
+
+        next_ep = None
+        if p.type == PAWN and abs(sr - er) == 2: next_ep = ((sr + er) // 2, sc)
+        self.en_passant_target = next_ep
+
+        enemy_color = 'b' if self.turn == 'w' else 'w'
+        if self.is_in_check(enemy_color): move_str += "+"
+
+        self.current_move_str = move_str
+        self.last_move_arrow = (start, end)
+
+        # King Capture Check
+        if target and target.type == KING:
+            self.game_over = True
+            self.winner = self.turn
+            sound = 'game_over'
+            final_move_str = move_str.replace("x", "") + "#"
+            self.current_move_str = final_move_str
+            if self.turn == 'w':
+                self.move_log.append(f"{self.turn_number}. {final_move_str}")
+            else:
+                self.move_log.append(f"{self.turn_number}... {final_move_str}")
+            self.save_snapshot()
+
+        if hasattr(self, 'play_sound'): self.play_sound(sound)
+
+        # Promotion / Next Phase
+        if not self.game_over:
+            promote_rank = 0 if p.color == 'w' else 7
+            if p.type == PAWN and er == promote_rank:
+
+                # --- BUG FIX: Check if it is actually the AI's turn or RL training ---
+                is_ai_turn = (getattr(self, 'game_mode', '') == 'rl_training') or \
+                             (getattr(self, 'game_mode', '') == 'white_ai' and self.turn == 'b') or \
+                             (getattr(self, 'game_mode', '') == 'black_ai' and self.turn == 'w')
+                # -----------------------------------------------------
+
+                if is_ai_turn:
+                    p.type = random.choice([QUEEN, ROOK, BISHOP, KNIGHT])
+                    self.current_move_str += f"={p.type}"
+                    if hasattr(self, 'play_sound'): self.play_sound('promote')
+                    self.prev_duck_pos = self.duck_pos
+                    self.phase = 'move_duck'
+
+                    # Debug the tensor after a piece is automatically promoted (only in UI)
+                    if hasattr(self, 'debug_print_observation') and getattr(self, 'game_mode', '') != 'rl_training':
+                        self.debug_print_observation()
+                else:
+                    self.promotion_pending = True
+                    self.promotion_coords = (er, ec)
+                    if hasattr(self, 'play_sound'): self.play_sound('notify')
+            else:
+                self.prev_duck_pos = self.duck_pos
+                self.phase = 'move_duck'
+
+                # Debug the tensor after a piece moves (only in UI)
+                if hasattr(self, 'debug_print_observation') and getattr(self, 'game_mode', '') != 'rl_training':
+                    self.debug_print_observation()
+    def promote_pawn(self, type_char):
+        r, c = self.promotion_coords
+        self.board[r][c].type = type_char
+        self.current_move_str += f"={type_char}"
+        enemy_color = 'b' if self.turn == 'w' else 'w'
+        if self.is_in_check(enemy_color):
+            if "+" not in self.current_move_str: self.current_move_str += "+"
+        self.promotion_pending = False
+        self.promotion_coords = None
+        if hasattr(self, 'play_sound'): self.play_sound('promote')
+        self.prev_duck_pos = self.duck_pos
+        self.phase = 'move_duck'
+
+        # Debug the tensor after a piece is promoted
+        # self.debug_print_observation()
+
+    def place_duck(self, pos, animated=True):
+        if self.board[pos[0]][pos[1]] or pos == self.prev_duck_pos: return
+
+        if animated and self.duck_pos != (-1, -1) and hasattr(self, 'animate_move_visual'):
+            self.animate_move_visual(self.duck_pos, pos, None, is_duck=True)
+
+        log_entry = f"{self.current_move_str} @ {self.get_notation_coords(pos[0], pos[1])}"
+        if self.turn == 'w':
+            self.move_log.append(f"{self.turn_number}. {log_entry}")
+        else:
+            self.move_log.append(f"{self.turn_number}... {log_entry}")
+            self.turn_number += 1
+
+        self.duck_pos = pos
+        if hasattr(self, 'play_sound'): self.play_sound('notify')
+
+        # --- UPDATE STATE ---
+        self.phase = 'move_piece'
+        self.turn = 'b' if self.turn == 'w' else 'w'
+        self.save_snapshot()
+
+        # --- CHECK 3-FOLD, 50-MOVE, AND STALEMATE ---
+        self.check_game_end_conditions()
+
+        # AI Turn Trigger
+        is_ai_next = (self.game_mode == 'white_ai' and self.turn == 'b') or \
+                     (self.game_mode == 'black_ai' and self.turn == 'w')
+        if is_ai_next and not self.game_over:
+            self.waiting_for_ai = True
+            self.ai_wait_start = pygame.time.get_ticks()
+        else:
+            self.waiting_for_ai = False
+
+        # Debug the tensor after the duck is placed
+        # self.debug_print_observation()
+
+    def check_game_end_conditions(self):
+        """Checks for 50-move rule, 3-fold repetition, and Stalemate (Loss)."""
+        if self.game_over: return
+
+        # 1. 50-Move Rule (100 half-moves)
+        if self.half_move_clock >= 100:
+            self.game_over = True
+            self.winner = 'draw'
+            print("Game Over: 50-Move Rule")
+            return
+
+        # 2. 3-Fold Repetition
+        signature = self.generate_fen_signature()
+        self.rep_history[signature] = self.rep_history.get(signature, 0) + 1
+        if self.rep_history[signature] >= 3:
+            self.game_over = True
+            self.winner = 'draw'
+            print("Game Over: 3-Fold Repetition")
+            return
+
+        # 3. Stalemate Logic (Player has no legal moves -> LOSS)
+        has_moves = False
+        for r in range(8):
+            for c in range(8):
+                p = self.board[r][c]
+                if p and p.color == self.turn:
+                    if self.get_piece_legal_moves(r, c):
+                        has_moves = True
+                        break
+            if has_moves: break
+
+        if not has_moves:
+            self.game_over = True
+            self.winner = 'b' if self.turn == 'w' else 'w'
+            print(f"Game Over: Stalemate (Win for {self.winner.upper()})")
+
+    def ai_turn(self):
+        if self.view_index != len(self.history) - 1: return
+        if self.game_over: return
+        if not self.waiting_for_ai: return
+        if pygame.time.get_ticks() - self.ai_wait_start < 400: return
+
+        if self.phase == 'move_piece':
+            move = self.ai.get_piece_move(self.board, self.turn, self.get_piece_legal_moves)
+            if move:
+                self.execute_move(move[0], move[1], animated=True)
+            else:
+                self.game_over = True
+                self.winner = 'b' if self.turn == 'w' else 'w'
+
+        elif self.phase == 'move_duck':
+            target = self.ai.get_duck_move(self.board, self.duck_pos, self.prev_duck_pos)
+            if target: self.place_duck(target, animated=True)
+
+    def clear_board(self):
+        """Removes all pieces from the board."""
+        self.board = [[None] * 8 for _ in range(8)]
+        self.duck_pos = (-1, -1)
+        self.turn = 'w'
+        self.move_log = []
+        self.history = []
+
+    def set_piece(self, r, c, piece_type, color):
+        """Manually places a piece."""
+        if piece_type == 'duck':
+            self.duck_pos = (r, c)
+            self.board[r][c] = None  # Duck cannot share square
+        else:
+            if self.duck_pos == (r, c): self.duck_pos = (-1, -1)
+            self.board[r][c] = Piece(color, piece_type)
+
+    def validate_editor_board(self):
+        """Ensures the custom board is playable (Kings exist)."""
+        w_king = sum(1 for r in range(8) for c in range(8) if
+                     self.board[r][c] and self.board[r][c].type == KING and self.board[r][c].color == 'w')
+        b_king = sum(1 for r in range(8) for c in range(8) if
+                     self.board[r][c] and self.board[r][c].type == KING and self.board[r][c].color == 'b')
+        return w_king == 1 and b_king == 1
+
+    # ==========================================
+    # --- RL ENVIRONMENT HELPERS ---
+    # ==========================================
+
+    def _get_obs(self):
+        """
+        Converts the current board state into an 19x8x8 Observation Tensor for the RL Model.
+        Channels 0-5: White pieces (P, N, B, R, Q, K)
+        Channels 6-11: Black pieces
+        Channel 12: Duck position
+        Channel 13: En Passant target
+        Channel 14: Turn (1.0 for White, 0.0 for Black)
+        Channels 15-18: Castling rights (White King, White Queen, Black King, Black Queen)
+        """
+        obs = np.zeros((19, 8, 8), dtype=np.float32)
+
+        piece_to_channel = {
+            'w': {PAWN: 0, KNIGHT: 1, BISHOP: 2, ROOK: 3, QUEEN: 4, KING: 5},
+            'b': {PAWN: 6, KNIGHT: 7, BISHOP: 8, ROOK: 9, QUEEN: 10, KING: 11}
+        }
+
+        wk_pos = None
+        bk_pos = None
+
+        # 1. Fill piece layers
+        for r in range(8):
+            for c in range(8):
+                p = self.board[r][c]
+                if p:
+                    channel = piece_to_channel[p.color][p.type]
+                    obs[channel][r][c] = 1.0
+
+                    if p.type == KING:
+                        if p.color == 'w':
+                            wk_pos = (r, c)
+                        else:
+                            bk_pos = (r, c)
+
+        # 2. Duck position
+        if self.duck_pos != (-1, -1):
+            dr, dc = self.duck_pos
+            obs[12][dr][dc] = 1.0
+
+        # 3. En Passant target
+        if self.en_passant_target:
+            er, ec = self.en_passant_target
+            obs[13][er][ec] = 1.0
+
+        # 4. Turn
+        if self.turn == 'w':
+            obs[14].fill(1.0)
+
+        # 5. Castling rights
+        if wk_pos and not self.board[wk_pos[0]][wk_pos[1]].has_moved:
+            if self.can_castle(wk_pos[0], wk_pos[1], True):
+                obs[15].fill(1.0)
+            if self.can_castle(wk_pos[0], wk_pos[1], False):
+                obs[16].fill(1.0)
+
+        if bk_pos and not self.board[bk_pos[0]][bk_pos[1]].has_moved:
+            if self.can_castle(bk_pos[0], bk_pos[1], True):
+                obs[17].fill(1.0)
+            if self.can_castle(bk_pos[0], bk_pos[1], False):
+                obs[18].fill(1.0)
+
+        return obs
+
+    # ==========================================
+    # --- RL ACTION SPACE HELPERS ---
+    # ==========================================
+
+    def _encode_move(self, start, end):
+        """Converts a move from coordinates to a flat index (0-4095)"""
+        start_idx = start[0] * 8 + start[1]
+        end_idx = end[0] * 8 + end[1]
+        return start_idx * 64 + end_idx
+
+    def _decode_move(self, action):
+        """Converts a flat index back to coordinates ((sr, sc), (er, ec))"""
+        start_idx = action // 64
+        end_idx = action % 64
+        sr, sc = start_idx // 8, start_idx % 8
+        er, ec = end_idx // 8, end_idx % 8
+        return (sr, sc), (er, ec)
+
+    def action_masks(self):
+        """
+        Returns a boolean mask of size 4096.
+        True means the action is legal in the current phase.
+        """
+        masks = np.zeros(4096, dtype=bool)
+
+        # --- TERMINAL STATE PROTECTION ---
+        # SB3 requests a mask even for the terminal state (when the game is over).
+        # We must provide at least one valid action to prevent PyTorch Simplex() crash.
+        if getattr(self, 'game_over', False):
+            masks[0] = True
+            return masks
+
+        if self.phase == 'move_piece':
+            # Phase 1: Moving a piece
+            for r in range(8):
+                for c in range(8):
+                    p = self.board[r][c]
+                    if p and p.color == self.turn:
+                        valid_moves = self.get_piece_legal_moves(r, c)
+                        for end_pos in valid_moves:
+                            action_idx = self._encode_move((r, c), end_pos)
+                            masks[action_idx] = True
+
+        elif self.phase == 'move_duck':
+            # Phase 2: Placing the duck
+            # We arbitrarily use start=(0,0) to keep the action within the 4096 range
+            for r in range(8):
+                for c in range(8):
+                    if not self.board[r][c] and (r, c) != self.prev_duck_pos:
+                        action_idx = self._encode_move((0, 0), (r, c))
+                        masks[action_idx] = True
+
+        # --- BULLETPROOF FALLBACK ---
+        # If somehow no moves are found during a regular game state
+        if not masks.any():
+            masks[0] = True
+
+        return masks
+
+
+    def debug_print_observation(self):
+        """
+        Helper function to print the 19x8x8 observation tensor in a human-readable format.
+        It scans the tensor and prints only the active bits (1.0).
+        """
+        obs = self._get_obs()
+
+        # Map channel indices to readable names
+        channel_names = {
+            0: "White Pawns", 1: "White Knights", 2: "White Bishops",
+            3: "White Rooks", 4: "White Queens", 5: "White King",
+            6: "Black Pawns", 7: "Black Knights", 8: "Black Bishops",
+            9: "Black Rooks", 10: "Black Queens", 11: "Black King",
+            12: "Duck Position", 13: "En Passant Target"
+        }
+
+        print("\n" + "=" * 40)
+        print("OBSERVATION TENSOR STATE")
+        print("=" * 40)
+
+        # 1. Print piece positions and board targets (Channels 0-13)
+        for channel in range(14):
+            active_squares = []
+            for r in range(8):
+                for c in range(8):
+                    if obs[channel][r][c] == 1.0:
+                        # Convert (r, c) to chess notation like 'e2'
+                        coords = self.get_notation_coords(r, c)
+                        active_squares.append(coords)
+
+            # Only print channels that actually have active bits
+            if active_squares:
+                print(f"[{channel}] {channel_names[channel]:<18}: {', '.join(active_squares)}")
+
+        # 2. Print global state variables (Channels 14-18)
+        print("-" * 40)
+        # Turn plane is entirely 1.0 if white, 0.0 if black
+        current_turn = "White" if obs[14][0][0] == 1.0 else "Black"
+        print(f"[14] Turn               : {current_turn}")
+
+        # Castling planes
+        print(f"[15] White Castling KS  : {'Yes' if obs[15][0][0] == 1.0 else 'No'}")
+        print(f"[16] White Castling QS  : {'Yes' if obs[16][0][0] == 1.0 else 'No'}")
+        print(f"[17] Black Castling KS  : {'Yes' if obs[17][0][0] == 1.0 else 'No'}")
+        print(f"[18] Black Castling QS  : {'Yes' if obs[18][0][0] == 1.0 else 'No'}")
+        print("=" * 40 + "\n")
+
+    def load_replay_file(self, filepath):
+        """
+        Loads a .pkl replay file, resets the board, and silently executes
+        all actions to populate the history array for the GUI viewer.
+        """
+        import pickle
+
+        try:
+            with open(filepath, 'rb') as f:
+                game_data = pickle.load(f)
+        except Exception as e:
+            print(f"Failed to load replay: {e}")
+            return
+
+        actions = game_data.get('action_history', [])
+        if not actions:
+            print("No action history found in this replay.")
+            return
+
+        # 1. Reset the game state to start a fresh game
+        self.reset_game_state()
+        self.game_mode = 'replay'
+        self.state = 'game'
+
+        # 2. Reconstruct the game silently
+        for act in actions:
+            (sr, sc), (er, ec) = self._decode_move(act)
+            if self.phase == 'move_piece':
+                self.execute_move((sr, sc), (er, ec), animated=False)
+            elif self.phase == 'move_duck':
+                self.place_duck((er, ec), animated=False)
+
+        # 3. Set the viewer to the START of the game so the user can click '>' to watch
+        self.view_index = 0
+        print(f"Successfully loaded replay with {len(actions) // 2} full turns.")
+
+============================================================
+FILE: SBThree\duck_env.py
+============================================================
+
+import gymnasium as gym
+import numpy as np
+from gymnasium import spaces
+import sys
+import os
+import pickle
+import time
+import random
+
+# Add the root directory to sys.path so we can import the game logic
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+from DuckChess_Game.Logic.logic import GameLogicMixin
+
+
+class DuckChessEnv(gym.Env, GameLogicMixin):
+    """
+    Headless RL Environment for Duck Chess compatible with Stable Baselines3.
+    The RL Agent plays WHITE. The Environment simulates BLACK randomly.
+    """
+
+    def __init__(self):
+        super().__init__()
+
+        self.action_space = spaces.Discrete(4096)
+        self.observation_space = spaces.Box(low=0.0, high=1.0, shape=(19, 8, 8), dtype=np.float32)
+        self.game_mode = 'rl_training'
+
+        self.episode_counter = 0
+        self.replays_dir = "saved_replays"
+        os.makedirs(self.replays_dir, exist_ok=True)
+
+        self.reset()
+
+    def reset(self, seed=None, options=None):
+        super().reset(seed=seed)
+
+        self.board = [[None] * 8 for _ in range(8)]
+        self.duck_pos = (-1, -1)
+        self.prev_duck_pos = (-1, -1)
+        self.turn = 'w'
+        self.phase = 'move_piece'
+        self.game_over = False
+        self.winner = None
+        self.en_passant_target = None
+        self.half_move_clock = 0
+        self.rep_history = {}
+        self.turn_number = 1
+
+        self.move_log = []
+        self.history = []
+        self.view_index = -1
+        self.last_move_arrow = None
+        self.captured = {'w': [], 'b': []}
+        self.promotion_pending = False
+        self.current_move_str = ""
+
+        self.action_history = []
+
+        self.init_board()
+
+        return self._get_obs(), {}
+
+    def save_snapshot(self):
+        pass
+
+    def _save_binary_replay(self):
+        timestamp = time.strftime("%Y%m%d_%H%M%S")
+        filename = os.path.join(self.replays_dir, f"game_{self.episode_counter}_{timestamp}.pkl")
+
+        game_data = {
+            'episode': self.episode_counter,
+            'winner': self.winner,
+            'move_log': self.move_log,
+            'action_history': self.action_history
+        }
+
+        with open(filename, 'wb') as f:
+            pickle.dump(game_data, f)
+
+    def _play_random_opponent_turn(self):
+        """
+        Simulates a complete turn (Piece Move + Duck Place) for the Black opponent.
+        """
+        if self.game_over or self.turn != 'b':
+            return
+
+        # 1. Opponent Piece Move
+        valid_piece_moves = []
+        for r in range(8):
+            for c in range(8):
+                p = self.board[r][c]
+                if p and p.color == 'b':
+                    moves = self.get_piece_legal_moves(r, c)
+                    for dest in moves:
+                        valid_piece_moves.append(((r, c), dest))
+
+        if valid_piece_moves:
+            chosen_move = random.choice(valid_piece_moves)
+            # We must save the opponent's action to the history so the GUI replay viewer won't crash
+            action_idx = self._encode_move(chosen_move[0], chosen_move[1])
+            self.action_history.append(action_idx)
+
+            self.execute_move(chosen_move[0], chosen_move[1], animated=False)
+            self.check_game_end_conditions()
+
+        if self.game_over: return
+
+        # 2. Opponent Duck Placement
+        valid_duck_moves = []
+        for r in range(8):
+            for c in range(8):
+                if not self.board[r][c] and (r, c) != self.prev_duck_pos:
+                    valid_duck_moves.append((r, c))
+
+        if valid_duck_moves:
+            chosen_duck = random.choice(valid_duck_moves)
+
+            # Save opponent duck action
+            action_idx = self._encode_move((0, 0), chosen_duck)
+            self.action_history.append(action_idx)
+
+            self.place_duck(chosen_duck, animated=False)
+            self.check_game_end_conditions()
+
+    def step(self, action):
+        self.action_history.append(action)
+        reward = -0.001  # Small step penalty to encourage fast wins
+        terminated = False
+        truncated = False
+        info = {}
+
+        # 1. AGENT'S TURN (WHITE)
+        (sr, sc), (er, ec) = self._decode_move(action)
+
+        if self.phase == 'move_piece':
+            self.execute_move((sr, sc), (er, ec), animated=False)
+        elif self.phase == 'move_duck':
+            self.place_duck((er, ec), animated=False)
+
+        self.check_game_end_conditions()
+
+        # 2. OPPONENT'S TURN (BLACK) - Triggered only if the Agent just placed a duck
+        if not self.game_over and self.turn == 'b':
+            self._play_random_opponent_turn()
+
+        # 3. EVALUATE REWARD
+        if self.game_over:
+            terminated = True
+            self.episode_counter += 1
+
+            if self.winner == 'w':  # Agent won!
+                reward = 1.0
+            elif self.winner == 'b':  # Agent lost to the random bot
+                reward = -1.0
+            else:  # Draw
+                reward = -0.1
+
+            if self.episode_counter % 5 == 0:
+                self._save_binary_replay()
+
+        return self._get_obs(), reward, terminated, truncated, info
+
+    def get_action_masks(self):
+        return self.action_masks()
+
+============================================================
+FILE: SBThree\read_replay.py
+============================================================
+
+import pickle
+import sys
+import os
+
+
+def read_binary_game(filepath):
+    """
+    Loads a .pkl replay file and prints the game details and move log.
+    """
+    if not os.path.exists(filepath):
+        print(f"Error: File '{filepath}' not found.")
+        return
+
+    with open(filepath, 'rb') as f:
+        game_data = pickle.load(f)
+
+    print("=" * 40)
+    print(f"GAME REPLAY - Episode: {game_data.get('episode', 'Unknown')}")
+    print(f"Winner: {game_data.get('winner', 'Unknown').upper()}")
+    print("=" * 40)
+    print("Move Log:")
+
+    for move in game_data.get('move_log', []):
+        print(move)
+
+    print("=" * 40)
+
+
+if __name__ == "__main__":
+    # Change this filename to one of the files generated in the 'saved_replays' folder
+    target_file = "saved_replays/game_500_20260311_201500.pkl"
+    read_binary_game(target_file)
+
+============================================================
+FILE: SBThree\train.py
+============================================================
+
+import os
+from sb3_contrib import MaskablePPO
+from sb3_contrib.common.wrappers import ActionMasker
+from duck_env import DuckChessEnv
+
+
+def mask_fn(env: DuckChessEnv):
+    return env.get_action_masks()
+
+
+def main():
+    env = DuckChessEnv()
+    env = ActionMasker(env, mask_fn)
+
+    models_dir = "models/duck_ppo"
+    os.makedirs(models_dir, exist_ok=True)
+    model_path = f"{models_dir}/duck_model_v1.zip"
+
+    if os.path.exists(model_path):
+        print(f"Loading existing model from {model_path}...")
+        model = MaskablePPO.load(model_path, env=env)
+    else:
+        print("Starting fresh training with stability parameters...")
+        # We add 'max_grad_norm' to prevent gradient explosions (NaNs)
+        # and increase 'batch_size' for more stable updates.
+        model = MaskablePPO(
+            "MlpPolicy",
+            env,
+            verbose=1,
+            batch_size=128,  # Increased from 64 for stability
+            max_grad_norm=0.5,  # Strictly limits how much weights can jump
+            learning_rate=0.0002  # Slightly slower learning for better convergence
+        )
+
+    print("Starting training! Press Ctrl+C to save and stop early.")
+    try:
+        # Training for 500,000 steps
+        model.learn(total_timesteps=100_000, reset_num_timesteps=False)
+    except KeyboardInterrupt:
+        print("\nTraining interrupted. Saving progress...")
+
+    model.save(f"{models_dir}/duck_model_v1")
+    print(f"Model saved successfully to {models_dir}/duck_model_v1")
+
+
+if __name__ == "__main__":
+    main()
+
+============================================================
+FILE: UI\main.py
+============================================================
+
+import pygame
+import sys
+import copy
+import asyncio
+from DuckChess_Game.UI.settings import *
+from DuckChess_Game.Logic.logic import GameLogicMixin
+from DuckChess_Game.UI.rendering import RenderingMixin
+from DuckChess_Game.UI.pieces import Piece
+
+
+class DuckChess(GameLogicMixin, RenderingMixin):
+    def __init__(self):
+        pygame.init()
+        self.screen = pygame.display.set_mode((DEFAULT_WIDTH, DEFAULT_HEIGHT), pygame.RESIZABLE)
+        pygame.display.set_caption("Duck Chess")
+        self.clock = pygame.time.Clock()
+
+        self.game_mode = None
+        self.player_side = 'w'
+        self.state = 'menu'  # Start in Menu
+
+        # Initialize AI
+        self.init_ai()
+
+        # Layout
+        self.sq_size = 0
+        self.board_x = 0
+        self.board_y = 0
+        self.ui_height = 60
+        self.panel_width = 300
+        self.eval_bar_width = 36
+        self.side_margin = 20
+
+        # Buttons (Initialized to zero, updated in resize_layout)
+        self.nav_btns = {k: pygame.Rect(0, 0, 0, 0) for k in ['start', 'prev', 'next', 'end']}
+        self.menu_btn_rect = pygame.Rect(0, 0, 0, 0)
+        self.flip_btn_rect = pygame.Rect(0, 0, 0, 0)
+        self.restart_btn_rect = pygame.Rect(0, 0, 0, 0)
+
+        # --- NEW: Eval Toggle ---
+        self.show_eval = True  # Default is ON
+        self.eval_btn_rect = pygame.Rect(0, 0, 0, 0)
+
+        # Editor Buttons (Initialized to zero)
+        self.editor_play_btn = pygame.Rect(0, 0, 0, 0)
+        self.editor_clear_btn = pygame.Rect(0, 0, 0, 0)
+        self.editor_menu_btn = pygame.Rect(0, 0, 0, 0)
+        self.editor_turn_btn = pygame.Rect(0, 0, 0, 0)
+
+        # Assets
+        self.original_images = {}
+        self.scaled_images = {}
+        self.sounds = {}
+        self.load_assets()
+
+        # State Variables
+        self.move_log = []
+        self.current_move_str = ""
+        self.turn_number = 1
+        self.history = []
+        self.view_index = -1
+
+        # Drag & Drop State
+        self.dragging = False
+        self.drag_piece = None
+        self.drag_start = None
+        self.drag_offset = (0, 0)
+
+        # Promotion Specific
+        self.promotion_pending = False
+        self.promotion_coords = None
+
+        self.target_eval_score = 0
+        self.current_eval_score = 0.0
+
+        self.resize_layout(DEFAULT_WIDTH, DEFAULT_HEIGHT)
+        self.reset_game_state()
+
+    def save_snapshot(self):
+        self.history.append({
+            'board': copy.deepcopy(self.board),
+            'duck_pos': self.duck_pos,
+            'prev_duck': self.prev_duck_pos,
+            'last_move': self.last_move_arrow,
+            'captured': copy.deepcopy(self.captured),
+            'log': list(self.move_log)
+        })
+        self.view_index = len(self.history) - 1
+
+    def reset_game_state(self):
+        # 1. Initialize Variables FIRST (Prevents AttributeErrors)
+        self.duck_pos = (-1, -1)
+        self.prev_duck_pos = (-1, -1)
+        self.turn = 'w'
+        self.phase = 'move_piece'
+        self.selected_square = None
+        self.valid_moves = []
+        self.game_over = False
+        self.winner = None
+        self.en_passant_target = None
+        self.half_move_clock = 0
+        self.rep_history = {}
+
+        self.move_log = []
+        self.last_move_arrow = None
+        self.turn_number = 1
+        self.current_move_str = ""
+        self.history = []
+        self.view_index = -1
+
+        self.captured = {'w': [], 'b': []}
+        self.promotion_pending = False
+        self.target_eval_score = 0
+        self.current_eval_score = 0.0
+
+        # 2. Setup the Board
+        self.board = [[None] * 8 for _ in range(8)]
+
+        # FIX: Always initialize the pieces when resetting.
+        # (This fixes the empty board bug in PvP)
+        self.init_board()
+
+        # 3. AI Setup
+        if self.game_mode == 'black_ai':
+            self.waiting_for_ai = True
+            self.ai_wait_start = pygame.time.get_ticks()
+        else:
+            self.waiting_for_ai = False
+
+        # 4. Save the initial state to history
+        self.save_snapshot()
+
+    def handle_mouse_down(self, pos):
+        if self.promotion_pending: return
+
+        # Navigation
+        if self.nav_btns['start'].collidepoint(pos): self.view_index = 0; return
+        if self.nav_btns['prev'].collidepoint(pos): self.view_index = max(0, self.view_index - 1); return
+        if self.nav_btns['next'].collidepoint(pos): self.view_index = min(len(self.history) - 1, self.view_index + 1); return
+        if self.nav_btns['end'].collidepoint(pos): self.view_index = len(self.history) - 1; return
+
+        # Control Buttons
+        if self.restart_btn_rect.collidepoint(pos):
+            self.reset_game_state()
+            return
+        # --- NEW: Eval Toggle Click ---
+        if self.eval_btn_rect.collidepoint(pos):
+            self.show_eval = not self.show_eval
+            return
+        if self.menu_btn_rect.collidepoint(pos): self.state = 'menu'; return
+        if self.game_mode == 'pvp' and self.flip_btn_rect.collidepoint(pos):
+            self.player_side = 'b' if self.player_side == 'w' else 'w';
+            return
+
+        is_live = (self.view_index == len(self.history) - 1)
+        if not is_live or self.game_over or self.waiting_for_ai: return
+
+        r, c = self.get_board_pos(pos[0], pos[1])
+        if r == -1: return
+
+        if self.phase == 'move_piece':
+            piece = self.board[r][c]
+
+            if piece and piece.color == self.turn:
+                self.dragging = True
+                self.drag_piece = piece
+                self.drag_start = (r, c)
+                px, py = self.get_screen_pos(r, c)
+                self.drag_offset = (pos[0] - px, pos[1] - py)
+                self.selected_square = (r, c)
+                self.valid_moves = self.get_piece_legal_moves(r, c)
+
+            elif self.selected_square and (r, c) in self.valid_moves:
+                self.execute_move(self.selected_square, (r, c))
+                self.selected_square = None
+                self.valid_moves = []
+
+            else:
+                self.selected_square = None
+                self.valid_moves = []
+
+        elif self.phase == 'move_duck':
+            if (r, c) == self.duck_pos:
+                self.dragging = True
+                self.drag_piece = 'duck'
+                self.drag_start = (r, c)
+                px, py = self.get_screen_pos(r, c)
+                self.drag_offset = (pos[0] - px, pos[1] - py)
+
+            elif not self.board[r][c] and (r, c) != self.prev_duck_pos:
+                self.place_duck((r, c))
+
+    def handle_mouse_up(self, pos):
+        if not self.dragging: return
+
+        r, c = self.get_board_pos(pos[0], pos[1])
+
+        if r != -1:
+            if self.phase == 'move_piece' and self.drag_piece != 'duck':
+                if (r, c) in self.valid_moves:
+                    self.execute_move(self.drag_start, (r, c), animated=False)
+                    self.selected_square = None
+                    self.valid_moves = []
+                elif (r, c) == self.drag_start:
+                    pass
+                else:
+                    self.selected_square = None
+                    self.valid_moves = []
+
+            elif self.phase == 'move_duck' and self.drag_piece == 'duck':
+                if not self.board[r][c] and (r, c) != self.prev_duck_pos:
+                    self.place_duck((r, c), animated=False)
+
+        self.dragging = False
+        self.drag_piece = None
+        self.drag_start = None
+
+    def handle_keyboard(self, event):
+        if event.key == pygame.K_LEFT:
+            self.view_index = max(0, self.view_index - 1)
+        elif event.key == pygame.K_RIGHT:
+            self.view_index = min(len(self.history) - 1, self.view_index + 1)
+
+    def handle_editor_input(self, event):
+        mx, my = pygame.mouse.get_pos()
+
+        if event.type == pygame.MOUSEBUTTONDOWN:
+            # --- Turn Toggle ---
+            if hasattr(self, 'editor_turn_btn') and self.editor_turn_btn.collidepoint((mx, my)):
+                self.turn = 'b' if self.turn == 'w' else 'w'
+                return
+
+            # --- UI Buttons ---
+            if hasattr(self, 'editor_play_btn') and self.editor_play_btn.collidepoint((mx, my)):
+                if self.validate_editor_board():
+                    self.state = 'game'
+                    self.game_mode = 'pvp'
+                    self.phase = 'move_piece'
+                    self.save_snapshot()
+                    return
+
+            if hasattr(self, 'editor_clear_btn') and self.editor_clear_btn.collidepoint((mx, my)):
+                self.clear_board()
+                return
+
+            if hasattr(self, 'editor_menu_btn') and self.editor_menu_btn.collidepoint((mx, my)):
+                self.state = 'menu'
+                return
+
+            # --- Palette Interaction ---
+            palette_x = self.board_x + self.sq_size * 8 + 40
+            start_y = self.board_y
+            white_pieces = [KING, QUEEN, ROOK, BISHOP, KNIGHT, PAWN]
+
+            # White Column
+            for i, p_type in enumerate(white_pieces):
+                r = pygame.Rect(palette_x, start_y + i * (self.sq_size + 10), self.sq_size, self.sq_size)
+                if r.collidepoint((mx, my)):
+                    self.dragging = True
+                    self.drag_piece = f"w{p_type}"
+                    return
+
+            # Black Column
+            for i, p_type in enumerate(white_pieces):
+                r = pygame.Rect(palette_x + self.sq_size + 10, start_y + i * (self.sq_size + 10), self.sq_size,
+                                self.sq_size)
+                if r.collidepoint((mx, my)):
+                    self.dragging = True
+                    self.drag_piece = f"b{p_type}"
+                    return
+
+            # Duck
+            y_duck = start_y + 6 * (self.sq_size + 10)
+            r_duck = pygame.Rect(palette_x, y_duck, self.sq_size, self.sq_size)
+            if r_duck.collidepoint((mx, my)):
+                self.dragging = True
+                self.drag_piece = "duck"
+                return
+
+            # --- Board Interaction ---
+            r, c = self.get_board_pos(mx, my)
+            if r != -1:
+                p = self.board[r][c]
+                if self.duck_pos == (r, c):
+                    self.dragging = True
+                    self.drag_piece = "duck"
+                    self.duck_pos = (-1, -1)
+                elif p:
+                    self.dragging = True
+                    self.drag_piece = f"{p.color}{p.type}"
+                    self.board[r][c] = None
+
+        elif event.type == pygame.MOUSEBUTTONUP:
+            if self.dragging:
+                r, c = self.get_board_pos(mx, my)
+                if r != -1:
+                    if self.drag_piece == 'duck':
+                        self.duck_pos = (r, c)
+                        self.board[r][c] = None
+                    else:
+                        color = self.drag_piece[0]
+                        ptype = self.drag_piece[1:]
+                        self.board[r][c] = Piece(color, ptype)
+                        if self.duck_pos == (r, c): self.duck_pos = (-1, -1)
+                self.dragging = False
+                self.drag_piece = None
+
+    # --- ASYNC MAIN LOOP ---
+    async def run(self):
+        while True:
+            # 1. EVENT HANDLING
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    pygame.quit()
+                    sys.exit()
+
+                if event.type == pygame.VIDEORESIZE:
+                    self.resize_layout(event.w, event.h)
+
+                if self.state == 'menu':
+                    pass
+
+                elif self.state == 'edit':
+                    self.handle_editor_input(event)
+
+                elif self.state == 'game':
+                    if event.type == pygame.MOUSEBUTTONDOWN:
+                        if self.promotion_pending:
+                            for rect, p_type in self.get_promotion_rects():
+                                if rect.collidepoint(event.pos):
+                                    self.promote_pawn(p_type)
+                        else:
+                            self.handle_mouse_down(event.pos)
+
+                    elif event.type == pygame.MOUSEBUTTONUP:
+                        self.handle_mouse_up(event.pos)
+
+                    elif event.type == pygame.KEYDOWN:
+                        self.handle_keyboard(event)
+
+            # 2. DRAWING & LOGIC
+            if self.state == 'menu':
+                self.draw_menu()
+
+            elif self.state == 'edit':
+                self.draw_editor()
+
+            else:  # Game Mode
+                self.ai_turn()
+                self.draw_game()
+
+            # 3. REFRESH
+            pygame.display.flip()
+            self.clock.tick(FPS)
+            await asyncio.sleep(0)
+
+
+if __name__ == "__main__":
+    asyncio.run(DuckChess().run())
+
+============================================================
+FILE: UI\pieces.py
+============================================================
+
+class Piece:
+    def __init__(self, color, type):
+        self.color = color
+        self.type = type
+        self.has_moved = False
+
+============================================================
+FILE: UI\rendering.py
+============================================================
+
+from DuckChess_Game.UI.rendering_base import BaseRenderingMixin
+from DuckChess_Game.UI.rendering_ui import UIRenderingMixin
+from DuckChess_Game.UI.rendering_board import BoardRenderingMixin
+
+class RenderingMixin(BaseRenderingMixin, UIRenderingMixin, BoardRenderingMixin):
+	"""
+	Aggregates all rendering mixins. 
+	This keeps the code clean while maintaining compatibility with main.py.
+	"""
+	pass
+
+============================================================
+FILE: UI\rendering_base.py
+============================================================
+
+import pygame
+import os
+from DuckChess_Game.UI.settings import *
+
+
+class BaseRenderingMixin:
+    """Core rendering utilities, asset loading, layout math, and common drawing helpers"""
+
+    def load_assets(self):
+        current_file_dir = os.path.dirname(os.path.abspath(__file__))
+        potential_paths = [
+            os.path.normpath(os.path.join(current_file_dir, "..", "assets")),
+            os.path.normpath(os.path.join(current_file_dir, "assets")),
+            os.path.normpath(os.path.join(current_file_dir, "..", "..", "assets")),
+            os.path.abspath("assets")
+        ]
+
+        assets_dir = None
+        for path in potential_paths:
+            if os.path.exists(path):
+                assets_dir = path
+                break
+
+        if not assets_dir:
+            assets_dir = os.path.normpath(os.path.join(current_file_dir, "..", "assets"))
+
+        pieces_dir = os.path.join(assets_dir, "pieces")
+        sounds_dir = os.path.join(assets_dir, "sounds")
+
+        # Init Sound System
+        try:
+            pygame.mixer.init()
+            self.sounds = {}
+        except Exception as e:
+            print(f"Sound init failed: {e}")
+            self.sounds = {}
+
+        # Load Sounds
+        sound_files = {
+            'move': 'move.wav',
+            'capture': 'capture.wav',
+            'castle': 'castle.wav',
+            'promote': 'promote.wav',
+            'notify': 'notify.wav',
+            'game_over': 'game_over.wav'
+        }
+
+        if os.path.exists(sounds_dir):
+            for name, filename in sound_files.items():
+                path = os.path.join(sounds_dir, filename)
+                if os.path.exists(path):
+                    try:
+                        snd = pygame.mixer.Sound(path)
+                        snd.set_volume(SOUND_VOLUME)
+                        self.sounds[name] = snd
+                    except:
+                        pass
+
+        # Load Pieces
+        name_map = {'K': 'king', 'Q': 'queen', 'R': 'rook', 'B': 'bishop', 'N': 'knight', 'P': 'pawn'}
+        if os.path.exists(pieces_dir):
+            for color in ['w', 'b']:
+                for p_type, p_name in name_map.items():
+                    filename = f"{p_name}-{color}.png"
+                    full_path = os.path.join(pieces_dir, filename)
+                    if os.path.exists(full_path):
+                        try:
+                            key = f"{color}{p_type}"
+                            self.original_images[key] = pygame.image.load(full_path).convert_alpha()
+                        except:
+                            pass
+
+        # Load Duck
+        duck_paths = [os.path.join(assets_dir, "duck.png"), os.path.join(pieces_dir, "duck.png")]
+        for path in duck_paths:
+            if os.path.exists(path):
+                try:
+                    self.original_images['duck'] = pygame.image.load(path).convert_alpha()
+                    break
+                except:
+                    pass
+
+    def play_sound(self, name):
+        if name in self.sounds:
+            self.sounds[name].play()
+
+    def resize_layout(self, w, h):
+        self.screen_w, self.screen_h = w, h
+        bottom_hud_space = 90
+        available_w = w - self.panel_width - self.side_margin * 2
+        available_h = h - bottom_hud_space - self.side_margin
+
+        self.sq_size = min(available_w - self.eval_bar_width - self.side_margin, available_h) // 8
+        board_width = self.sq_size * 8
+        total_center_width = self.eval_bar_width + self.side_margin + board_width
+        start_x = self.side_margin + (available_w - total_center_width) // 2
+
+        self.eval_bar_x = start_x
+        self.board_x = self.eval_bar_x + self.eval_bar_width + self.side_margin
+        self.board_y = self.side_margin + (available_h - (self.sq_size * 8)) // 2
+
+        self.font_large = pygame.font.SysFont("Segoe UI Symbol", int(self.sq_size * 0.8), bold=True)
+        self.font_ui = pygame.font.SysFont("Verdana", 14)
+        self.font_history = pygame.font.SysFont("Consolas", 14)
+        self.font_nav = pygame.font.SysFont("Arial", 20, bold=True)
+        self.font_menu_title = pygame.font.SysFont("Verdana", 60, bold=True)
+        self.font_menu_sub = pygame.font.SysFont("Verdana", 16, bold=True)
+        self.font_eval = pygame.font.SysFont("Arial", 16, bold=True)
+        self.font_status = pygame.font.SysFont("Verdana", 18, bold=True)
+
+        self.scaled_images = {}
+        for key, img in self.original_images.items():
+            sz = int(self.sq_size * 0.8) if key == 'duck' else self.sq_size
+            self.scaled_images[key] = pygame.transform.smoothscale(img, (sz, sz))
+
+        px, by = w - self.panel_width, h - 60
+        bw, bh = self.panel_width // 4 - 8, 35
+
+        self.nav_btns['start'] = pygame.Rect(px + 10, by, bw, bh)
+        self.nav_btns['prev'] = pygame.Rect(px + 10 + bw + 5, by, bw, bh)
+        self.nav_btns['next'] = pygame.Rect(px + 10 + (bw + 5) * 2, by, bw, bh)
+        self.nav_btns['end'] = pygame.Rect(px + 10 + (bw + 5) * 3, by, bw, bh)
+
+    def get_screen_pos(self, r, c):
+        dr, dc = (7 - r, 7 - c) if self.player_side == 'b' else (r, c)
+        return self.board_x + dc * self.sq_size, self.board_y + dr * self.sq_size
+
+    def get_board_pos(self, px, py):
+        rx, ry = px - self.board_x, py - self.board_y
+        if rx < 0 or ry < 0:
+            return -1, -1
+
+        c, r = rx // self.sq_size, ry // self.sq_size
+        if c >= 8 or r >= 8:
+            return -1, -1
+
+        return (7 - r, 7 - c) if self.player_side == 'b' else (r, c)
+
+    # --- NEW HELPER METHODS (Reduces Duplication) ---
+
+    def _draw_piece_sprite(self, p, x, y):
+        """Draws a piece sprite, or falls back to unicode text if image is missing"""
+        key = f"{p.color}{p.type}"
+        if key in self.scaled_images:
+            self.screen.blit(self.scaled_images[key], (x, y))
+        else:
+            txt = UNICODE_PIECES[p.color][p.type]
+            tc = (0, 0, 0) if p.color == 'b' else (255, 255, 255)
+            sf = self.font_large.render(txt, True, tc)
+            rc = sf.get_rect(center=(x + self.sq_size // 2, y + self.sq_size // 2))
+            if p.color == 'w':
+                ol = self.font_large.render(txt, True, (0, 0, 0))
+                self.screen.blit(ol, ol.get_rect(center=(rc.centerx + 2, rc.centery + 2)))
+            self.screen.blit(sf, rc)
+
+    def _draw_highlight_square(self, r, c, rgba_color):
+        """Draws a semi-transparent square over a specific board position"""
+        x, y = self.get_screen_pos(r, c)
+        s = pygame.Surface((self.sq_size, self.sq_size), pygame.SRCALPHA)
+        s.fill(rgba_color)
+        self.screen.blit(s, (x, y))
+
+============================================================
+FILE: UI\rendering_board.py
+============================================================
+
+import pygame
+import math
+from DuckChess_Game.UI.settings import *
+
+
+class BoardRenderingMixin:
+    """Handles the rendering of the board, pieces, duck, and editor logic"""
+
+    def _draw_base_board(self):
+        """Helper to draw the 8x8 squares and the coordinates"""
+        font_coord = pygame.font.SysFont("Arial", 12, bold=True)
+        for r in range(8):
+            for c in range(8):
+                x, y = self.get_screen_pos(r, c)
+                color = WHITE_COLOR if (r + c) % 2 == 0 else BLACK_SQ_COLOR
+                pygame.draw.rect(self.screen, color, (x, y, self.sq_size, self.sq_size))
+
+                text_color = WHITE_COLOR if (r + c) % 2 != 0 else BLACK_SQ_COLOR
+                is_bottom_row = (r == 7) if self.player_side == 'w' else (r == 0)
+
+                if is_bottom_row:
+                    self.screen.blit(font_coord.render("abcdefgh"[c], True, text_color),
+                                     (x + self.sq_size - 12, y + self.sq_size - 14))
+
+                is_left_col = (c == 0) if self.player_side == 'w' else (c == 7)
+                if is_left_col:
+                    self.screen.blit(font_coord.render("87654321"[r], True, text_color), (x + 3, y + 2))
+
+    def draw_duck(self, r, c):
+        x, y = self.get_screen_pos(r, c)
+        if 'duck' in self.scaled_images:
+            img = self.scaled_images['duck']
+            self.screen.blit(img,
+                             (x + (self.sq_size - img.get_width()) // 2, y + (self.sq_size - img.get_height()) // 2))
+        else:
+            pygame.draw.circle(self.screen, (255, 220, 0), (x + self.sq_size // 2, y + self.sq_size // 2),
+                               self.sq_size // 3)
+
+    def draw_editor(self):
+        self.draw_menu_background()
+
+        # Draw Board Borders
+        pygame.draw.rect(self.screen, (20, 20, 20),
+                         (self.board_x - 2, self.board_y - 2, self.sq_size * 8 + 4, self.sq_size * 8 + 4), width=2)
+
+        self._draw_base_board()
+
+        for r in range(8):
+            for c in range(8):
+                if self.duck_pos == (r, c):
+                    self.draw_duck(r, c)
+                p = self.board[r][c]
+                if p:
+                    x, y = self.get_screen_pos(r, c)
+                    self._draw_piece_sprite(p, x, y)
+
+        # Draw Palette (Side Panel)
+        palette_x = self.board_x + self.sq_size * 8 + 40
+        start_y = self.board_y
+        white_pieces = [KING, QUEEN, ROOK, BISHOP, KNIGHT, PAWN]
+
+        for i, p_type in enumerate(white_pieces):
+            y = start_y + i * (self.sq_size + 10)
+            key = f"w{p_type}"
+            if key in self.scaled_images:
+                r_rect = pygame.Rect(palette_x, y, self.sq_size, self.sq_size)
+                if r_rect.collidepoint(pygame.mouse.get_pos()):
+                    pygame.draw.rect(self.screen, (255, 255, 255, 50), r_rect)
+                self.screen.blit(self.scaled_images[key], (palette_x, y))
+
+        for i, p_type in enumerate(white_pieces):
+            y = start_y + i * (self.sq_size + 10)
+            key = f"b{p_type}"
+            if key in self.scaled_images:
+                r_rect = pygame.Rect(palette_x + self.sq_size + 10, y, self.sq_size, self.sq_size)
+                if r_rect.collidepoint(pygame.mouse.get_pos()):
+                    pygame.draw.rect(self.screen, (255, 255, 255, 50), r_rect)
+                self.screen.blit(self.scaled_images[key], (palette_x + self.sq_size + 10, y))
+
+        y_misc = start_y + 6 * (self.sq_size + 10)
+        if 'duck' in self.scaled_images:
+            self.screen.blit(self.scaled_images['duck'], (palette_x, y_misc))
+
+        trash_rect = pygame.Rect(palette_x + self.sq_size + 10, y_misc, self.sq_size, self.sq_size)
+        pygame.draw.rect(self.screen, (200, 50, 50), trash_rect, border_radius=4)
+        trash_txt = self.font_ui.render("CLR", True, (255, 255, 255))
+        self.screen.blit(trash_txt, trash_txt.get_rect(center=trash_rect.center))
+
+        # Floating Piece (Dragging)
+        if hasattr(self, 'dragging') and self.dragging and self.drag_piece:
+            mx, my = pygame.mouse.get_pos()
+            key = self.drag_piece
+            if key == 'duck' and 'duck' in self.scaled_images:
+                self.screen.blit(self.scaled_images['duck'], (mx - self.sq_size // 2, my - self.sq_size // 2))
+            elif key in self.scaled_images:
+                self.screen.blit(self.scaled_images[key], (mx - self.sq_size // 2, my - self.sq_size // 2))
+
+        # UI Controls
+        hud_rect = pygame.Rect(20, self.screen_h - 70, self.screen_w - 40, 60)
+        self.draw_glass_panel(hud_rect)
+
+        valid = self.validate_editor_board()
+        status_txt = "EDITOR MODE" if not valid else "EDITOR MODE: Ready"
+        col = (200, 50, 50) if not valid else (50, 200, 50)
+        self.screen.blit(self.font_status.render(status_txt, True, col), (40, self.screen_h - 50))
+
+        mouse = pygame.mouse.get_pos()
+        self.editor_turn_btn = pygame.Rect(self.screen_w - 560, self.screen_h - 58, 140, 36)
+        is_white = (self.turn == 'w')
+        btn_col = EVAL_WHITE if is_white else EVAL_BLACK
+        txt_col = (0, 0, 0) if is_white else (255, 255, 255)
+
+        pygame.draw.rect(self.screen, btn_col, self.editor_turn_btn, border_radius=6)
+        pygame.draw.rect(self.screen, BTN_BORDER, self.editor_turn_btn, width=1, border_radius=6)
+        t_surf = self.font_ui.render("Turn: WHITE" if is_white else "Turn: BLACK", True, txt_col)
+        self.screen.blit(t_surf, t_surf.get_rect(center=self.editor_turn_btn.center))
+
+        self.editor_menu_btn = pygame.Rect(self.screen_w - 410, self.screen_h - 58, 120, 36)
+        self.draw_styled_button(self.editor_menu_btn, "MENU", self.editor_menu_btn.collidepoint(mouse))
+
+        self.editor_clear_btn = pygame.Rect(self.screen_w - 280, self.screen_h - 58, 120, 36)
+        self.draw_styled_button(self.editor_clear_btn, "CLEAR ALL", self.editor_clear_btn.collidepoint(mouse))
+
+        self.editor_play_btn = pygame.Rect(self.screen_w - 150, self.screen_h - 58, 120, 36)
+        if valid:
+            self.draw_styled_button(self.editor_play_btn, "PLAY", self.editor_play_btn.collidepoint(mouse))
+
+    def draw_game(self, hidden_square=None):
+        self.draw_menu_background()
+
+        is_live = (self.view_index == len(self.history) - 1)
+        if is_live:
+            board, d_pos, last_mv, prev_d = self.board, self.duck_pos, self.last_move_arrow, self.prev_duck_pos
+        else:
+            snap = self.history[self.view_index]
+            board, d_pos, last_mv, prev_d = snap['board'], snap['duck_pos'], snap['last_move'], snap['prev_duck']
+
+        hide_pos = self.drag_start if hasattr(self,
+                                              'dragging') and self.dragging and self.drag_start and is_live else hidden_square
+
+        # Board Border
+        border_rect = pygame.Rect(self.board_x - 20, self.board_y - 20, self.sq_size * 8 + 40, self.sq_size * 8 + 40)
+        pygame.draw.rect(self.screen, BTN_BORDER, border_rect, width=0, border_radius=4)
+        pygame.draw.rect(self.screen, (20, 20, 20),
+                         (self.board_x - 2, self.board_y - 2, self.sq_size * 8 + 4, self.sq_size * 8 + 4), width=2)
+
+        self._draw_base_board()
+
+        for r in range(8):
+            for c in range(8):
+                # Highlights: Last Move & Previous Duck Position
+                if last_mv and ((r, c) == last_mv[0] or (r, c) == last_mv[1]):
+                    self._draw_highlight_square(r, c, LAST_MOVE_COLOR)
+                if prev_d and (r, c) == prev_d:
+                    self._draw_highlight_square(r, c, LAST_MOVE_COLOR)
+
+                if is_live and not self.promotion_pending:
+                    x, y = self.get_screen_pos(r, c)
+                    if self.phase == 'move_piece':
+                        if self.selected_square == (r, c):
+                            pygame.draw.rect(self.screen, HIGHLIGHT, (x, y, self.sq_size, self.sq_size))
+                        if (r, c) in self.valid_moves:
+                            s = pygame.Surface((self.sq_size, self.sq_size), pygame.SRCALPHA)
+                            if board[r][c]:
+                                pygame.draw.circle(s, (100, 255, 100, 180), (self.sq_size // 2, self.sq_size // 2),
+                                                   self.sq_size // 2 - 2, 6)
+                            else:
+                                pygame.draw.circle(s, (100, 255, 100, 150), (self.sq_size // 2, self.sq_size // 2),
+                                                   self.sq_size // 6)
+                            self.screen.blit(s, (x, y))
+                    elif self.phase == 'move_duck':
+                        if board[r][c] is None and (r, c) != prev_d:
+                            s = pygame.Surface((self.sq_size, self.sq_size), pygame.SRCALPHA)
+                            pygame.draw.circle(s, (255, 215, 0, 100), (self.sq_size // 2, self.sq_size // 2),
+                                               self.sq_size // 5)
+                            self.screen.blit(s, (x, y))
+
+                if hide_pos and (r, c) == hide_pos:
+                    continue
+
+                if d_pos == (r, c):
+                    self.draw_duck(r, c)
+
+                p = board[r][c]
+                if p:
+                    if p.type == 'K' and self.is_in_check(p.color, board):
+                        self._draw_highlight_square(r, c, (235, 60, 60, 180))
+
+                    x, y = self.get_screen_pos(r, c)
+                    self._draw_piece_sprite(p, x, y)
+
+        if hasattr(self, 'dragging') and self.dragging and self.drag_piece and is_live:
+            mx, my = pygame.mouse.get_pos()
+            draw_x, draw_y = mx - self.drag_offset[0], my - self.drag_offset[1]
+            key = 'duck' if self.drag_piece == 'duck' else f"{self.drag_piece.color}{self.drag_piece.type}"
+            if key in self.scaled_images:
+                self.screen.blit(self.scaled_images[key], (draw_x, draw_y))
+
+        if self.show_eval:
+            self.draw_eval_bar(board)
+
+        self.draw_history_panel()
+
+        # HUD Rendering
+        hud_rect = pygame.Rect(20, self.screen_h - 70, self.screen_w - self.panel_width - 40, 60)
+        self.draw_glass_panel(hud_rect)
+
+        if self.game_over:
+            status, status_col = ("GAME OVER: DRAW", (200, 200, 200)) if self.winner == 'draw' else (
+            f"WINNER: {'WHITE' if self.winner == 'w' else 'BLACK'}", MENU_ACCENT)
+        elif not is_live:
+            status, status_col = "VIEWING HISTORY", (200, 200, 255)
+        elif self.promotion_pending:
+            status, status_col = "CHOOSE PROMOTION PIECE", MENU_ACCENT
+        else:
+            status, status_col = f"{'WHITE' if self.turn == 'w' else 'BLACK'} TO {'MOVE PIECE' if self.phase == 'move_piece' else 'PLACE DUCK'}", (
+            220, 220, 220)
+
+        self.screen.blit(self.font_status.render(status, True, status_col), (40, self.screen_h - 50))
+
+        mouse = pygame.mouse.get_pos()
+        btns = [
+            ("Menu", self.menu_btn_rect),
+            ("Hide Eval" if self.show_eval else "Show Eval", self.eval_btn_rect),
+            ("Restart", self.restart_btn_rect)
+        ]
+        if self.game_mode == 'pvp':
+            btns.insert(2, ("Flip Board", self.flip_btn_rect))
+
+        start_x = hud_rect.right - 20 - (len(btns) * 110)
+        for i, (lbl, r) in enumerate(btns):
+            r.width, r.height, r.x, r.centery = 100, 36, start_x + i * 110, hud_rect.centery
+            self.draw_styled_button(r, lbl, r.collidepoint(mouse))
+
+        if self.promotion_pending and is_live:
+            self.draw_promotion_ui()
+
+    def animate_move_visual(self, start, end, piece, is_duck=False):
+        if self.view_index != len(self.history) - 1:
+            return
+
+        x1, y1 = self.get_screen_pos(start[0], start[1])
+        x2, y2 = self.get_screen_pos(end[0], end[1])
+
+        key = 'duck' if is_duck else f"{piece.color}{piece.type}"
+        img = self.scaled_images.get(key)
+        if not img and not is_duck:
+            return
+
+        start_time = pygame.time.get_ticks()
+        clock = pygame.time.Clock()
+
+        while True:
+            now = pygame.time.get_ticks()
+            elapsed = now - start_time
+            if elapsed >= ANIMATION_SPEED:
+                break
+
+            progress = 1 - math.pow(1 - (elapsed / ANIMATION_SPEED), 3)
+            current_x = x1 + (x2 - x1) * progress
+            current_y = y1 + (y2 - y1) * progress
+
+            self.draw_game(hidden_square=start)
+            if img: self.screen.blit(img, (current_x, current_y))
+            pygame.display.flip()
+            clock.tick(ANIMATION_FPS)
+
+============================================================
+FILE: UI\rendering_ui.py
+============================================================
+
+import pygame
+from DuckChess_Game.UI.settings import *
+
+
+class UIRenderingMixin:
+    """Handles UI components: Menus, History Panel, Eval Bar, and Buttons"""
+
+    def draw_menu_background(self):
+        tile_size = 100
+        cols, rows = self.screen_w // tile_size + 1, self.screen_h // tile_size + 1
+        for r in range(rows):
+            for c in range(cols):
+                color = MENU_BG_DARK if (r + c) % 2 == 0 else MENU_BG_LIGHT
+                pygame.draw.rect(self.screen, color, (c * tile_size, r * tile_size, tile_size, tile_size))
+
+    def draw_glass_panel(self, rect):
+        s = pygame.Surface((rect.width, rect.height), pygame.SRCALPHA)
+        s.fill((20, 25, 30, 230))
+        self.screen.blit(s, rect.topleft)
+        pygame.draw.rect(self.screen, BTN_BORDER, rect, width=1, border_radius=8)
+
+    def draw_styled_button(self, rect, text, hover, font=None):
+        if font is None:
+            font = self.font_menu_sub
+
+        color = BTN_HOVER if hover else BTN_NORMAL
+        border_col = MENU_ACCENT if hover else BTN_BORDER
+
+        shadow_rect = rect.copy()
+        shadow_rect.y += 2
+        pygame.draw.rect(self.screen, (0, 0, 0, 100), shadow_rect, border_radius=6)
+        pygame.draw.rect(self.screen, color, rect, border_radius=6)
+        pygame.draw.rect(self.screen, border_col, rect, width=1, border_radius=6)
+
+        txt_col = MENU_ACCENT if hover else BTN_TEXT
+        txt_surf = font.render(text, True, txt_col)
+        self.screen.blit(txt_surf, txt_surf.get_rect(center=rect.center))
+
+    def draw_menu(self):
+        self.draw_menu_background()
+
+        t_shadow = self.font_menu_title.render("DUCK CHESS", True, (0, 0, 0))
+        self.screen.blit(t_shadow, t_shadow.get_rect(center=(self.screen_w // 2 + 3, self.screen_h * 0.2 + 3)))
+        t_main = self.font_menu_title.render("DUCK CHESS", True, MENU_ACCENT)
+        self.screen.blit(t_main, t_main.get_rect(center=(self.screen_w // 2, self.screen_h * 0.2)))
+
+        panel_rect = pygame.Rect((self.screen_w - 400) // 2, (self.screen_h - 400) // 2 + 40, 400, 400)
+        self.draw_glass_panel(panel_rect)
+
+        opts = [
+            ("Play as White", 'white_ai'),
+            ("Play as Black", 'black_ai'),
+            ("2 Player (PvP)", 'pvp'),
+            ("Edit Board", 'edit'),
+            ("Load Replay", 'load_replay')
+        ]
+
+        mouse = pygame.mouse.get_pos()
+        click = pygame.mouse.get_pressed()[0]
+
+        for i, (txt, mode) in enumerate(opts):
+            # Make buttons slightly smaller to fit 5 options nicely
+            r = pygame.Rect(0, 0, 300, 50)
+            r.centerx, r.top = self.screen_w // 2, panel_rect.top + 30 + i * 70
+            self.draw_styled_button(r, txt, r.collidepoint(mouse))
+
+            if click and r.collidepoint(mouse):
+                pygame.time.wait(150)
+
+                if mode == 'edit':
+                    self.state = 'edit'
+                    self.reset_game_state()
+                    self.clear_board()
+                    self.init_board()
+                elif mode == 'load_replay':
+                    # Open a native OS file dialog to select the .pkl file
+                    import tkinter as tk
+                    from tkinter import filedialog
+
+                    root = tk.Tk()
+                    root.wm_attributes('-topmost', 1)  # Keep dialog above PyGame
+                    root.withdraw()  # Hide the empty root window
+
+                    filepath = filedialog.askopenfilename(
+                        title="Select Duck Chess Replay",
+                        filetypes=[("Replay Files", "*.pkl")]
+                    )
+                    root.destroy()
+
+                    if filepath:
+                        self.load_replay_file(filepath)
+                else:
+                    self.game_mode = mode
+                    self.player_side = 'b' if mode == 'black_ai' else 'w'
+                    self.state = 'game'
+                    self.reset_game_state()
+                return
+
+    def draw_eval_bar(self, current_board):
+        if self.game_over:
+            self.target_eval_score = 0 if self.winner == 'draw' else (20 if self.winner == 'w' else -20)
+        else:
+            self.target_eval_score = self.calculate_material_score(current_board)
+
+        diff = self.target_eval_score - self.current_eval_score
+        if abs(diff) < 0.05:
+            self.current_eval_score = self.target_eval_score
+        else:
+            self.current_eval_score += diff * 0.1
+
+        max_adv = 20
+        normalized = (max(-max_adv, min(max_adv, self.current_eval_score)) + max_adv) / (2 * max_adv)
+        bar_h, bar_y, bar_x, bar_w = self.sq_size * 8, self.board_y, self.eval_bar_x, self.eval_bar_width
+
+        pygame.draw.rect(self.screen, BTN_BORDER, (bar_x - 2, bar_y - 2, bar_w + 4, bar_h + 4), border_radius=4)
+        mid_y = bar_y + bar_h * (1 - normalized)
+        pygame.draw.rect(self.screen, EVAL_BLACK, (bar_x, bar_y, bar_w, mid_y - bar_y))
+        pygame.draw.rect(self.screen, EVAL_WHITE, (bar_x, mid_y, bar_w, bar_y + bar_h - mid_y))
+
+        if self.game_over:
+            color = (150, 150, 150)
+            if self.winner == 'w':
+                color = EVAL_WHITE
+            elif self.winner == 'b':
+                color = EVAL_BLACK
+            pygame.draw.rect(self.screen, color, (bar_x, bar_y, bar_w, bar_h))
+
+        score_txt = f"{abs(int(round(self.current_eval_score)))}"
+        txt_surf = self.font_eval.render(score_txt, True, TEXT_COLOR if normalized > 0.95 else EVAL_WHITE)
+        self.screen.blit(txt_surf, txt_surf.get_rect(center=(bar_x + bar_w // 2, bar_y + 15)))
+
+    def draw_history_panel(self):
+        self.draw_glass_panel(pygame.Rect(self.screen_w - self.panel_width, 0, self.panel_width, self.screen_h))
+        title = self.font_status.render("Move History", True, MENU_ACCENT)
+        self.screen.blit(title, (self.screen_w - self.panel_width + 15, 15))
+
+        counter = self.font_ui.render(f"{self.view_index} / {len(self.history) - 1}", True, (150, 150, 150))
+        self.screen.blit(counter, (self.screen_w - 90, 18))
+        pygame.draw.line(self.screen, BTN_BORDER, (self.screen_w - self.panel_width + 10, 45), (self.screen_w - 10, 45))
+
+        full_log = self.history[-1]['log']
+        start_y = 55
+        line_height = 24
+        col_white_x = self.screen_w - self.panel_width + 10
+        col_black_x = self.screen_w - self.panel_width + 155
+
+        available_height = self.nav_btns['start'].top - start_y - 10
+        max_rows = available_height // line_height
+        total_rows = (len(full_log) + 1) // 2
+
+        current_ply_idx = self.view_index - 1
+        current_row_idx = current_ply_idx // 2
+        scroll_row = max(0, current_row_idx - (max_rows - 2)) if current_row_idx > max_rows - 2 else 0
+
+        for row in range(scroll_row, min(total_rows, scroll_row + max_rows)):
+            y_pos = start_y + (row - scroll_row) * line_height
+
+            # White Move
+            w_idx = row * 2
+            if w_idx < len(full_log):
+                is_active = (w_idx == current_ply_idx)
+                if is_active:
+                    pygame.draw.rect(self.screen, BTN_NORMAL, pygame.Rect(col_white_x - 2, y_pos, 140, line_height),
+                                     border_radius=4)
+                color = MENU_ACCENT if is_active else (220, 220, 220)
+                self.screen.blit(self.font_history.render(full_log[w_idx], True, color), (col_white_x, y_pos + 4))
+
+            # Black Move
+            b_idx = row * 2 + 1
+            if b_idx < len(full_log):
+                raw_str = full_log[b_idx]
+                clean_str = raw_str.split(' ', 1)[1] if "..." in raw_str and len(raw_str.split(' ', 1)) > 1 else raw_str
+
+                is_active = (b_idx == current_ply_idx)
+                if is_active:
+                    pygame.draw.rect(self.screen, BTN_NORMAL, pygame.Rect(col_black_x - 2, y_pos, 140, line_height),
+                                     border_radius=4)
+                color = MENU_ACCENT if is_active else (220, 220, 220)
+                self.screen.blit(self.font_history.render(clean_str, True, color), (col_black_x, y_pos + 4))
+
+        mouse = pygame.mouse.get_pos()
+        for lbl, key in [("<<", 'start'), ("<", 'prev'), (">", 'next'), (">>", 'end')]:
+            self.draw_styled_button(self.nav_btns[key], lbl, self.nav_btns[key].collidepoint(mouse), self.font_nav)
+
+    def get_promotion_rects(self):
+        if not self.promotion_coords:
+            return []
+        r, c = self.promotion_coords
+        bx, by = self.get_screen_pos(r, c)
+
+        opts = [QUEEN, ROOK, BISHOP, KNIGHT]
+        menu_h = self.sq_size * len(opts)
+        start_y = by + (self.sq_size - menu_h) // 2
+        board_top, board_bottom = self.board_y, self.board_y + self.sq_size * 8
+
+        if start_y < board_top:
+            start_y = board_top
+        elif start_y + menu_h > board_bottom:
+            start_y = board_bottom - menu_h
+
+        return [(pygame.Rect(bx, start_y + i * self.sq_size, self.sq_size, self.sq_size), p) for i, p in
+                enumerate(opts)]
+
+    def draw_promotion_ui(self):
+        rects = self.get_promotion_rects()
+        if not rects:
+            return
+        container = rects[0][0].unionall([r[0] for r in rects])
+        pygame.draw.rect(self.screen, EVAL_WHITE, container)
+        pygame.draw.rect(self.screen, BTN_BORDER, container, width=2)
+
+        m = pygame.mouse.get_pos()
+        for r, p in rects:
+            if r.collidepoint(m): pygame.draw.rect(self.screen, HIGHLIGHT, r)
+            k = f"{self.turn}{p}"
+            if k in self.scaled_images: self.screen.blit(self.scaled_images[k], r)
+
+============================================================
+FILE: UI\settings.py
+============================================================
+
+# --- Defaults ---
+DEFAULT_WIDTH = 1050
+DEFAULT_HEIGHT = 650
+FPS = 60
+
+# --- COLORS ---
+WHITE_COLOR = (235, 236, 208)
+BLACK_SQ_COLOR = (119, 149, 86)
+HIGHLIGHT = (186, 202, 68)
+LAST_MOVE_COLOR = (245, 235, 110, 160)
+VALID_MOVE = (100, 200, 100, 150)
+TEXT_COLOR = (20, 20, 20)
+BG_COLOR = (40, 44, 52)
+BOARD_BG_COLOR = (240, 240, 240)
+PANEL_BG_COLOR = (50, 53, 60)
+BUTTON_COLOR = (70, 130, 180)
+BUTTON_HOVER = (100, 149, 237)
+MENU_BG = (40, 44, 52)
+ACTIVE_MOVE_BG = (80, 85, 95)
+PROMOTION_BG = (255, 255, 255, 255)
+EVAL_WHITE = (240, 240, 240)
+EVAL_BLACK = (50, 50, 50)
+
+# Unicode Fallback
+UNICODE_PIECES = {
+    'w': {'K': '♔', 'Q': '♕', 'R': '♖', 'B': '♗', 'N': '♘', 'P': '♙'},
+    'b': {'K': '♚', 'Q': '♛', 'R': '♜', 'B': '♝', 'N': '♞', 'P': '♟'}
+}
+
+# Piece Constants
+KING, QUEEN, ROOK, BISHOP, KNIGHT, PAWN = 'K', 'Q', 'R', 'B', 'N', 'P'
+
+# Piece values
+PIECE_VALUES = {
+    PAWN: 1,
+    KNIGHT: 3,
+    BISHOP: 3,
+    ROOK: 5,
+    QUEEN: 9,
+    KING: 0
+}
+
+# --- MENU AESTHETICS ---
+# Dark modern theme
+MENU_BG_DARK = (30, 33, 40)
+MENU_BG_LIGHT = (40, 44, 52)
+MENU_ACCENT = (255, 215, 0)  # Gold for the Duck
+MENU_TEXT_SHADOW = (0, 0, 0, 100)
+
+# Button Styles
+BTN_NORMAL = (70, 80, 90)
+BTN_HOVER = (90, 100, 110)
+BTN_BORDER = (100, 110, 120)
+BTN_TEXT = (240, 240, 240)
+
+# --- ANIMATION & SOUND ---
+ANIMATION_SPEED = 150  # Duration in milliseconds (Lower = Faster)
+ANIMATION_FPS = 60
+
+# Default Volume (0.0 to 1.0)
+SOUND_VOLUME = 0.6
+
+============================================================
+FILE: SBThree\Logic\logic.py
+============================================================
+
+# --- RL ENVIRONMENT HELPERS ---
+def _get_obs(self):
+    """
+    Converts the current board state into an 19x8x8 Observation Tensor for the RL Model.
+    Channels 0-5: White pieces (P, N, B, R, Q, K)
+    Channels 6-11: Black pieces
+    Channel 12: Duck position
+    Channel 13: En Passant target
+    Channel 14: Turn (1.0 for White, 0.0 for Black)
+    Channels 15-18: Castling rights (White King, White Queen, Black King, Black Queen)
+    """
+    obs = np.zeros((19, 8, 8), dtype=np.float32)
+
+    piece_to_channel = {
+        'w': {PAWN: 0, KNIGHT: 1, BISHOP: 2, ROOK: 3, QUEEN: 4, KING: 5},
+        'b': {PAWN: 6, KNIGHT: 7, BISHOP: 8, ROOK: 9, QUEEN: 10, KING: 11}
+    }
+
+    wk_pos = None
+    bk_pos = None
+
+    # 1. Fill piece layers
+    for r in range(8):
+        for c in range(8):
+            p = self.board[r][c]
+            if p:
+                channel = piece_to_channel[p.color][p.type]
+                obs[channel][r][c] = 1.0
+
+                if p.type == KING:
+                    if p.color == 'w':
+                        wk_pos = (r, c)
+                    else:
+                        bk_pos = (r, c)
+
+    # 2. Duck position
+    if self.duck_pos != (-1, -1):
+        dr, dc = self.duck_pos
+        obs[12][dr][dc] = 1.0
+
+    # 3. En Passant target
+    if self.en_passant_target:
+        er, ec = self.en_passant_target
+        obs[13][er][ec] = 1.0
+
+    # 4. Turn
+    if self.turn == 'w':
+        obs[14].fill(1.0)
+
+    # 5. Castling rights
+    if wk_pos and not self.board[wk_pos[0]][wk_pos[1]].has_moved:
+        if self.can_castle(wk_pos[0], wk_pos[1], True):
+            obs[15].fill(1.0)
+        if self.can_castle(wk_pos[0], wk_pos[1], False):
+            obs[16].fill(1.0)
+
+    if bk_pos and not self.board[bk_pos[0]][bk_pos[1]].has_moved:
+        if self.can_castle(bk_pos[0], bk_pos[1], True):
+            obs[17].fill(1.0)
+        if self.can_castle(bk_pos[0], bk_pos[1], False):
+            obs[18].fill(1.0)
+
+    return obs
+# --- RL ACTION SPACE HELPERS ---
+
+
+def _encode_move(self, start, end):
+    """Converts a move from coordinates to a flat index (0-4095)"""
+    start_idx = start[0] * 8 + start[1]
+    end_idx = end[0] * 8 + end[1]
+    return start_idx * 64 + end_idx
+
+
+def _decode_move(self, action):
+    """Converts a flat index back to coordinates ((sr, sc), (er, ec))"""
+    start_idx = action // 64
+    end_idx = action % 64
+    sr, sc = start_idx // 8, start_idx % 8
+    er, ec = end_idx // 8, end_idx % 8
+    return (sr, sc), (er, ec)
+
+
+def action_masks(self):
+    """
+    Returns a boolean mask of size 4096.
+    True means the action is legal in the current phase.
+    """
+    masks = np.zeros(4096, dtype=bool)
+
+    if self.phase == 'move_piece':
+        # Phase 1: Moving a piece
+        for r in range(8):
+            for c in range(8):
+                p = self.board[r][c]
+                if p and p.color == self.turn:
+                    valid_moves = self.get_piece_legal_moves(r, c)
+                    for end_pos in valid_moves:
+                        action_idx = self._encode_move((r, c), end_pos)
+                        masks[action_idx] = True
+
+    elif self.phase == 'move_duck':
+        # Phase 2: Placing the duck
+        # We arbitrarily use start=(0,0) to keep the action within the 4096 range
+        for r in range(8):
+            for c in range(8):
+                if not self.board[r][c] and (r, c) != self.prev_duck_pos:
+                    action_idx = self._encode_move((0, 0), (r, c))
+                    masks[action_idx] = True
+    return masks
+
+
+def debug_print_observation(self):
+    """
+    Helper function to print the 19x8x8 observation tensor in a human-readable format.
+    It scans the tensor and prints only the active bits (1.0).
+    """
+    obs = self._get_obs()
+
+    # Map channel indices to readable names
+    channel_names = {
+        0: "White Pawns", 1: "White Knights", 2: "White Bishops",
+        3: "White Rooks", 4: "White Queens", 5: "White King",
+        6: "Black Pawns", 7: "Black Knights", 8: "Black Bishops",
+        9: "Black Rooks", 10: "Black Queens", 11: "Black King",
+        12: "Duck Position", 13: "En Passant Target"
+    }
+
+    print("\n" + "=" * 40)
+    print("OBSERVATION TENSOR STATE")
+    print("=" * 40)
+
+    # 1. Print piece positions and board targets (Channels 0-13)
+    for channel in range(14):
+        active_squares = []
+        for r in range(8):
+            for c in range(8):
+                if obs[channel][r][c] == 1.0:
+                    # Convert (r, c) to chess notation like 'e2'
+                    coords = self.get_notation_coords(r, c)
+                    active_squares.append(coords)
+
+        # Only print channels that actually have active bits
+        if active_squares:
+            print(f"[{channel}] {channel_names[channel]:<18}: {', '.join(active_squares)}")
+
+    # 2. Print global state variables (Channels 14-18)
+    print("-" * 40)
+    # Turn plane is entirely 1.0 if white, 0.0 if black
+    current_turn = "White" if obs[14][0][0] == 1.0 else "Black"
+    print(f"[14] Turn               : {current_turn}")
+
+    # Castling planes
+    print(f"[15] White Castling KS  : {'Yes' if obs[15][0][0] == 1.0 else 'No'}")
+    print(f"[16] White Castling QS  : {'Yes' if obs[16][0][0] == 1.0 else 'No'}")
+    print(f"[17] Black Castling KS  : {'Yes' if obs[17][0][0] == 1.0 else 'No'}")
+    print(f"[18] Black Castling QS  : {'Yes' if obs[18][0][0] == 1.0 else 'No'}")
+    print("=" * 40 + "\n")
+
