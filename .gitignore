@@ -1,18 +1,12 @@
-# Python environment and caches
+# Python & Caches
 __pycache__/
 *.pyc
-.venv/
-venv/
+build/
+.vscode/
 .idea/
+
+# ML Data - DO NOT TRACK IN GIT
 models/
 *.zip
 *.pkl
-.vscode/
-
-# PyGame compiled builds
-build/
-
-# Ignore the massive amount of binary replays generated during training
-DuckChess_Game/SBThree/saved_replays/*.pkl
-
-# DO NOT ignore the models folder - we want to share the ZIP file!
+DuckChess_Game/SBThree/saved_replays/
