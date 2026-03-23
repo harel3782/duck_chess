@@ -1,0 +1,13 @@
+# Python environment and caches
+__pycache__/
+.venv/
+venv/
+.idea/
+
+# PyGame compiled builds
+build/
+
+# Ignore the massive amount of binary replays generated during training
+DuckChess_Game/SBThree/saved_replays/*.pkl
+
+# DO NOT ignore the models folder - we want to share the ZIP file!
