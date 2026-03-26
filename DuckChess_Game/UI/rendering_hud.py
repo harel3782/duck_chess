@@ -2,15 +2,17 @@ import pygame
 from DuckChess_Game.UI.settings import *
 
 class HUDRenderingMixin:
-	"""Handles in-game UI overlays: eval bar, history panel, and control buttons."""
+	"""Handles in-game UI overlays with premium brushed brass buttons."""
 
 	def draw_eval_bar(self, current_board):
-		"""Draws the dynamic material evaluation bar."""
-		if self.game_over: self.target_eval_score = 0 if self.winner == 'draw' else (20 if self.winner == 'w' else -20)
-		else: self.target_eval_score = self.calculate_material_score(current_board)
+		"""Draws the dynamic material evaluation bar [cite: 78-79]."""
+		if getattr(self, 'game_over', False): 
+			self.target_eval_score = 0 if self.winner == 'draw' else (20 if self.winner == 'w' else -20)
+		else: 
+			self.target_eval_score = self.calculate_material_score(current_board)
 
-		diff = self.target_eval_score - self.current_eval_score
-		self.current_eval_score = self.target_eval_score if abs(diff) < 0.05 else self.current_eval_score + diff * 0.1
+		diff = self.target_eval_score - getattr(self, 'current_eval_score', 0.0)
+		self.current_eval_score = getattr(self, 'current_eval_score', 0.0) + diff * 0.1
 
 		max_adv = 20
 		normalized = (max(-max_adv, min(max_adv, self.current_eval_score)) + max_adv) / (2 * max_adv)
@@ -21,86 +23,101 @@ class HUDRenderingMixin:
 		pygame.draw.rect(self.screen, EVAL_BLACK, (bar_x, bar_y, bar_w, mid_y - bar_y))
 		pygame.draw.rect(self.screen, EVAL_WHITE, (bar_x, mid_y, bar_w, bar_y + bar_h - mid_y))
 
-		if self.game_over:
-			col = EVAL_WHITE if self.winner == 'w' else (EVAL_BLACK if self.winner == 'b' else (150, 150, 150))
-			pygame.draw.rect(self.screen, col, (bar_x, bar_y, bar_w, bar_h))
-
-		txt = self.font_eval.render(f"{abs(int(round(self.current_eval_score)))}", True, TEXT_COLOR if normalized > 0.95 else EVAL_WHITE)
+		txt = FONT_EVAL.render(f"{abs(int(round(self.current_eval_score)))}", True, TEXT_COLOR if normalized > 0.95 else EVAL_WHITE)
 		self.screen.blit(txt, txt.get_rect(center=(bar_x + bar_w // 2, bar_y + 15)))
 
 	def draw_history_panel(self):
-		"""Renders the scrollable and clickable move history panel."""
-		panel_rect = pygame.Rect(self.screen_w - self.panel_width, 0, self.panel_width, self.screen_h)
+		"""Renders the scrollable move history panel [cite: 79-81]."""
+		panel_rect = pygame.Rect(self.screen_w - PANEL_WIDTH, 0, PANEL_WIDTH, self.screen_h)
 		self.draw_glass_panel(panel_rect)
-		self.screen.blit(self.font_status.render("Move History", True, MENU_ACCENT), (self.screen_w - self.panel_width + 15, 15))
+		self.screen.blit(FONT_STATUS.render("Move History", True, MENU_ACCENT), (self.screen_w - PANEL_WIDTH + 15, 15))
 		
-		counter = self.font_ui.render(f"{self.view_index} / {max(0, len(self.history) - 1)}", True, (150, 150, 150))
+		counter = FONT_UI.render(f"{self.view_index} / {max(0, len(self.history) - 1)}", True, (150, 150, 150))
 		self.screen.blit(counter, (self.screen_w - 90, 18))
-		pygame.draw.line(self.screen, BTN_BORDER, (self.screen_w - self.panel_width + 10, 45), (self.screen_w - 10, 45))
+		pygame.draw.line(self.screen, BTN_BORDER, (self.screen_w - PANEL_WIDTH + 10, 45), (self.screen_w - 10, 45))
 
 		if not self.history: return
 		full_log = self.history[-1]['log']
-		
 		row_height = 24
 		max_rows = (self.nav_btns['start'].top - 65) // row_height
 		total_rows = (len(full_log) + 1) // 2
 		
 		if not hasattr(self, 'history_scroll_offset'): self.history_scroll_offset = 0
-		if not hasattr(self, 'is_user_scrolling'): self.is_user_scrolling = False
-
-		# Auto-scroll to current view index if user is not manually scrolling
-		if not self.is_user_scrolling:
+		if not getattr(self, 'is_user_scrolling', False):
 			self.history_scroll_offset = max(0, ((self.view_index - 1) // 2) - (max_rows - 2))
 
-		# Clamp scroll boundaries
-		max_scroll = max(0, total_rows - max_rows)
-		self.history_scroll_offset = max(0, min(self.history_scroll_offset, max_scroll))
-
-		scroll = self.history_scroll_offset
+		scroll = max(0, min(self.history_scroll_offset, max(0, total_rows - max_rows)))
 		self.move_click_rects = {} 
 		mouse = pygame.mouse.get_pos()
 
 		for row in range(scroll, min(total_rows, scroll + max_rows + 1)):
 			y = 55 + (row - scroll) * row_height
-			if y > self.nav_btns['start'].top - 15: continue # Don't draw over bottom buttons
-
+			if y > self.nav_btns['start'].top - 15: continue
 			for i, offset in enumerate([(0, 10), (1, 155)]):
 				idx = row * 2 + i
 				if idx < len(full_log):
 					active = (idx == self.view_index - 1)
-					rect = pygame.Rect(self.screen_w - self.panel_width + offset[1] - 8, y, 130, row_height)
+					rect = pygame.Rect(self.screen_w - PANEL_WIDTH + offset[1] - 8, y, 130, row_height)
 					self.move_click_rects[idx] = rect
-					
-					# Highlight active or hovered move
-					if active: 
-						pygame.draw.rect(self.screen, BTN_NORMAL, rect, border_radius=4)
+					if active: pygame.draw.rect(self.screen, BTN_NORMAL, rect, border_radius=4)
 					elif rect.collidepoint(mouse) and panel_rect.collidepoint(mouse):
 						pygame.draw.rect(self.screen, (60, 65, 75), rect, border_radius=4)
-
 					txt = full_log[idx].split(' ', 1)[1] if "..." in full_log[idx] and i == 1 else full_log[idx]
-					self.screen.blit(self.font_history.render(txt, True, MENU_ACCENT if active else (220, 220, 220)), (rect.x + 8, y + 4))
+					self.screen.blit(FONT_HISTORY.render(txt, True, MENU_ACCENT if active else (220, 220, 220)), (rect.x + 8, y + 4))
 
+		# Navigation buttons (History Panel)
 		for lbl, k in [("<<", 'start'), ("<", 'prev'), (">", 'next'), (">>", 'end')]:
-			self.draw_styled_button(self.nav_btns[k], lbl, self.nav_btns[k].collidepoint(mouse), self.font_nav)
+			self.draw_hud_button(self.nav_btns[k], lbl, self.nav_btns[k].collidepoint(mouse))
 
 	def draw_in_game_hud(self):
-		"""Draws the bottom control bar during active gameplay."""
-		hud = pygame.Rect(20, self.screen_h - 70, self.screen_w - self.panel_width - 40, 60)
+		"""Draws the bottom control bar with pill-shaped brass buttons [cite: 81-83]."""
+		hud = pygame.Rect(20, self.screen_h - 70, self.screen_w - PANEL_WIDTH - 40, 60)
 		self.draw_glass_panel(hud)
 
 		is_live = (self.view_index == len(self.history) - 1)
-		if self.game_over:
-			status, col = ("GAME OVER: DRAW", (200, 200, 200)) if self.winner == 'draw' else (f"WINNER: {'WHITE' if self.winner == 'w' else 'BLACK'}", MENU_ACCENT)
+		if getattr(self, 'game_over', False):
+			status, col = ("GAME OVER", MENU_ACCENT)
 		elif not is_live: status, col = "VIEWING HISTORY", (200, 200, 255)
-		elif getattr(self, 'promotion_pending', False): status, col = "CHOOSE PROMOTION PIECE", MENU_ACCENT
-		else: status, col = f"{'WHITE' if self.turn == 'w' else 'BLACK'} TO {'MOVE PIECE' if self.phase == 'move_piece' else 'PLACE DUCK'}", (220, 220, 220)
+		else: status, col = f"{'WHITE' if self.turn == 'w' else 'BLACK'} TO {self.phase.replace('_', ' ').upper()}", (220, 220, 220)
 
-		self.screen.blit(self.font_status.render(status, True, col), (40, self.screen_h - 50))
+		self.screen.blit(FONT_STATUS.render(status, True, col), (40, self.screen_h - 50))
 
+		# Define Action Buttons
 		mouse = pygame.mouse.get_pos()
-		btns = [("Menu", self.menu_btn_rect), ("Hide Eval" if getattr(self, 'show_eval', True) else "Show Eval", self.eval_btn_rect), ("Restart", self.restart_btn_rect)]
-		if getattr(self, 'game_mode', '') == 'pvp': btns.insert(2, ("Flip Board", self.flip_btn_rect))
+		eval_txt = "Hide Eval" if getattr(self, 'show_eval', True) else "Show Eval"
+		btns = [("Menu", self.menu_btn_rect), (eval_txt, self.eval_btn_rect), ("Reset", self.restart_btn_rect)]
+		if getattr(self, 'game_mode', '') == 'pvp': btns.insert(1, ("Flip", self.flip_btn_rect))
 
+		# Render buttons as pill-shaped brass plaques
+		btn_w, btn_h, spacing = 95, 36, 12
+		start_x = hud.right - (btn_w + spacing) * len(btns) - 15
 		for i, (lbl, r) in enumerate(btns):
-			r.update(hud.right - 20 - (len(btns) * 110) + i * 110, hud.centery - 18, 100, 36)
-			self.draw_styled_button(r, lbl, r.collidepoint(mouse))
+			r.update(start_x + i * (btn_w + spacing), hud.centery - btn_h // 2, btn_w, btn_h)
+			self.draw_hud_button(r, lbl, r.collidepoint(mouse))
+
+	def draw_hud_button(self, rect, text, hover):
+		"""Renders a pill-shaped button with a deep brass look and drop shadow."""
+		# Subtle Drop Shadow
+		shadow_rect = rect.copy()
+		shadow_rect.y += 2
+		pygame.draw.rect(self.screen, (0, 0, 0, 120), shadow_rect, border_radius=18)
+
+		# Main Body (Recessed look)
+		body_col = BTN_HOVER if hover else BTN_NORMAL
+		pygame.draw.rect(self.screen, body_col, rect, border_radius=18)
+		
+		# Brass Border (Glowing on hover)
+		border_col = MENU_ACCENT if hover else BTN_BORDER
+		pygame.draw.rect(self.screen, border_col, rect, width=2, border_radius=18)
+
+		# Text Styling
+		txt_col = MENU_ACCENT if hover else BRASS_TEXT
+		txt_surf = FONT_UI.render(text, True, txt_col)
+		self.screen.blit(txt_surf, txt_surf.get_rect(center=rect.center))
+
+	def draw_glass_panel(self, rect):
+		"""Draws a refined frosted glass panel [cite: 83-84]."""
+		s = pygame.Surface((rect.width, rect.height), pygame.SRCALPHA)
+		s.fill(PANEL_BG)
+		self.screen.blit(s, rect.topleft)
+		pygame.draw.rect(self.screen, BTN_BORDER, rect, width=1, border_radius=15)
