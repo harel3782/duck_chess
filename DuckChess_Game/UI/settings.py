@@ -20,8 +20,9 @@ BOARD_FRAME = (70, 45, 30)
 HIGHLIGHT = (186, 202, 68, 140)
 LAST_MOVE_COLOR = (218, 165, 32, 100)
 
-# Valid Move Indicators (Golden Halos)
-VALID_MOVE_GOLD = (218, 165, 32, 180)
+# Valid Move Indicators (Chess.com Orange Style)
+# UPDATED: Solid orange dot with high visibility
+VALID_MOVE_ORANGE = (255, 150, 0, 170) 
 VALID_CAPTURE_RED = (200, 60, 60, 180)
 
 # Buttons & UI Elements
@@ -61,7 +62,7 @@ FPS, DUCK_SCALE_FACTOR = 60, 0.8
 PANEL_WIDTH, SIDE_MARGIN, EVAL_BAR_WIDTH = 300, 20, 36
 
 # --- AI & Animation Settings ---
-AI_MOVE_DELAY = 1200             # Time AI waits before each action (ms) 
+AI_MOVE_DELAY = 1200             # Time AI waits before each action (ms)
 ANIMATION_SPEED = 180  
 ANIMATION_FPS = 60
 SOUND_VOLUME = 0.5
