@@ -61,7 +61,7 @@ FPS, DUCK_SCALE_FACTOR = 60, 0.8
 PANEL_WIDTH, SIDE_MARGIN, EVAL_BAR_WIDTH = 300, 20, 36
 
 # --- AI & Animation Settings ---
-AI_MOVE_DELAY = 1200             # Increased delay for a more natural feel (ms)
+AI_MOVE_DELAY = 1200             # Time AI waits before each action (ms) 
 ANIMATION_SPEED = 180  
 ANIMATION_FPS = 60
 SOUND_VOLUME = 0.5

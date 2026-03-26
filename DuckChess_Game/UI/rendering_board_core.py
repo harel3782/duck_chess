@@ -5,7 +5,7 @@ class BoardCoreRenderingMixin:
 	"""Handles the physical 8x8 grid with a high-end walnut frame look."""
 
 	def _draw_base_board(self):
-		"""Draws the walnut and maple inlay squares and coordinates [cite: 71-72]."""
+		"""Draws the walnut and maple inlay squares and coordinates[cite: 70]."""
 		frame_rect = pygame.Rect(self.board_x - 15, self.board_y - 15, self.sq_size * 8 + 30, self.sq_size * 8 + 30)
 		pygame.draw.rect(self.screen, BOARD_FRAME, frame_rect, border_radius=4)
 		pygame.draw.rect(self.screen, BTN_BORDER, frame_rect, width=2, border_radius=4)
@@ -23,7 +23,7 @@ class BoardCoreRenderingMixin:
 					self.screen.blit(f_coord.render("87654321"[r], True, txt_col), (x + 3, y + 2))
 
 	def draw_game(self, hidden_square=None):
-		"""Master render function with updated Golden Halos for moves [cite: 72-74]."""
+		"""Master render function with updated Golden Halos for moves [cite: 71-72]."""
 		self.draw_menu_background()
 		is_live = (self.view_index == len(self.history) - 1)
 		snap = None if is_live else self.history[self.view_index]
@@ -45,16 +45,14 @@ class BoardCoreRenderingMixin:
 						if getattr(self, 'selected_square', None) == (r, c): 
 							self._draw_highlight_square(r, c, HIGHLIGHT)
 						if (r, c) in getattr(self, 'valid_moves', []):
-							# Draw Golden Halos (Rings)
 							s = pygame.Surface((self.sq_size, self.sq_size), pygame.SRCALPHA)
 							if b[r][c]: # Capture
 								pygame.draw.circle(s, VALID_CAPTURE_RED, (self.sq_size // 2, self.sq_size // 2), self.sq_size // 2 - 4, 4)
-							else: # Empty square move
+							else: # Move
 								pygame.draw.circle(s, VALID_MOVE_GOLD, (self.sq_size // 2, self.sq_size // 2), self.sq_size // 5, 2)
 							self.screen.blit(s, (x, y))
 					elif self.phase == 'move_duck' and not b[r][c] and (r, c) != p_duck:
 						s = pygame.Surface((self.sq_size, self.sq_size), pygame.SRCALPHA)
-						# Golden ring for duck placement
 						pygame.draw.circle(s, (218, 165, 32, 120), (self.sq_size // 2, self.sq_size // 2), self.sq_size // 4, 2)
 						self.screen.blit(s, (x, y))
 
@@ -64,7 +62,7 @@ class BoardCoreRenderingMixin:
 				p = b[r][c]
 				if p:
 					if p.type == 'K' and self.is_in_check(p.color, b): 
-						self._draw_highlight_square(r, c, (200, 50, 50, 160))
+						self._draw_highlight_square(r, c, (200, 50, 50, 160)) [cite: 73]
 					self._draw_piece_sprite(p, *self.get_screen_pos(r, c))
 
 		if getattr(self, 'show_eval', True): self.draw_eval_bar(b)
