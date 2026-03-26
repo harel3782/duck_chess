@@ -5,7 +5,7 @@ class BoardCoreRenderingMixin:
 	"""Handles the physical 8x8 grid with a high-end wooden frame look."""
 
 	def _draw_base_board(self):
-		"""Draws the wooden inlay squares and coordinate notation[cite: 67]."""
+		"""Draws the wooden inlay squares and coordinate notation[cite: 67, 71]."""
 		# Draw a thick wooden frame around the board
 		frame_rect = pygame.Rect(self.board_x - 15, self.board_y - 15, self.sq_size * 8 + 30, self.sq_size * 8 + 30)
 		pygame.draw.rect(self.screen, BOARD_FRAME, frame_rect, border_radius=4)
@@ -17,7 +17,7 @@ class BoardCoreRenderingMixin:
 				x, y = self.get_screen_pos(r, c)
 				pygame.draw.rect(self.screen, WHITE_COLOR if (r + c) % 2 == 0 else BLACK_SQ_COLOR, (x, y, self.sq_size, self.sq_size))
 				
-				# Coordinates with high contrast
+				# Coordinates with high contrast [cite: 72]
 				txt_col = (80, 50, 35) if (r + c) % 2 == 0 else (245, 235, 210)
 				if (r == 7 and self.player_side == 'w') or (r == 0 and self.player_side == 'b'):
 					self.screen.blit(f_coord.render("abcdefgh"[c], True, txt_col), (x + self.sq_size - 12, y + self.sq_size - 14))
@@ -25,14 +25,14 @@ class BoardCoreRenderingMixin:
 					self.screen.blit(f_coord.render("87654321"[r], True, txt_col), (x + 3, y + 2))
 
 	def draw_duck(self, r, c):
-		"""Renders the duck sprite centered on a square[cite: 68]."""
+		"""Renders the duck sprite centered on a square[cite: 68, 72]."""
 		x, y = self.get_screen_pos(r, c)
 		if 'duck' in self.scaled_images:
 			img = self.scaled_images['duck']
 			self.screen.blit(img, (x + (self.sq_size - img.get_width()) // 2, y + (self.sq_size - img.get_height()) // 2))
 
 	def draw_game(self, hidden_square=None):
-		"""The master render function for active gameplay frames [cite: 68-70]."""
+		"""The master render function for active gameplay frames [cite: 68-70, 72-74]."""
 		self.draw_menu_background()
 
 		is_live = (self.view_index == len(self.history) - 1)
@@ -69,6 +69,7 @@ class BoardCoreRenderingMixin:
 
 				p = b[r][c]
 				if p:
+					# Checking for King in check 
 					if p.type == 'K' and self.is_in_check(p.color, b): 
 						self._draw_highlight_square(r, c, (235, 60, 60, 180))
 					self._draw_piece_sprite(p, *self.get_screen_pos(r, c))
@@ -79,7 +80,10 @@ class BoardCoreRenderingMixin:
 			if k in self.scaled_images: 
 				self.screen.blit(self.scaled_images[k], (mx - self.drag_offset[0], my - self.drag_offset[1]))
 
-		self.draw_eval_bar(b)
+		# FIXED: Respect show_eval setting 
+		if getattr(self, 'show_eval', True):
+			self.draw_eval_bar(b)
+			
 		self.draw_history_panel()
 		self.draw_in_game_hud()
 		if getattr(self, 'promotion_pending', False) and is_live: self.draw_promotion_ui()

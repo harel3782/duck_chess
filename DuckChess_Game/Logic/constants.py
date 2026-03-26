@@ -1,7 +1,7 @@
 # --- Piece Constants ---
 KING, QUEEN, ROOK, BISHOP, KNIGHT, PAWN = 'K', 'Q', 'R', 'B', 'N', 'P'
 
-# --- Evaluation Values ---
+# --- Evaluation Values  ---
 PIECE_VALUES = {
 	PAWN: 1,
 	KNIGHT: 3,
