@@ -1,0 +1,107 @@
+import pygame
+
+class GameInputMixin:
+	"""Handles user input during active gameplay."""
+
+	def handle_promotion_click(self, pos):
+		for rect, p_type in self.get_promotion_rects():
+			if rect.collidepoint(pos):
+				self.promote_pawn(p_type)
+				break
+
+	def handle_mouse_down(self, pos):
+		# Navigation Arrows (Reset user scroll when used)
+		if self.nav_btns['start'].collidepoint(pos): self.view_index, self.is_user_scrolling = 0, False; return
+		if self.nav_btns['prev'].collidepoint(pos): self.view_index, self.is_user_scrolling = max(0, self.view_index - 1), False; return
+		if self.nav_btns['next'].collidepoint(pos): self.view_index, self.is_user_scrolling = min(len(self.history) - 1, self.view_index + 1), False; return
+		if self.nav_btns['end'].collidepoint(pos): self.view_index, self.is_user_scrolling = len(self.history) - 1, False; return
+
+		if self.restart_btn_rect.collidepoint(pos): self.reset_game_state(); return
+		if hasattr(self, 'eval_btn_rect') and self.eval_btn_rect.collidepoint(pos): self.show_eval = not getattr(self, 'show_eval', True); return
+		if self.menu_btn_rect.collidepoint(pos): self.state = 'menu'; return
+		if getattr(self, 'game_mode', '') == 'pvp' and hasattr(self, 'flip_btn_rect') and self.flip_btn_rect.collidepoint(pos):
+			self.player_side = 'b' if self.player_side == 'w' else 'w'; return
+
+		# --- History Panel Drag & Click ---
+		panel_rect = pygame.Rect(self.screen_w - self.panel_width, 0, self.panel_width, self.screen_h)
+		if panel_rect.collidepoint(pos):
+			self.history_dragging = True
+			self.last_mouse_y = pos[1]
+			self.is_user_scrolling = True
+			
+			for idx, rect in getattr(self, 'move_click_rects', {}).items():
+				if rect.collidepoint(pos):
+					self.view_index = idx + 1
+					self.is_user_scrolling = False # Snap scroll to the clicked view
+					if hasattr(self, 'play_sound'): self.play_sound('move')
+					return
+			return # Clicked empty panel space, ignore board interaction
+
+		# --- Board Interaction ---
+		is_live = (self.view_index == len(self.history) - 1)
+		if not is_live or getattr(self, 'game_over', False) or getattr(self, 'waiting_for_ai', False): return
+
+		r, c = self.get_board_pos(pos[0], pos[1])
+		if r == -1: return
+
+		if self.phase == 'move_piece':
+			piece = self.board[r][c]
+			if piece and piece.color == self.turn:
+				self.dragging, self.drag_piece, self.drag_start = True, piece, (r, c)
+				px, py = self.get_screen_pos(r, c)
+				self.drag_offset = (pos[0] - px, pos[1] - py)
+				self.selected_square, self.valid_moves = (r, c), self.get_piece_legal_moves(r, c)
+			elif getattr(self, 'selected_square', None) and (r, c) in getattr(self, 'valid_moves', []):
+				self.execute_move(self.selected_square, (r, c))
+				self.selected_square, self.valid_moves = None, []
+			else:
+				self.selected_square, self.valid_moves = None, []
+				
+		elif self.phase == 'move_duck':
+			if (r, c) == self.duck_pos:
+				self.dragging, self.drag_piece, self.drag_start = True, 'duck', (r, c)
+				px, py = self.get_screen_pos(r, c)
+				self.drag_offset = (pos[0] - px, pos[1] - py)
+			elif not self.board[r][c] and (r, c) != self.prev_duck_pos:
+				self.place_duck((r, c))
+
+	def handle_mouse_up(self, pos):
+		self.history_dragging = False # Stop panel drag
+		if not getattr(self, 'dragging', False): return
+		
+		r, c = self.get_board_pos(pos[0], pos[1])
+		if r != -1:
+			if self.phase == 'move_piece' and self.drag_piece != 'duck':
+				if (r, c) in getattr(self, 'valid_moves', []):
+					self.execute_move(self.drag_start, (r, c), animated=False)
+				self.selected_square, self.valid_moves = None, []
+			elif self.phase == 'move_duck' and self.drag_piece == 'duck':
+				if not self.board[r][c] and (r, c) != self.prev_duck_pos:
+					self.place_duck((r, c), animated=False)
+
+		self.dragging, self.drag_piece, self.drag_start = False, None, None
+
+	def handle_mouse_motion(self, pos):
+		"""Handles dragging the history panel up and down."""
+		if getattr(self, 'history_dragging', False):
+			dy = pos[1] - getattr(self, 'last_mouse_y', pos[1])
+			if abs(dy) >= 24: # Drag sensitivity (1 row)
+				rows = dy // 24
+				self.history_scroll_offset = getattr(self, 'history_scroll_offset', 0) - rows
+				self.last_mouse_y = pos[1]
+
+	def handle_mouse_wheel(self, y):
+		"""Handles scrolling via mouse wheel in the history panel."""
+		mx, my = pygame.mouse.get_pos()
+		panel_rect = pygame.Rect(self.screen_w - self.panel_width, 0, self.panel_width, self.screen_h)
+		if panel_rect.collidepoint((mx, my)):
+			self.is_user_scrolling = True
+			self.history_scroll_offset = getattr(self, 'history_scroll_offset', 0) - y
+
+	def handle_keyboard(self, event):
+		if event.key == pygame.K_LEFT: 
+			self.view_index = max(0, self.view_index - 1)
+			self.is_user_scrolling = False
+		elif event.key == pygame.K_RIGHT: 
+			self.view_index = min(len(self.history) - 1, self.view_index + 1)
+			self.is_user_scrolling = False

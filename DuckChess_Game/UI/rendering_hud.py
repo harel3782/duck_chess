@@ -5,7 +5,7 @@ class HUDRenderingMixin:
 	"""Handles in-game UI overlays: eval bar, history panel, and control buttons."""
 
 	def draw_eval_bar(self, current_board):
-		"""Draws the dynamic material evaluation bar [cite: 188-192]."""
+		"""Draws the dynamic material evaluation bar."""
 		if self.game_over: self.target_eval_score = 0 if self.winner == 'draw' else (20 if self.winner == 'w' else -20)
 		else: self.target_eval_score = self.calculate_material_score(current_board)
 
@@ -29,8 +29,9 @@ class HUDRenderingMixin:
 		self.screen.blit(txt, txt.get_rect(center=(bar_x + bar_w // 2, bar_y + 15)))
 
 	def draw_history_panel(self):
-		"""Renders the scrolling move history panel on the right [cite: 192-200]."""
-		self.draw_glass_panel(pygame.Rect(self.screen_w - self.panel_width, 0, self.panel_width, self.screen_h))
+		"""Renders the scrollable and clickable move history panel."""
+		panel_rect = pygame.Rect(self.screen_w - self.panel_width, 0, self.panel_width, self.screen_h)
+		self.draw_glass_panel(panel_rect)
 		self.screen.blit(self.font_status.render("Move History", True, MENU_ACCENT), (self.screen_w - self.panel_width + 15, 15))
 		
 		counter = self.font_ui.render(f"{self.view_index} / {max(0, len(self.history) - 1)}", True, (150, 150, 150))
@@ -39,25 +40,51 @@ class HUDRenderingMixin:
 
 		if not self.history: return
 		full_log = self.history[-1]['log']
-		max_rows = (self.nav_btns['start'].top - 65) // 24
-		scroll = max(0, ((self.view_index - 1) // 2) - (max_rows - 2)) if ((self.view_index - 1) // 2) > max_rows - 2 else 0
+		
+		row_height = 24
+		max_rows = (self.nav_btns['start'].top - 65) // row_height
+		total_rows = (len(full_log) + 1) // 2
+		
+		if not hasattr(self, 'history_scroll_offset'): self.history_scroll_offset = 0
+		if not hasattr(self, 'is_user_scrolling'): self.is_user_scrolling = False
 
-		for row in range(scroll, min((len(full_log) + 1) // 2, scroll + max_rows)):
-			y = 55 + (row - scroll) * 24
+		# Auto-scroll to current view index if user is not manually scrolling
+		if not self.is_user_scrolling:
+			self.history_scroll_offset = max(0, ((self.view_index - 1) // 2) - (max_rows - 2))
+
+		# Clamp scroll boundaries
+		max_scroll = max(0, total_rows - max_rows)
+		self.history_scroll_offset = max(0, min(self.history_scroll_offset, max_scroll))
+
+		scroll = self.history_scroll_offset
+		self.move_click_rects = {} 
+		mouse = pygame.mouse.get_pos()
+
+		for row in range(scroll, min(total_rows, scroll + max_rows + 1)):
+			y = 55 + (row - scroll) * row_height
+			if y > self.nav_btns['start'].top - 15: continue # Don't draw over bottom buttons
+
 			for i, offset in enumerate([(0, 10), (1, 155)]):
 				idx = row * 2 + i
 				if idx < len(full_log):
 					active = (idx == self.view_index - 1)
-					if active: pygame.draw.rect(self.screen, BTN_NORMAL, pygame.Rect(self.screen_w - self.panel_width + offset[1] - 12, y, 140, 24), border_radius=4)
-					txt = full_log[idx].split(' ', 1)[1] if "..." in full_log[idx] and i == 1 else full_log[idx]
-					self.screen.blit(self.font_history.render(txt, True, MENU_ACCENT if active else (220, 220, 220)), (self.screen_w - self.panel_width + offset[1], y + 4))
+					rect = pygame.Rect(self.screen_w - self.panel_width + offset[1] - 8, y, 130, row_height)
+					self.move_click_rects[idx] = rect
+					
+					# Highlight active or hovered move
+					if active: 
+						pygame.draw.rect(self.screen, BTN_NORMAL, rect, border_radius=4)
+					elif rect.collidepoint(mouse) and panel_rect.collidepoint(mouse):
+						pygame.draw.rect(self.screen, (60, 65, 75), rect, border_radius=4)
 
-		mouse = pygame.mouse.get_pos()
+					txt = full_log[idx].split(' ', 1)[1] if "..." in full_log[idx] and i == 1 else full_log[idx]
+					self.screen.blit(self.font_history.render(txt, True, MENU_ACCENT if active else (220, 220, 220)), (rect.x + 8, y + 4))
+
 		for lbl, k in [("<<", 'start'), ("<", 'prev'), (">", 'next'), (">>", 'end')]:
 			self.draw_styled_button(self.nav_btns[k], lbl, self.nav_btns[k].collidepoint(mouse), self.font_nav)
 
 	def draw_in_game_hud(self):
-		"""Draws the bottom control bar during active gameplay [cite: 169-173]."""
+		"""Draws the bottom control bar during active gameplay."""
 		hud = pygame.Rect(20, self.screen_h - 70, self.screen_w - self.panel_width - 40, 60)
 		self.draw_glass_panel(hud)
 
