@@ -1,5 +1,6 @@
 import pygame
 import pickle
+import copy
 from DuckChess_Game.UI.settings import *
 from DuckChess_Game.Logic.constants import *
 from DuckChess_Game.Logic.notation_helper import NotationHelper
@@ -9,7 +10,7 @@ class StateManagerMixin:
 	"""Handles high-level turn flow, AI execution, game state transitions, and replays."""
 
 	def calculate_material_score(self, board_state):
-		"""Calculates material balance using PIECE_VALUES from constants."""
+		"""Calculates material balance using PIECE_VALUES from constants[cite: 12]."""
 		score = 0
 		for r in range(8):
 			for c in range(8):
@@ -20,18 +21,66 @@ class StateManagerMixin:
 		return score
 
 	def clear_board(self):
-		"""Resets the board and game history."""
+		"""Removes all pieces from the board [cite: 29-30]."""
 		self.board = [[None] * 8 for _ in range(8)]
 		self.duck_pos = (-1, -1)
 		self.turn = 'w'
 		self.move_log = []
 		self.history = []
 
+	def save_snapshot(self):
+		"""Saves a single point in history [cite: 76-77]."""
+		self.history.append({
+			'board': copy.deepcopy(self.board),
+			'duck_pos': self.duck_pos,
+			'prev_duck': getattr(self, 'prev_duck_pos', (-1, -1)),
+			'last_move': getattr(self, 'last_move_arrow', None),
+			'captured': copy.deepcopy(getattr(self, 'captured', {'w': [], 'b': []})),
+			'log': list(self.move_log)
+		})
+		self.view_index = len(self.history) - 1
+
+	def reset_game_state(self):
+		"""Completely resets the game environment [cite: 77-81]."""
+		self.duck_pos = (-1, -1)
+		self.prev_duck_pos = (-1, -1)
+		self.turn = 'w'
+		self.phase = 'move_piece'
+		self.selected_square = None
+		self.valid_moves = []
+		self.game_over = False
+		self.winner = None
+		self.en_passant_target = None
+		self.half_move_clock = 0
+		self.rep_history = {}
+
+		self.move_log = []
+		self.last_move_arrow = None
+		self.turn_number = 1
+		self.current_move_str = ""
+		self.history = []
+		self.view_index = -1
+
+		self.captured = {'w': [], 'b': []}
+		self.promotion_pending = False
+		self.target_eval_score = 0
+		self.current_eval_score = 0.0
+
+		self.board = [[None] * 8 for _ in range(8)]
+		self.init_board()
+
+		if getattr(self, 'game_mode', None) == 'black_ai':
+			self.waiting_for_ai = True
+			self.ai_wait_start = pygame.time.get_ticks()
+		else:
+			self.waiting_for_ai = False
+
+		self.save_snapshot()
+
 	def execute_move(self, start, end, animated=True):
-		"""Executes a piece move, checks for promotion, and transitions phases."""
+		"""Executes a piece move, checks for promotion, and transitions phases [cite: 36-38]."""
 		p = self.board[start[0]][start[1]]
 		
-		# Generate initial notation
 		move_str = p.type if p.type != PAWN else ""
 		if self.board[end[0]][end[1]]: move_str += "x"
 		move_str += NotationHelper.get_notation_coords(end[0], end[1])
@@ -40,7 +89,6 @@ class StateManagerMixin:
 		if animated and hasattr(self, 'animate_move_visual'):
 			self.animate_move_visual(start, end, p, is_duck=False)
 
-		# Execute physical move
 		executor = MoveExecutor()
 		captured = executor.execute_piece_move(self.board, start, end)
 
@@ -49,7 +97,6 @@ class StateManagerMixin:
 			self.winner = self.turn
 			self.save_snapshot()
 		else:
-			# --- PROMOTION LOGIC ---
 			promote_rank = 0 if p.color == 'w' else 7
 			if p.type == PAWN and end[0] == promote_rank:
 				is_ai_turn = (getattr(self, 'game_mode', '') == 'rl_training') or \
@@ -57,18 +104,15 @@ class StateManagerMixin:
 							 (getattr(self, 'game_mode', '') == 'black_ai' and self.turn == 'w')
 				
 				if is_ai_turn:
-					# AI auto-promotes to Queen
 					p.type = QUEEN
 					self.current_move_str += "=Q"
 					if hasattr(self, 'play_sound'): self.play_sound('promote')
 					self.prev_duck_pos, self.phase = self.duck_pos, 'move_duck'
 				else:
-					# Wait for human player to choose
 					self.promotion_pending = True
 					self.promotion_coords = (end[0], end[1])
 					if hasattr(self, 'play_sound'): self.play_sound('notify')
 			else:
-				# Normal move, proceed to duck
 				self.prev_duck_pos, self.phase = self.duck_pos, 'move_duck'
 
 	def promote_pawn(self, type_char):
@@ -89,7 +133,7 @@ class StateManagerMixin:
 		self.prev_duck_pos, self.phase = self.duck_pos, 'move_duck'
 
 	def place_duck(self, pos, animated=True):
-		"""Finalizes the turn by placing the duck and saving state."""
+		"""Finalizes the turn by placing the duck and saving state [cite: 38-39]."""
 		if self.board[pos[0]][pos[1]] or pos == self.prev_duck_pos: return
 
 		coords = NotationHelper.get_notation_coords(pos[0], pos[1])
@@ -116,7 +160,7 @@ class StateManagerMixin:
 			self.waiting_for_ai = False
 
 	def ai_turn(self):
-		"""Automated logic for the AI player's moves."""
+		"""Automated logic for the AI player's moves [cite: 3-6]."""
 		if self.view_index != len(self.history) - 1 or self.game_over or not getattr(self, 'waiting_for_ai', False): return
 		if pygame.time.get_ticks() - self.ai_wait_start < 400: return
 
@@ -133,7 +177,7 @@ class StateManagerMixin:
 				self.place_duck(target, animated=True)
 
 	def load_replay_file(self, filepath):
-		"""Loads a .pkl replay file and reconstructs history turn-by-turn."""
+		"""Loads a .pkl replay file and reconstructs history turn-by-turn [cite: 39-40]."""
 		try:
 			with open(filepath, 'rb') as f:
 				game_data = pickle.load(f)
@@ -148,8 +192,7 @@ class StateManagerMixin:
 		self.game_mode, self.state = 'replay', 'game'
 
 		for act in actions:
-			# _decode_move is provided by RLMixin
-			(sr, sc), (er, ec) = self._decode_move(act)
+			(sr, sc), (er, ec) = getattr(self, '_decode_move')(act)
 			if self.phase == 'move_piece':
 				self.execute_move((sr, sc), (er, ec), animated=False)
 			elif self.phase == 'move_duck':
@@ -158,7 +201,7 @@ class StateManagerMixin:
 		self.view_index = len(self.history) - 1
 
 	def check_game_end_conditions(self):
-		"""Validates terminal states: 50-move rule and stalemate."""
+		"""Validates terminal states: 50-move rule and stalemate [cite: 33-35]."""
 		if self.game_over: return
 		if hasattr(self, 'half_move_clock') and self.half_move_clock >= 100:
 			self.game_over, self.winner = True, 'draw'; return

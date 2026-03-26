@@ -1,6 +1,5 @@
 import pygame
 import sys
-import copy
 import asyncio
 from DuckChess_Game.UI.settings import *
 from DuckChess_Game.Logic.logic import GameLogicMixin
@@ -49,75 +48,16 @@ class DuckChess(GameLogicMixin, RenderingMixin, InputHandlerMixin):
 		self.sounds = {}
 		self.load_assets()
 
-		# State Variables
-		self.move_log = []
-		self.current_move_str = ""
-		self.turn_number = 1
-		self.history = []
-		self.view_index = -1
-
+		# Drag & Drop State [cite: 74-75]
 		self.dragging = False
 		self.drag_piece = None
 		self.drag_start = None
 		self.drag_offset = (0, 0)
 
-		self.promotion_pending = False
-		self.promotion_coords = None
-
-		self.target_eval_score = 0
-		self.current_eval_score = 0.0
-
 		self.resize_layout(DEFAULT_WIDTH, DEFAULT_HEIGHT)
+		
+		# Calls the reset method now located in StateManagerMixin
 		self.reset_game_state()
-
-	def save_snapshot(self):
-		"""Saves a single point in history [cite: 76-77]."""
-		self.history.append({
-			'board': copy.deepcopy(self.board),
-			'duck_pos': self.duck_pos,
-			'prev_duck': self.prev_duck_pos,
-			'last_move': self.last_move_arrow,
-			'captured': copy.deepcopy(getattr(self, 'captured', {'w': [], 'b': []})),
-			'log': list(self.move_log)
-		})
-		self.view_index = len(self.history) - 1
-
-	def reset_game_state(self):
-		"""Completely resets the game environment [cite: 77-81]."""
-		self.duck_pos = (-1, -1)
-		self.prev_duck_pos = (-1, -1)
-		self.turn = 'w'
-		self.phase = 'move_piece'
-		self.selected_square = None
-		self.valid_moves = []
-		self.game_over = False
-		self.winner = None
-		self.en_passant_target = None
-		self.half_move_clock = 0
-		self.rep_history = {}
-
-		self.move_log = []
-		self.last_move_arrow = None
-		self.turn_number = 1
-		self.current_move_str = ""
-		self.history = []
-		self.view_index = -1
-
-		self.captured = {'w': [], 'b': []}
-		self.promotion_pending = False
-		self.target_eval_score = 0
-		self.current_eval_score = 0.0
-
-		self.board = [[None] * 8 for _ in range(8)]
-		self.init_board()
-
-		if self.game_mode == 'black_ai':
-			self.waiting_for_ai = True
-			self.ai_wait_start = pygame.time.get_ticks()
-		else:
-			self.waiting_for_ai = False
-
-		self.save_snapshot()
 
 	async def run(self):
 		"""The core application loop [cite: 110-117]."""
