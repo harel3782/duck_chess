@@ -8,7 +8,7 @@ class TurnManagerMixin:
 	"""Handles piece movement, duck placement, and AI turns with strategic delays."""
 
 	def execute_move(self, start, end, animated=True):
-		"""Executes a piece move, handles promotion checks and transitions [cite: 29-30]."""
+		"""Executes a piece move, handles promotion checks and transitions."""
 		p = self.board[start[0]][start[1]]
 		if not p: return
 
@@ -38,7 +38,7 @@ class TurnManagerMixin:
 				self.prev_duck_pos, self.phase = self.duck_pos, 'move_duck'
 
 	def _handle_auto_promotion(self, pawn, pos):
-		"""Logic for AI or Replay pawn promotion[cite: 30]."""
+		"""Logic for AI or Replay pawn promotion."""
 		game_mode = getattr(self, 'game_mode', '')
 		is_auto = game_mode in ('rl_training', 'replay') or \
 				 (game_mode == 'white_ai' and self.turn == 'b') or \
@@ -52,18 +52,8 @@ class TurnManagerMixin:
 			self.promotion_pending = True
 			self.promotion_coords = pos
 
-	def promote_pawn(self, type_char):
-		"""Handles manual pawn promotion."""
-		if not getattr(self, 'promotion_coords', None): return
-		r, c = self.promotion_coords
-		self.board[r][c].type = type_char
-		self.current_move_str += f"={type_char}"
-		self.promotion_pending = False
-		self.promotion_coords = None
-		self.prev_duck_pos, self.phase = self.duck_pos, 'move_duck'
-
 	def place_duck(self, pos, animated=True):
-		"""Finalizes turn by placing the duck and switching turns [cite: 31-32]."""
+		"""Finalizes turn by placing the duck and switching turns."""
 		if self.board[pos[0]][pos[1]] or pos == self.prev_duck_pos: return
 
 		coords = NotationHelper.get_notation_coords(pos[0], pos[1])
@@ -79,7 +69,7 @@ class TurnManagerMixin:
 		self.save_snapshot()
 		self.check_game_end_conditions()
 
-		# Check if the NEXT player is an AI
+		# Determine if the NEXT move belongs to AI
 		is_ai_next = (self.game_mode == 'white_ai' and self.turn == 'b') or \
 					 (self.game_mode == 'black_ai' and self.turn == 'w')
 		
@@ -87,21 +77,20 @@ class TurnManagerMixin:
 			self.waiting_for_ai = True
 			self.ai_wait_start = pygame.time.get_ticks()
 		else:
-			# FIXED: Explicitly stop waiting for AI when it's the player's turn
 			self.waiting_for_ai = False
 
 	def ai_turn(self):
-		"""Automated logic for the AI player with double-action delay[cite: 32]."""
+		"""Automated AI logic with delays before both piece and duck moves."""
 		if self.view_index != len(self.history) - 1 or self.game_over or not getattr(self, 'waiting_for_ai', False): return
 		
-		# Respect the delay from settings
+		# AI waits based on AI_MOVE_DELAY from settings
 		if pygame.time.get_ticks() - self.ai_wait_start < AI_MOVE_DELAY: return
 
 		if self.phase == 'move_piece':
 			move = self.ai.get_piece_move(self.board, self.turn, self.get_piece_legal_moves)
 			if move:
 				self.execute_move(move[0], move[1], animated=True)
-				# Reset timer so AI waits again before placing the duck
+				# RESET timer so AI waits again before placing the duck
 				self.ai_wait_start = pygame.time.get_ticks() 
 			else:
 				self.game_over, self.winner = True, ('b' if self.turn == 'w' else 'w')
