@@ -4,11 +4,12 @@ import copy
 import asyncio
 from DuckChess_Game.UI.settings import *
 from DuckChess_Game.Logic.logic import GameLogicMixin
+from DuckChess_Game.Logic.rl_mixin import RLMixin   # <--- הוסף את השורה הזו
 from DuckChess_Game.UI.rendering import RenderingMixin
 from DuckChess_Game.UI.pieces import Piece
 
 
-class DuckChess(GameLogicMixin, RenderingMixin):
+class DuckChess(GameLogicMixin, RLMixin, RenderingMixin):
     def __init__(self):
         pygame.init()
         self.screen = pygame.display.set_mode((DEFAULT_WIDTH, DEFAULT_HEIGHT), pygame.RESIZABLE)
