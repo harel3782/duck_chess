@@ -24,7 +24,7 @@ class InputHandlerMixin:
 				elif key == 'edit':
 					self.clear_board(); self.init_board(); self.state = 'edit'
 				elif key == 'replay':
-					# Open standard OS file dialog [cite: 53]
+					# Open standard OS file dialog
 					import tkinter as tk
 					from tkinter import filedialog
 					root = tk.Tk(); root.withdraw()
@@ -35,22 +35,24 @@ class InputHandlerMixin:
 					root.destroy()
 					if file_path:
 						if hasattr(self, 'play_sound'): self.play_sound('notify')
-						self.load_replay_file(file_path) # [cite: 37, 70]
+						self.load_replay_file(file_path)
 				elif key == 'quit':
 					pygame.quit(); sys.exit()
 
 	def handle_mouse_down(self, pos):
 		if self.promotion_pending: return
 
-		# HUD Buttons
+		# Navigation Arrows (Synced with Log Panel locations)
 		if self.nav_btns['start'].collidepoint(pos): self.view_index = 0; return
 		if self.nav_btns['prev'].collidepoint(pos): self.view_index = max(0, self.view_index - 1); return
 		if self.nav_btns['next'].collidepoint(pos): self.view_index = min(len(self.history) - 1, self.view_index + 1); return
 		if self.nav_btns['end'].collidepoint(pos): self.view_index = len(self.history) - 1; return
+
+		# HUD Buttons
 		if self.restart_btn_rect.collidepoint(pos): self.reset_game_state(); return
 		if self.eval_btn_rect.collidepoint(pos): self.show_eval = not self.show_eval; return
 		if self.menu_btn_rect.collidepoint(pos): self.state = 'menu'; return
-		if self.game_mode == 'pvp' and self.flip_btn_rect.collidepoint(pos):
+		if self.game_mode == 'pvp' and hasattr(self, 'flip_btn_rect') and self.flip_btn_rect.collidepoint(pos):
 			self.player_side = 'b' if self.player_side == 'w' else 'w'; return
 
 		is_live = (self.view_index == len(self.history) - 1)
