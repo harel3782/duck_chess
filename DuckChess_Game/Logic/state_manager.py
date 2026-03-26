@@ -10,7 +10,7 @@ class StateManagerMixin:
 	"""Handles high-level turn flow, AI execution, game state transitions, and replays."""
 
 	def calculate_material_score(self, board_state):
-		"""Calculates material balance using PIECE_VALUES from constants[cite: 12]."""
+		"""Calculates material balance using PIECE_VALUES from constants."""
 		score = 0
 		for r in range(8):
 			for c in range(8):
@@ -21,7 +21,7 @@ class StateManagerMixin:
 		return score
 
 	def clear_board(self):
-		"""Removes all pieces from the board [cite: 29-30]."""
+		"""Removes all pieces from the board."""
 		self.board = [[None] * 8 for _ in range(8)]
 		self.duck_pos = (-1, -1)
 		self.turn = 'w'
@@ -29,7 +29,7 @@ class StateManagerMixin:
 		self.history = []
 
 	def save_snapshot(self):
-		"""Saves a single point in history [cite: 76-77]."""
+		"""Saves a single point in history."""
 		self.history.append({
 			'board': copy.deepcopy(self.board),
 			'duck_pos': self.duck_pos,
@@ -41,7 +41,7 @@ class StateManagerMixin:
 		self.view_index = len(self.history) - 1
 
 	def reset_game_state(self):
-		"""Completely resets the game environment [cite: 77-81]."""
+		"""Completely resets the game environment."""
 		self.duck_pos = (-1, -1)
 		self.prev_duck_pos = (-1, -1)
 		self.turn = 'w'
@@ -78,13 +78,19 @@ class StateManagerMixin:
 		self.save_snapshot()
 
 	def execute_move(self, start, end, animated=True):
-		"""Executes a piece move, checks for promotion, and transitions phases [cite: 36-38]."""
+		"""Executes a piece move, plays sounds, checks for promotion, and transitions phases."""
 		p = self.board[start[0]][start[1]]
 		
+		# Build notation and check for capture
 		move_str = p.type if p.type != PAWN else ""
-		if self.board[end[0]][end[1]]: move_str += "x"
+		is_capture = self.board[end[0]][end[1]] is not None
+		if is_capture: move_str += "x"
 		move_str += NotationHelper.get_notation_coords(end[0], end[1])
 		self.current_move_str = move_str
+
+		# Determine the correct sound effect
+		is_castle = (p.type == KING and abs(start[1] - end[1]) == 2)
+		sound_to_play = 'capture' if is_capture else ('castle' if is_castle else 'move')
 
 		if animated and hasattr(self, 'animate_move_visual'):
 			self.animate_move_visual(start, end, p, is_duck=False)
@@ -92,10 +98,16 @@ class StateManagerMixin:
 		executor = MoveExecutor()
 		captured = executor.execute_piece_move(self.board, start, end)
 
+		# Play the sound
+		if hasattr(self, 'play_sound') and getattr(self, 'game_mode', '') != 'replay':
+			self.play_sound(sound_to_play)
+
 		if captured and captured.type == KING:
 			self.game_over = True
 			self.winner = self.turn
 			self.save_snapshot()
+			if hasattr(self, 'play_sound') and getattr(self, 'game_mode', '') != 'replay':
+				self.play_sound('game_over')
 		else:
 			promote_rank = 0 if p.color == 'w' else 7
 			if p.type == PAWN and end[0] == promote_rank:
@@ -133,8 +145,11 @@ class StateManagerMixin:
 		self.prev_duck_pos, self.phase = self.duck_pos, 'move_duck'
 
 	def place_duck(self, pos, animated=True):
-		"""Finalizes the turn by placing the duck and saving state [cite: 38-39]."""
+		"""Finalizes the turn by placing the duck and saving state."""
 		if self.board[pos[0]][pos[1]] or pos == self.prev_duck_pos: return
+
+		if hasattr(self, 'play_sound') and getattr(self, 'game_mode', '') != 'replay':
+			self.play_sound('notify')
 
 		coords = NotationHelper.get_notation_coords(pos[0], pos[1])
 		log_entry = f"{self.current_move_str} @ {coords}"
@@ -160,7 +175,7 @@ class StateManagerMixin:
 			self.waiting_for_ai = False
 
 	def ai_turn(self):
-		"""Automated logic for the AI player's moves [cite: 3-6]."""
+		"""Automated logic for the AI player's moves."""
 		if self.view_index != len(self.history) - 1 or self.game_over or not getattr(self, 'waiting_for_ai', False): return
 		if pygame.time.get_ticks() - self.ai_wait_start < 400: return
 
@@ -177,7 +192,7 @@ class StateManagerMixin:
 				self.place_duck(target, animated=True)
 
 	def load_replay_file(self, filepath):
-		"""Loads a .pkl replay file and reconstructs history turn-by-turn [cite: 39-40]."""
+		"""Loads a .pkl replay file and reconstructs history turn-by-turn."""
 		try:
 			with open(filepath, 'rb') as f:
 				game_data = pickle.load(f)
@@ -201,7 +216,7 @@ class StateManagerMixin:
 		self.view_index = len(self.history) - 1
 
 	def check_game_end_conditions(self):
-		"""Validates terminal states: 50-move rule and stalemate [cite: 33-35]."""
+		"""Validates terminal states: 50-move rule and stalemate."""
 		if self.game_over: return
 		if hasattr(self, 'half_move_clock') and self.half_move_clock >= 100:
 			self.game_over, self.winner = True, 'draw'; return
@@ -218,3 +233,4 @@ class StateManagerMixin:
 		if not has_moves:
 			self.game_over = True
 			self.winner = 'b' if self.turn == 'w' else 'w'
+			if hasattr(self, 'play_sound'): self.play_sound('game_over')
