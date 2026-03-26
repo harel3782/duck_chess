@@ -10,3 +10,6 @@ models/
 *.zip
 *.pkl
 DuckChess_Game/SBThree/saved_replays/
+
+# Ignored text files
+duck_chess_full_code.txt
