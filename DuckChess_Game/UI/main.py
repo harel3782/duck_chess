@@ -36,7 +36,7 @@ class DuckChess(GameLogicMixin, RenderingMixin, InputHandlerMixin, AssetManagerM
 		self.menu_btn_rect = pygame.Rect(0, 0, 0, 0)
 		self.flip_btn_rect = pygame.Rect(0, 0, 0, 0)
 		self.restart_btn_rect = pygame.Rect(0, 0, 0, 0)
-		self.show_eval = True
+		self.show_eval = False
 		self.eval_btn_rect = pygame.Rect(0, 0, 0, 0)
 		self.editor_play_btn = pygame.Rect(0, 0, 0, 0)
 		self.editor_clear_btn = pygame.Rect(0, 0, 0, 0)
