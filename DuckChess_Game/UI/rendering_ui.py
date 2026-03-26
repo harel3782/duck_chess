@@ -1,216 +1,309 @@
 import pygame
+import random
+import math
 from DuckChess_Game.UI.settings import *
 
-
 class UIRenderingMixin:
-    """Handles UI components: Menus, History Panel, Eval Bar, and Buttons"""
+	"""Handles the rendering of Main Menu, Load Replay, in-game HUD, and specialized lists."""
 
-    def draw_menu_background(self):
-        tile_size = 100
-        cols, rows = self.screen_w // tile_size + 1, self.screen_h // tile_size + 1
-        for r in range(rows):
-            for c in range(cols):
-                color = MENU_BG_DARK if (r + c) % 2 == 0 else MENU_BG_LIGHT
-                pygame.draw.rect(self.screen, color, (c * tile_size, r * tile_size, tile_size, tile_size))
+	def draw_menu_background(self):
+		"""Draws a deep ocean gradient background and a dynamic particle field."""
+		self.screen.fill(COLOR_BG)
+		max_radius = int(math.sqrt(self.screen_w ** 2 + self.screen_h ** 2))
+		center_col = COLOR_BG
+		edge_col = (20, 30, 45, 10)
+		for r in range(max_radius, 0, -max_radius // 6):
+			progress = (max_radius - r) / max_radius
+			col = [int(center_col[i] * (1 - progress) + edge_col[i] * progress) for i in range(3)]
+			pygame.draw.circle(self.screen, col, (self.screen_w // 2, self.screen_h // 2), r)
 
-    def draw_glass_panel(self, rect):
-        s = pygame.Surface((rect.width, rect.height), pygame.SRCALPHA)
-        s.fill((20, 25, 30, 230))
-        self.screen.blit(s, rect.topleft)
-        pygame.draw.rect(self.screen, BTN_BORDER, rect, width=1, border_radius=8)
+		if not hasattr(self, 'particles'):
+			self.particles = []
+			for _ in range(70):
+				self.particles.append({'x': random.uniform(0, self.screen_w), 'y': random.uniform(0, self.screen_h), 'size': random.uniform(1.0, 3.5), 'speed': random.uniform(0.1, 0.4)})
+		
+		particle_surf = pygame.Surface((self.screen_w, self.screen_h), pygame.SRCALPHA)
+		time_ms = pygame.time.get_ticks()
+		for p in self.particles:
+			p['y'] -= p['speed']
+			p['x'] += 0.2 * math.sin(time_ms * 0.001 + p['y'] * 0.01)
+			if p['y'] < -10: p['y'] = self.screen_h + 10
+			if p['x'] < -10: p['x'] = self.screen_w + 10
+			if p['x'] > self.screen_w + 10: p['x'] = -10
+			alpha = 100 + 100 * math.sin(time_ms * 0.002 + p['y'] * 0.05)
+			pygame.draw.circle(particle_surf, (0, 255, 255, int(alpha * 0.15)), (int(p['x']), int(p['y'])), int(p['size'] * 2))
+			pygame.draw.circle(particle_surf, (220, 240, 255, int(alpha * 0.7)), (int(p['x']), int(p['y'])), int(p['size']))
+		self.screen.blit(particle_surf, (0, 0))
 
-    def draw_styled_button(self, rect, text, hover, font=None):
-        if font is None:
-            font = self.font_menu_sub
+	def draw_menu(self):
+		"""Renders the modernized, atmospheric Main Menu."""
+		self.draw_menu_background()
+		mouse_pos = pygame.mouse.get_pos()
+		center_x = self.screen_w // 2
+		start_y = max(50, self.screen_h // 2 - 280)
+		logo_rect = pygame.Rect(center_x - 60, start_y, 120, 120)
+		pulse = 180 + 75 * math.sin(pygame.time.get_ticks() * 0.005)
+		s_duck = pygame.Surface((120, 120), pygame.SRCALPHA)
+		pygame.draw.circle(s_duck, (COLOR_DUCK_ACCENT[0], COLOR_DUCK_ACCENT[1], COLOR_DUCK_ACCENT[2], int(pulse * 0.2)), (60, 60), 60)
+		pygame.draw.circle(s_duck, (COLOR_DUCK_ACCENT[0], COLOR_DUCK_ACCENT[1], COLOR_DUCK_ACCENT[2], int(pulse * 0.5)), (60, 60), 45, width=15)
+		pygame.draw.circle(s_duck, COLOR_DUCK_ACCENT, (60, 60), 45)
+		pygame.draw.circle(s_duck, (10, 10, 10), (45, 45), 5)
+		self.screen.blit(s_duck, logo_rect.topleft)
 
-        color = BTN_HOVER if hover else BTN_NORMAL
-        border_col = MENU_ACCENT if hover else BTN_BORDER
+		font_title = pygame.font.SysFont("Arial", 72, bold=True)
+		font_subtitle = pygame.font.SysFont("Arial", 20, bold=True)
+		duck_center = (center_x - 110, start_y + 160)
+		chess_center = (center_x + 90, start_y + 160)
+		self._draw_text_with_glow(self.screen, "DUCK", font_title, duck_center, COLOR_DUCK_ACCENT, COLOR_DUCK_VALID[:3])
+		self._draw_text_with_glow(self.screen, "CHESS", font_title, chess_center, COLOR_HIGHLIGHT[:3], BTN_BORDER[:3])
+		self.screen.blit(font_subtitle.render("Strategic Anarchy", True, COLOR_TEXT), (center_x - 80, start_y + 200))
 
-        shadow_rect = rect.copy()
-        shadow_rect.y += 2
-        pygame.draw.rect(self.screen, (0, 0, 0, 100), shadow_rect, border_radius=6)
-        pygame.draw.rect(self.screen, color, rect, border_radius=6)
-        pygame.draw.rect(self.screen, border_col, rect, width=1, border_radius=6)
+		if not hasattr(self, 'menu_rects'):
+			self.menu_rects = {}
+			self.btn_order = ['white', 'black', 'pvp', 'edit', 'replay', 'quit']
+			self.btn_labels = {'white': 'Play as WHITE', 'black': 'Play as BLACK', 'pvp': '2 Player (PvP)', 'edit': 'Edit Board', 'replay': 'Load Replay', 'quit': 'Exit Game'}
 
-        txt_col = MENU_ACCENT if hover else BTN_TEXT
-        txt_surf = font.render(text, True, txt_col)
-        self.screen.blit(txt_surf, txt_surf.get_rect(center=rect.center))
+		btn_width, btn_height, btn_spacing = 300, 45, 15
+		first_btn_y = start_y + 250
+		for i, key in enumerate(self.btn_order):
+			r = pygame.Rect(center_x - btn_width // 2, first_btn_y + i * (btn_height + btn_spacing), btn_width, btn_height)
+			self.menu_rects[key] = r
+			self.draw_styled_menu_button(r, self.btn_labels[key], r.collidepoint(mouse_pos))
 
-    def draw_menu(self):
-        self.draw_menu_background()
+		footer_txt = self.font_ui.render("v1.5: Deep Ocean & Neon Update | 2024", True, (60, 80, 100))
+		self.screen.blit(footer_txt, footer_txt.get_rect(center=(center_x, self.screen_h - 20)))
 
-        t_shadow = self.font_menu_title.render("DUCK CHESS", True, (0, 0, 0))
-        self.screen.blit(t_shadow, t_shadow.get_rect(center=(self.screen_w // 2 + 3, self.screen_h * 0.2 + 3)))
-        t_main = self.font_menu_title.render("DUCK CHESS", True, MENU_ACCENT)
-        self.screen.blit(t_main, t_main.get_rect(center=(self.screen_w // 2, self.screen_h * 0.2)))
+	def draw_history_panel_2_column(self):
+		"""Draws move history in a clean two-column format."""
+		board_h = self.sq_size * 8
+		panel_rect = pygame.Rect(self.screen_w - self.panel_width + 10, self.board_y, self.panel_width - 20, board_h)
+		self.draw_glass_panel(panel_rect, border_radius=10)
+		font_headers = pygame.font.SysFont("Arial", 16, bold=True)
+		title = font_headers.render("STRATEGIC ANARCHY LOG", True, COLOR_ACCENT_WHITE)
+		self.screen.blit(title, (panel_rect.x + 15, panel_rect.y + 15))
+		
+		grouped_moves = []
+		turn_data = None
+		for move_str in self.move_log:
+			if "..." in move_str:
+				parts = move_str.split("... ")
+				t_num = parts[0] + "." if len(parts) > 1 else ""
+				b_move = parts[1] if len(parts) > 1 else move_str
+				if turn_data: turn_data = (turn_data[0], turn_data[1], b_move)
+				else: turn_data = (t_num, "---", b_move)
+				grouped_moves.append(turn_data)
+				turn_data = None
+			else:
+				parts = move_str.split(". ")
+				t_num = parts[0] + "." if len(parts) > 1 else ""
+				w_move = parts[1] if len(parts) > 1 else move_str
+				turn_data = (t_num, w_move, "")
+		if turn_data: grouped_moves.append(turn_data)
 
-        panel_rect = pygame.Rect((self.screen_w - 400) // 2, (self.screen_h - 400) // 2 + 40, 400, 400)
-        self.draw_glass_panel(panel_rect)
+		pygame.draw.line(self.screen, (60, 80, 100), (panel_rect.x + 10, panel_rect.y + 40), (panel_rect.right - 10, panel_rect.y + 40))
+		col_num_w, col_move_w = 40, (panel_rect.width - 40 - 40) // 2
+		h_y = panel_rect.y + 48
+		self.screen.blit(font_headers.render("Turn", True, COLOR_TEXT), (panel_rect.x + 15, h_y))
+		self.screen.blit(font_headers.render("WHITE", True, COLOR_ACCENT_WHITE), (panel_rect.x + 15 + col_num_w, h_y))
+		self.screen.blit(font_headers.render("BLACK", True, COLOR_ACCENT_BLACK), (panel_rect.x + 15 + col_num_w + col_move_w + 10, h_y))
+		pygame.draw.line(self.screen, (60, 80, 100), (panel_rect.x + 10, h_y + 22), (panel_rect.right - 10, h_y + 22))
 
-        opts = [
-            ("Play as White", 'white_ai'),
-            ("Play as Black", 'black_ai'),
-            ("2 Player (PvP)", 'pvp'),
-            ("Edit Board", 'edit'),
-            ("Load Replay", 'load_replay')
-        ]
+		font_list, start_y, line_height = pygame.font.SysFont("Consolas", 14), h_y + 35, 20
+		num_lines = (panel_rect.height - 100) // line_height
+		start_idx = max(0, len(grouped_moves) - num_lines)
+		is_live = (self.view_index == len(self.history) - 1)
+		last_played_idx = len(grouped_moves) - 1
+		
+		for i, (tnum, wmove, bmove) in enumerate(grouped_moves[start_idx:]):
+			actual_idx = i + start_idx
+			y = start_y + i * line_height
+			is_last_move = (actual_idx == last_played_idx and is_live)
+			t_col = COLOR_HIGHLIGHT[:3] if is_last_move else (100, 120, 140)
+			move_col = COLOR_HIGHLIGHT[:3] if is_last_move else COLOR_TEXT
+			self.screen.blit(font_list.render(tnum, True, t_col), (panel_rect.x + 15, y))
+			self.screen.blit(font_list.render(wmove, True, move_col), (panel_rect.x + 15 + col_num_w, y))
+			self.screen.blit(font_list.render(bmove, True, move_col), (panel_rect.x + 15 + col_num_w + col_move_w + 10, y))
 
-        mouse = pygame.mouse.get_pos()
-        click = pygame.mouse.get_pressed()[0]
+	def draw_in_game_hud(self):
+		"""Draws a simplified, cleaner HUD with more vertical space."""
+		is_live = (self.view_index == len(self.history) - 1)
+		board_width = self.sq_size * 8
+		hud_height = 80
+		hud_start_y = self.board_y + board_width + self.side_margin 
+		hud_rect = pygame.Rect(self.board_x - 10, hud_start_y, board_width + 20, hud_height)
+		self.draw_glass_panel(hud_rect, border_radius=10)
 
-        for i, (txt, mode) in enumerate(opts):
-            # Make buttons slightly smaller to fit 5 options nicely
-            r = pygame.Rect(0, 0, 300, 50)
-            r.centerx, r.top = self.screen_w // 2, panel_rect.top + 30 + i * 70
-            self.draw_styled_button(r, txt, r.collidepoint(mouse))
+		status_txt = ""
+		status_col = COLOR_TEXT
 
-            if click and r.collidepoint(mouse):
-                pygame.time.wait(150)
+		if self.state == 'edit':
+			valid = self.validate_editor_board()
+			status_txt = "READY" if valid else "INVALID BOARD (KINGS?)"
+			status_col = COLOR_HIGHLIGHT[:3] if valid else COLOR_CAPTURE_MOVE[:3]
+		elif self.game_over:
+			status_txt = "DRAW" if self.winner == 'draw' else f"WINNER: {self.winner.upper()}"
+			status_col = MENU_ACCENT
+		elif not is_live:
+			status_txt = f"HISTORY: {self.view_index + 1}/{len(self.history)}"
+			status_col = COLOR_VALID_MOVE
+		elif self.promotion_pending:
+			status_txt = "PROMOTION"
+			status_col = COLOR_DUCK_VALID
+		else:
+			t_col = 'WHITE' if self.turn == 'w' else 'BLACK'
+			ph = 'MOVE' if self.phase == 'move_piece' else 'DUCK'
+			status_txt = f"{t_col} TURN: {ph}"
+			status_col = COLOR_TEXT
 
-                if mode == 'edit':
-                    self.state = 'edit'
-                    self.reset_game_state()
-                    self.clear_board()
-                    self.init_board()
-                elif mode == 'load_replay':
-                    # Open a native OS file dialog to select the .pkl file
-                    import tkinter as tk
-                    from tkinter import filedialog
+		font_status_hud = pygame.font.SysFont("Arial", 18, bold=True)
+		status_surf = font_status_hud.render(status_txt, True, status_col)
+		self.screen.blit(status_surf, (hud_rect.x + 20, hud_rect.centery - status_surf.get_height() // 2))
 
-                    root = tk.Tk()
-                    root.wm_attributes('-topmost', 1)  # Keep dialog above PyGame
-                    root.withdraw()  # Hide the empty root window
+		mouse = pygame.mouse.get_pos()
+		if self.state == 'edit':
+			btns = [("Menu", self.editor_menu_btn), ("Clear", self.editor_clear_btn)]
+			if self.validate_editor_board(): btns.append(("Play", self.editor_play_btn))
+			turn_lbl = f"START: {'W' if self.turn == 'w' else 'B'}"
+			btns.insert(1, (turn_lbl, self.editor_turn_btn))
+		else:
+			btns = [("Menu", self.menu_btn_rect), ("Eval" if not self.show_eval else "No Eval", self.eval_btn_rect), ("Restart", self.restart_btn_rect)]
+			if self.game_mode == 'pvp': btns.insert(2, ("Flip", self.flip_btn_rect))
 
-                    filepath = filedialog.askopenfilename(
-                        title="Select Duck Chess Replay",
-                        filetypes=[("Replay Files", "*.pkl")]
-                    )
-                    root.destroy()
+		start_x = hud_rect.right - 20 - (len(btns) * 110)
+		for i, (lbl, rect_obj) in enumerate(btns):
+			rect_obj.update(start_x + i * 110, hud_rect.centery - 22, 100, 45) 
+			self.draw_styled_hud_button(rect_obj, lbl, rect_obj.collidepoint(mouse))
 
-                    if filepath:
-                        self.load_replay_file(filepath)
-                else:
-                    self.game_mode = mode
-                    self.player_side = 'b' if mode == 'black_ai' else 'w'
-                    self.state = 'game'
-                    self.reset_game_state()
-                return
+	def draw_eval_bar(self, board):
+		"""Draws the vertical material evaluation bar."""
+		bar_rect = pygame.Rect(self.side_margin + 5, self.board_y, self.eval_bar_width, self.sq_size * 8)
+		pygame.draw.rect(self.screen, EVAL_BLACK, bar_rect, border_radius=5)
+		score = self.calculate_material_score(board)
+		vis_score = max(-15, min(15, score))
+		fill_pct = (vis_score + 15) / 30.0
+		white_h = int(bar_rect.height * fill_pct)
+		if white_h > 0:
+			white_rect = pygame.Rect(bar_rect.x, bar_rect.bottom - white_h, bar_rect.width, white_h)
+			pygame.draw.rect(self.screen, EVAL_WHITE, white_rect, border_bottom_left_radius=5, border_bottom_right_radius=5)
+			if white_h >= bar_rect.height: pygame.draw.rect(self.screen, EVAL_WHITE, white_rect, border_radius=5)
+		pygame.draw.rect(self.screen, BTN_BORDER, bar_rect, width=2, border_radius=5)
 
-    def draw_eval_bar(self, current_board):
-        if self.game_over:
-            self.target_eval_score = 0 if self.winner == 'draw' else (20 if self.winner == 'w' else -20)
-        else:
-            self.target_eval_score = self.calculate_material_score(current_board)
+	def draw_promotion_ui(self):
+		"""Draws selection UI for pawn promotion."""
+		overlay = pygame.Surface((self.screen_w, self.screen_h), pygame.SRCALPHA)
+		overlay.fill((0, 0, 0, 150))
+		self.screen.blit(overlay, (0, 0))
+		spacing = self.sq_size + 20
+		panel_w, panel_h = spacing * 4 + 20, self.sq_size + 40
+		rect = pygame.Rect((self.screen_w - panel_w)//2, (self.screen_h - panel_h)//2, panel_w, panel_h)
+		self.draw_glass_panel(rect, border_radius=10)
+		for r, p_type in self.get_promotion_rects():
+			if r.collidepoint(pygame.mouse.get_pos()): pygame.draw.rect(self.screen, COLOR_HIGHLIGHT, r, border_radius=5)
+			key = f"{self.turn}{p_type}"
+			if key in self.scaled_images: self.screen.blit(self.scaled_images[key], (r.x, r.y))
 
-        diff = self.target_eval_score - self.current_eval_score
-        if abs(diff) < 0.05:
-            self.current_eval_score = self.target_eval_score
-        else:
-            self.current_eval_score += diff * 0.1
+	def get_promotion_rects(self):
+		"""Calculates rects for promotion selection."""
+		pieces, rects = [QUEEN, ROOK, BISHOP, KNIGHT], []
+		spacing = self.sq_size + 20
+		panel_w = spacing * 4 + 20
+		start_x, start_y = (self.screen_w - panel_w)//2 + 20, (self.screen_h - (self.sq_size + 40))//2 + 20
+		for i, p_type in enumerate(pieces):
+			r = pygame.Rect(start_x + i * spacing, start_y, self.sq_size, self.sq_size)
+			rects.append((r, p_type))
+		return rects
 
-        max_adv = 20
-        normalized = (max(-max_adv, min(max_adv, self.current_eval_score)) + max_adv) / (2 * max_adv)
-        bar_h, bar_y, bar_x, bar_w = self.sq_size * 8, self.board_y, self.eval_bar_x, self.eval_bar_width
+	def draw_glass_panel(self, rect, border_radius=0):
+		"""Helper for translucent frosted glass effect."""
+		s = pygame.Surface((rect.width, rect.height), pygame.SRCALPHA)
+		pygame.draw.rect(s, (20, 30, 45, 200), (0, 0, rect.width, rect.height), border_radius=border_radius)
+		self.screen.blit(s, rect.topleft)
+		pygame.draw.rect(self.screen, BTN_BORDER, rect, width=2, border_radius=border_radius)
 
-        pygame.draw.rect(self.screen, BTN_BORDER, (bar_x - 2, bar_y - 2, bar_w + 4, bar_h + 4), border_radius=4)
-        mid_y = bar_y + bar_h * (1 - normalized)
-        pygame.draw.rect(self.screen, EVAL_BLACK, (bar_x, bar_y, bar_w, mid_y - bar_y))
-        pygame.draw.rect(self.screen, EVAL_WHITE, (bar_x, mid_y, bar_w, bar_y + bar_h - mid_y))
+	def draw_styled_hud_button(self, rect, label, is_hover):
+		"""Draws a themed button for HUD interaction."""
+		s = pygame.Surface((rect.width, rect.height), pygame.SRCALPHA)
+		if is_hover:
+			pygame.draw.rect(s, (0, 255, 255, 60), (0, 0, rect.width, rect.height), border_radius=5)
+			border_col, text_col = COLOR_HIGHLIGHT[:3], (255, 255, 255)
+		else:
+			pygame.draw.rect(s, (30, 45, 60, 200), (0, 0, rect.width, rect.height), border_radius=5)
+			border_col, text_col = (60, 80, 100), COLOR_TEXT
+		self.screen.blit(s, rect.topleft)
+		pygame.draw.rect(self.screen, border_col, rect, width=1, border_radius=5)
+		txt_surf = pygame.font.SysFont("Arial", 14, bold=True).render(label, True, text_col)
+		self.screen.blit(txt_surf, txt_surf.get_rect(center=rect.center))
 
-        if self.game_over:
-            color = (150, 150, 150)
-            if self.winner == 'w':
-                color = EVAL_WHITE
-            elif self.winner == 'b':
-                color = EVAL_BLACK
-            pygame.draw.rect(self.screen, color, (bar_x, bar_y, bar_w, bar_h))
+	def _draw_text_with_glow(self, surf, text, font, center_pos, core_col, glow_col):
+		"""Helper to render glowing text effect."""
+		t_surf = font.render(text, True, glow_col)
+		t_rect = t_surf.get_rect(center=center_pos)
+		pulse = 120 + 80 * math.sin(pygame.time.get_ticks() * 0.005)
+		t_surf.set_alpha(int(pulse * 0.2))
+		surf.blit(t_surf, (t_rect.x - 4, t_rect.y - 4))
+		t_surf.set_alpha(int(pulse * 0.5))
+		surf.blit(t_surf, (t_rect.x - 2, t_rect.y - 2))
+		surf.blit(font.render(text, True, core_col), t_rect)
 
-        score_txt = f"{abs(int(round(self.current_eval_score)))}"
-        txt_surf = self.font_eval.render(score_txt, True, TEXT_COLOR if normalized > 0.95 else EVAL_WHITE)
-        self.screen.blit(txt_surf, txt_surf.get_rect(center=(bar_x + bar_w // 2, bar_y + 15)))
+	def draw_styled_menu_button(self, rect, label, is_hover):
+		"""Draws high-quality menu buttons with glows."""
+		s = pygame.Surface((rect.width, rect.height), pygame.SRCALPHA)
+		if is_hover:
+			pulse = 60 + 20 * math.sin(pygame.time.get_ticks() * 0.005)
+			pygame.draw.rect(s, (40, 60, 80, int(pulse)), (0, 0, rect.width, rect.height), border_radius=8)
+			border_col, text_col = COLOR_HIGHLIGHT[:3], (255, 255, 255)
+			glow_s = pygame.Surface((rect.width + 30, rect.height + 30), pygame.SRCALPHA)
+			pygame.draw.rect(glow_s, (0, 255, 255, 25), (15, 15, rect.width, rect.height), border_radius=12)
+			pygame.draw.rect(glow_s, (0, 255, 255, 60), (0, 0, rect.width + 30, rect.height + 30), width=15, border_radius=15)
+			self.screen.blit(glow_s, (rect.x - 15, rect.y - 15))
+		else:
+			pygame.draw.rect(s, (30, 45, 60, 100), (0, 0, rect.width, rect.height), border_radius=8)
+			border_col, text_col = (60, 80, 100), COLOR_TEXT
+		self.screen.blit(s, rect.topleft)
+		pygame.draw.rect(self.screen, border_col, rect, width=2, border_radius=8)
+		txt_surf = pygame.font.SysFont("Arial", 18, bold=True).render(label, True, text_col)
+		self.screen.blit(txt_surf, txt_surf.get_rect(center=rect.center))
 
-    def draw_history_panel(self):
-        self.draw_glass_panel(pygame.Rect(self.screen_w - self.panel_width, 0, self.panel_width, self.screen_h))
-        title = self.font_status.render("Move History", True, MENU_ACCENT)
-        self.screen.blit(title, (self.screen_w - self.panel_width + 15, 15))
+	def draw_load_replay(self):
+		"""Displays a clean, modern replay selection screen."""
+		self.draw_menu_background()
+		mouse_pos = pygame.mouse.get_pos()
+		center_x = self.screen_w // 2
 
-        counter = self.font_ui.render(f"{self.view_index} / {len(self.history) - 1}", True, (150, 150, 150))
-        self.screen.blit(counter, (self.screen_w - 90, 18))
-        pygame.draw.line(self.screen, BTN_BORDER, (self.screen_w - self.panel_width + 10, 45), (self.screen_w - 10, 45))
+		panel_w, panel_h = 600, self.screen_h - 200
+		panel_rect = pygame.Rect(center_x - panel_w//2, 100, panel_w, panel_h)
+		self.draw_glass_panel(panel_rect, border_radius=15)
+		
+		font_title = pygame.font.SysFont("Arial", 32, bold=True)
+		title_surf = font_title.render("SELECT REPLAY FILE", True, COLOR_TEXT)
+		self.screen.blit(title_surf, title_surf.get_rect(center=(center_x, 150)))
 
-        full_log = self.history[-1]['log']
-        start_y = 55
-        line_height = 24
-        col_white_x = self.screen_w - self.panel_width + 10
-        col_black_x = self.screen_w - self.panel_width + 155
+		# אתחול הרשימה כדי שה-InputHandler יוכל לגשת אליה
+		self.replay_rects = []
+		files = getattr(self, 'replay_files', [])
+		
+		if not files:
+			font_msg = pygame.font.SysFont("Arial", 20)
+			msg = font_msg.render("No Replay Files Found (*.pkl)", True, (120, 140, 160))
+			self.screen.blit(msg, msg.get_rect(center=(center_x, panel_rect.centery)))
+		else:
+			start_y, btn_h = 210, 40
+			for i, f_name in enumerate(files[:10]): 
+				y = start_y + i * (btn_h + 10)
+				r = pygame.Rect(center_x - 250, y, 500, btn_h)
+				# שמירת המלבן לרשימה שתבדק בלחיצה
+				self.replay_rects.append((r, f_name))
+				
+				# ציור הכפתור
+				is_hover = r.collidepoint(mouse_pos)
+				bg_col = (40, 60, 80, 180) if is_hover else (30, 45, 60, 100)
+				s = pygame.Surface((r.width, r.height), pygame.SRCALPHA)
+				pygame.draw.rect(s, bg_col, (0, 0, r.width, r.height), border_radius=5)
+				self.screen.blit(s, r.topleft)
+				pygame.draw.rect(self.screen, COLOR_HIGHLIGHT[:3] if is_hover else (60, 80, 100), r, width=1, border_radius=5)
+				
+				txt = self.font_ui.render(f_name, True, COLOR_TEXT)
+				self.screen.blit(txt, (r.x + 20, r.centery - txt.get_height()//2))
 
-        available_height = self.nav_btns['start'].top - start_y - 10
-        max_rows = available_height // line_height
-        total_rows = (len(full_log) + 1) // 2
-
-        current_ply_idx = self.view_index - 1
-        current_row_idx = current_ply_idx // 2
-        scroll_row = max(0, current_row_idx - (max_rows - 2)) if current_row_idx > max_rows - 2 else 0
-
-        for row in range(scroll_row, min(total_rows, scroll_row + max_rows)):
-            y_pos = start_y + (row - scroll_row) * line_height
-
-            # White Move
-            w_idx = row * 2
-            if w_idx < len(full_log):
-                is_active = (w_idx == current_ply_idx)
-                if is_active:
-                    pygame.draw.rect(self.screen, BTN_NORMAL, pygame.Rect(col_white_x - 2, y_pos, 140, line_height),
-                                     border_radius=4)
-                color = MENU_ACCENT if is_active else (220, 220, 220)
-                self.screen.blit(self.font_history.render(full_log[w_idx], True, color), (col_white_x, y_pos + 4))
-
-            # Black Move
-            b_idx = row * 2 + 1
-            if b_idx < len(full_log):
-                raw_str = full_log[b_idx]
-                clean_str = raw_str.split(' ', 1)[1] if "..." in raw_str and len(raw_str.split(' ', 1)) > 1 else raw_str
-
-                is_active = (b_idx == current_ply_idx)
-                if is_active:
-                    pygame.draw.rect(self.screen, BTN_NORMAL, pygame.Rect(col_black_x - 2, y_pos, 140, line_height),
-                                     border_radius=4)
-                color = MENU_ACCENT if is_active else (220, 220, 220)
-                self.screen.blit(self.font_history.render(clean_str, True, color), (col_black_x, y_pos + 4))
-
-        mouse = pygame.mouse.get_pos()
-        for lbl, key in [("<<", 'start'), ("<", 'prev'), (">", 'next'), (">>", 'end')]:
-            self.draw_styled_button(self.nav_btns[key], lbl, self.nav_btns[key].collidepoint(mouse), self.font_nav)
-
-    def get_promotion_rects(self):
-        if not self.promotion_coords:
-            return []
-        r, c = self.promotion_coords
-        bx, by = self.get_screen_pos(r, c)
-
-        opts = [QUEEN, ROOK, BISHOP, KNIGHT]
-        menu_h = self.sq_size * len(opts)
-        start_y = by + (self.sq_size - menu_h) // 2
-        board_top, board_bottom = self.board_y, self.board_y + self.sq_size * 8
-
-        if start_y < board_top:
-            start_y = board_top
-        elif start_y + menu_h > board_bottom:
-            start_y = board_bottom - menu_h
-
-        return [(pygame.Rect(bx, start_y + i * self.sq_size, self.sq_size, self.sq_size), p) for i, p in
-                enumerate(opts)]
-
-    def draw_promotion_ui(self):
-        rects = self.get_promotion_rects()
-        if not rects:
-            return
-        container = rects[0][0].unionall([r[0] for r in rects])
-        pygame.draw.rect(self.screen, EVAL_WHITE, container)
-        pygame.draw.rect(self.screen, BTN_BORDER, container, width=2)
-
-        m = pygame.mouse.get_pos()
-        for r, p in rects:
-            if r.collidepoint(m): pygame.draw.rect(self.screen, HIGHLIGHT, r)
-            k = f"{self.turn}{p}"
-            if k in self.scaled_images: self.screen.blit(self.scaled_images[k], r)
+		self.replay_back_rect = pygame.Rect(center_x - 60, panel_rect.bottom - 60, 120, 45)
+		self.draw_styled_hud_button(self.replay_back_rect, "BACK", self.replay_back_rect.collidepoint(mouse_pos))
