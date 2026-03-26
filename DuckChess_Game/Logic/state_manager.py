@@ -299,7 +299,42 @@ class StateManagerMixin:
 			target = self.ai.get_duck_move(self.board, self.duck_pos, self.prev_duck_pos)
 			if target: self.place_duck(target, animated=True)
 
-	def load_replay_file(self, filepath):
+def load_replay_file(self, filepath):
+		"""
+		Loads a .pkl replay file, resets the board, and silently executes
+		all actions to populate the history array for the GUI viewer.
+		"""
+		try:
+			with open(filepath, 'rb') as f:
+				game_data = pickle.load(f)
+		except Exception as e:
+			print(f"Failed to load replay: {e}")
+			return
+
+		actions = game_data.get('action_history', [])
+		if not actions:
+			print("No action history found in this replay.")
+			return
+
+		# איפוס מצב המשחק לפני הטעינה
+		self.reset_game_state()
+		self.game_mode = 'replay'
+		self.state = 'game'
+
+		# שחזור המהלכים ושמירת Snapshot אחרי כל אחד
+		for act in actions:
+			(sr, sc), (er, ec) = self._decode_move(act)
+			if self.phase == 'move_piece':
+				self.execute_move((sr, sc), (er, ec), animated=False)
+			elif self.phase == 'move_duck':
+				self.place_duck((er, ec), animated=False)
+			
+			# קריטי: שמירת המצב הנוכחי להיסטוריה כדי שהתצוגה תוכל להראות אותו
+			self.save_snapshot()
+
+		# הצגת המהלך האחרון שבוצע מיד עם פתיחת המשחק
+		self.view_index = len(self.history) - 1
+		print(f"Successfully loaded replay with {len(actions) // 2} full turns.")
 		"""
 		Loads a .pkl replay file, resets the board, and silently executes
 		all actions to populate the history array for the GUI viewer.
