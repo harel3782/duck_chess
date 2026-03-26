@@ -5,9 +5,10 @@ from DuckChess_Game.UI.settings import *
 from DuckChess_Game.Logic.logic import GameLogicMixin
 from DuckChess_Game.UI.rendering import RenderingMixin
 from DuckChess_Game.UI.input_handler import InputHandlerMixin
+from DuckChess_Game.UI.asset_manager import AssetManagerMixin  # <--- הייבוא החדש
 
-class DuckChess(GameLogicMixin, RenderingMixin, InputHandlerMixin):
-	"""The main application class, orchestrating Logic, Rendering, and Input handling."""
+class DuckChess(GameLogicMixin, RenderingMixin, InputHandlerMixin, AssetManagerMixin):
+	"""The main application class, orchestrating Logic, Rendering, Input, and Assets."""
 	
 	def __init__(self):
 		pygame.init()
@@ -42,13 +43,10 @@ class DuckChess(GameLogicMixin, RenderingMixin, InputHandlerMixin):
 		self.editor_menu_btn = pygame.Rect(0, 0, 0, 0)
 		self.editor_turn_btn = pygame.Rect(0, 0, 0, 0)
 
-		# Assets
-		self.original_images = {}
-		self.scaled_images = {}
-		self.sounds = {}
+		# Assets Handled via AssetManagerMixin
 		self.load_assets()
 
-		# Drag & Drop State [cite: 74-75]
+		# Drag & Drop State
 		self.dragging = False
 		self.drag_piece = None
 		self.drag_start = None
@@ -56,16 +54,14 @@ class DuckChess(GameLogicMixin, RenderingMixin, InputHandlerMixin):
 
 		self.resize_layout(DEFAULT_WIDTH, DEFAULT_HEIGHT)
 		
-		# Calls the reset method now located in StateManagerMixin
+		# Initializes State Manager
 		self.reset_game_state()
 
 	async def run(self):
-		"""The core application loop [cite: 110-117]."""
+		"""The core application loop."""
 		while True:
-			# Delegate input handling to InputHandlerMixin
 			self.process_events(pygame.event.get())
 
-			# Delegate drawing to RenderingMixin and Logic
 			if self.state == 'menu':
 				self.draw_menu()
 			elif self.state == 'edit':
