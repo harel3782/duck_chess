@@ -2,7 +2,7 @@ import pygame
 from DuckChess_Game.UI.settings import *
 
 class HUDRenderingMixin:
-	"""Handles in-game UI overlays with glossy, colorful jewel buttons."""
+	"""Handles in-game UI overlays with glossy, colorful jewel buttons without yellow borders."""
 
 	def draw_eval_bar(self, current_board):
 		"""Draws the dynamic material evaluation bar."""
@@ -27,10 +27,10 @@ class HUDRenderingMixin:
 		self.screen.blit(txt, txt.get_rect(center=(bar_x + bar_w // 2, bar_y + 15)))
 
 	def draw_history_panel(self):
-		"""Renders the scrollable move history panel with text caching for maximum performance [cite: 79-81]."""
+		"""Renders the scrollable move history panel with text caching for maximum performance."""
 		panel_rect = pygame.Rect(self.screen_w - PANEL_WIDTH, 0, PANEL_WIDTH, self.screen_h)
 		self.draw_glass_panel(panel_rect)
-		self.screen.blit(FONT_STATUS.render("Move History", True, MENU_ACCENT), (self.screen_w - PANEL_WIDTH + 15, 15))
+		self.screen.blit(FONT_STATUS.render("Move History", True, TEXT_COLOR), (self.screen_w - PANEL_WIDTH + 15, 15))
 		
 		counter = FONT_UI.render(f"{self.view_index} / {max(0, len(self.history) - 1)}", True, (150, 150, 150))
 		self.screen.blit(counter, (self.screen_w - 90, 18))
@@ -67,7 +67,7 @@ class HUDRenderingMixin:
 						pygame.draw.rect(self.screen, (50, 58, 68), rect, border_radius=4)
 					
 					txt = full_log[idx].split(' ', 1)[1] if "..." in full_log[idx] and i == 1 else full_log[idx]
-					color = MENU_ACCENT if active else (220, 220, 220)
+					color = (255, 255, 255) if active else (180, 180, 180)
 					
 					cache_key = (txt, color)
 					if cache_key not in self._history_text_cache:
@@ -75,18 +75,17 @@ class HUDRenderingMixin:
 					
 					self.screen.blit(self._history_text_cache[cache_key], (rect.x + 8, y + 4))
 
-		# Navigation buttons using the new jewel design
 		for lbl, k in [("<<", 'start'), ("<", 'prev'), (">", 'next'), (">>", 'end')]:
 			self.draw_hud_button(self.nav_btns[k], lbl, self.nav_btns[k].collidepoint(mouse))
 
 	def draw_in_game_hud(self):
-		"""Draws the bottom control bar with vibrant jewel-style buttons [cite: 81-83]."""
+		"""Draws the bottom control bar with vibrant jewel-style buttons."""
 		hud = pygame.Rect(20, self.screen_h - 70, self.screen_w - PANEL_WIDTH - 40, 60)
 		self.draw_glass_panel(hud)
 
 		is_live = (self.view_index == len(self.history) - 1)
 		if getattr(self, 'game_over', False):
-			status, col = ("GAME OVER", MENU_ACCENT)
+			status, col = ("GAME OVER", TEXT_COLOR)
 		elif not is_live: status, col = "VIEWING HISTORY", (200, 200, 255)
 		else: status, col = f"{'WHITE' if self.turn == 'w' else 'BLACK'} TO {self.phase.replace('_', ' ').upper()}", (220, 220, 220)
 
@@ -97,7 +96,6 @@ class HUDRenderingMixin:
 		btns = [("Menu", self.menu_btn_rect), (eval_txt, self.eval_btn_rect), ("Reset", self.restart_btn_rect)]
 		if getattr(self, 'game_mode', '') == 'pvp': btns.insert(1, ("Flip", self.flip_btn_rect))
 
-		# Apply layout for the new buttons
 		btn_w, btn_h, spacing = 95, 36, 12
 		start_x = hud.right - (btn_w + spacing) * len(btns) - 15
 		for i, (lbl, r) in enumerate(btns):
@@ -105,31 +103,29 @@ class HUDRenderingMixin:
 			self.draw_hud_button(r, lbl, r.collidepoint(mouse))
 
 	def draw_hud_button(self, rect, text, hover):
-		"""Renders a glossy, colorful 'jewel-like' button with brass casing."""
-		radius = 14  # Rounder, 'fuller' look
+		"""Renders a glossy, colorful 'jewel-like' button without the yellow casing."""
+		radius = 14
 		
 		# 1. Drop Shadow
 		shadow_rect = rect.copy()
 		shadow_rect.y += 3
 		pygame.draw.rect(self.screen, (0, 0, 0, 120), shadow_rect, border_radius=radius)
 		
-		# 2. Brass Casing (Outer)
-		casing_color = (255, 215, 0) if hover else (190, 150, 60)
+		# 2. Casing (Outer) - Uses slate/dark border instead of gold
+		casing_color = (100, 110, 130) if hover else (60, 65, 75)
 		pygame.draw.rect(self.screen, casing_color, rect, border_radius=radius)
 		
 		# 3. Colored Inner Pill (The "Jewel")
-		inner_rect = rect.inflate(-4, -4)
+		inner_rect = rect.inflate(-2, -2)
 		if hover:
-			inner_rect.y += 1  # Push down the inner part slightly
+			inner_rect.y += 1
 		
-		# Rich Royal/Sapphire Blue color
 		core_color = BTN_HOVER if hover else BTN_NORMAL 
 		pygame.draw.rect(self.screen, core_color, inner_rect, border_radius=radius-2)
 		
 		# 4. Glossy Highlight (Top half)
 		highlight_rect = pygame.Rect(inner_rect.x, inner_rect.y, inner_rect.width, inner_rect.height // 2)
 		highlight_surf = pygame.Surface((highlight_rect.width, highlight_rect.height), pygame.SRCALPHA)
-		# Subtle white glare for the glassy effect
 		pygame.draw.rect(highlight_surf, (255, 255, 255, 25), highlight_surf.get_rect(), border_radius=radius-2)
 		self.screen.blit(highlight_surf, highlight_rect.topleft)
 
@@ -138,7 +134,7 @@ class HUDRenderingMixin:
 		self.screen.blit(txt_surf, txt_surf.get_rect(center=inner_rect.center))
 
 	def draw_glass_panel(self, rect):
-		"""Draws a refined frosted glass panel [cite: 83-84]."""
+		"""Draws a refined frosted glass panel with a clean border."""
 		s = pygame.Surface((rect.width, rect.height), pygame.SRCALPHA)
 		s.fill(PANEL_BG)
 		self.screen.blit(s, rect.topleft)

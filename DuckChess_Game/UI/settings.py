@@ -8,30 +8,31 @@ def get_asset_path(filename):
 	assets_dir = os.path.normpath(os.path.join(current_file_dir, "..", "assets"))
 	return os.path.join(assets_dir, filename)
 
-# --- Premium Walnut & Brass Palette ---
+# --- Premium Walnut & Clean UI Palette ---
 BG_COLOR = (18, 20, 24)
 PANEL_BG = (42, 46, 54, 245)
-MENU_ACCENT = (218, 165, 32)     # Antique Gold
+MENU_ACCENT = (218, 165, 32)
 
 # Board Colors (Maple & Walnut)
 WHITE_COLOR = (240, 225, 195)
 BLACK_SQ_COLOR = (110, 75, 55)
 BOARD_FRAME = (70, 45, 30)
 HIGHLIGHT = (186, 202, 68, 140)
-LAST_MOVE_COLOR = (218, 165, 32, 100)
 
-# Valid Move Indicators (Chess.com Orange Style)
-VALID_MOVE_ORANGE = (255, 150, 0, 170)  # Solid orange dot
-VALID_CAPTURE_RED = (200, 60, 60, 180)
-
-# Buttons & UI Elements (Updated to Royal Blue / Sapphire)
-BTN_NORMAL = (35, 75, 120)       # Deep Sapphire Blue
-BTN_HOVER = (50, 95, 145)        # Brightened Sapphire
-BTN_BORDER = (218, 165, 32)      # Thick Gold
-BTN_TEXT = (255, 255, 255)       # Pure White for contrast
-BRASS_TEXT = (255, 235, 180)
-BRASS_BORDER = (190, 160, 110)
+# Cleaned up borders - removed yellow, using subtle slate
+BTN_NORMAL = (35, 75, 120)
+BTN_HOVER = (50, 95, 145)
+BTN_BORDER = (75, 85, 100)       # Clean slate border instead of gold
+BTN_TEXT = (255, 255, 255)
+BRASS_TEXT = (245, 245, 245)
 TEXT_COLOR = (245, 245, 245)
+
+# Last Move Indicator (Bright yellow transparent highlight)
+LAST_MOVE_COLOR = (245, 245, 100, 100)
+
+# Valid Move Indicators
+VALID_MOVE_ORANGE = (255, 150, 0, 170)
+VALID_CAPTURE_RED = (200, 60, 60, 180)
 
 # Evaluation Bar
 EVAL_WHITE = (235, 235, 235)
