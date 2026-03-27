@@ -5,12 +5,9 @@ class BoardCoreRenderingMixin:
 	"""Handles the physical 8x8 grid rendering with static surface caching and King threat highlights."""
 
 	def _draw_base_board(self):
-		"""Draws the walnut and maple inlay squares using a cached surface for high FPS."""
-		# Create cache if it doesn't exist or if screen was resized
+		"""Draws the walnut and maple inlay squares using a cached surface for high FPS [cite: 71-72]."""
 		if not hasattr(self, '_cached_board_surface') or getattr(self, '_cached_sq_size', 0) != self.sq_size:
 			self._cached_sq_size = self.sq_size
-			
-			# Surface size includes the 15px frame on all sides
 			surf_size = self.sq_size * 8 + 30
 			self._cached_board_surface = pygame.Surface((surf_size, surf_size), pygame.SRCALPHA)
 			
@@ -21,7 +18,6 @@ class BoardCoreRenderingMixin:
 			f_coord = pygame.font.SysFont("Arial", 11, bold=True)
 			for r in range(8):
 				for c in range(8):
-					# Local coordinates for the surface
 					dr, dc = (7 - r, 7 - c) if self.player_side == 'b' else (r, c)
 					lx, ly = 15 + dc * self.sq_size, 15 + dr * self.sq_size
 					
@@ -35,11 +31,10 @@ class BoardCoreRenderingMixin:
 						lbl = f_coord.render("87654321"[r], True, txt_col)
 						self._cached_board_surface.blit(lbl, (lx + 3, ly + 2))
 
-		# Blit the optimized cached board
 		self.screen.blit(self._cached_board_surface, (self.board_x - 15, self.board_y - 15))
 
 	def draw_game(self, hidden_square=None):
-		"""Master render function with Duck Chess rules and optimized visual indicators."""
+		"""Master render function with Duck Chess rules and optimized visual indicators [cite: 72-74]."""
 		self.draw_menu_background()
 		is_live = (self.view_index == len(self.history) - 1)
 		snap = None if is_live else self.history[self.view_index]
@@ -50,16 +45,18 @@ class BoardCoreRenderingMixin:
 
 		self._draw_base_board()
 
-		# OPTIMIZATION: Calculate check status ONCE per frame, not 64 times!
 		w_in_check = self.is_in_check('w', b)
 		b_in_check = self.is_in_check('b', b)
+
+		# FIX: In PvP mode, both sides are considered the "player's side" for drawing legal moves
+		is_player_turn = (getattr(self, 'game_mode', '') == 'pvp' or self.turn == self.player_side)
 
 		for r in range(8):
 			for c in range(8):
 				if last_m and ((r, c) in last_m): self._draw_highlight_square(r, c, LAST_MOVE_COLOR)
 				if p_duck and (r, c) == p_duck: self._draw_highlight_square(r, c, LAST_MOVE_COLOR)
 
-				if is_live and self.turn == self.player_side and not getattr(self, 'promotion_pending', False):
+				if is_live and is_player_turn and not getattr(self, 'promotion_pending', False):
 					x, y = self.get_screen_pos(r, c)
 					if self.phase == 'move_piece':
 						if getattr(self, 'selected_square', None) == (r, c): 
@@ -79,11 +76,9 @@ class BoardCoreRenderingMixin:
 
 				p = b[r][c]
 				if p:
-					# Restored visual threat indicator using the optimized flags
 					if p.type == 'K':
 						if (p.color == 'w' and w_in_check) or (p.color == 'b' and b_in_check):
 							self._draw_highlight_square(r, c, (200, 50, 50, 160))
-							
 					self._draw_piece_sprite(p, *self.get_screen_pos(r, c))
 
 		if getattr(self, 'dragging', False) and self.drag_piece and is_live:
