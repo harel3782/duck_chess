@@ -24,11 +24,11 @@ LAST_MOVE_COLOR = (218, 165, 32, 100)
 VALID_MOVE_ORANGE = (255, 150, 0, 170)  # Solid orange dot
 VALID_CAPTURE_RED = (200, 60, 60, 180)
 
-# Buttons & UI Elements
-BTN_NORMAL = (50, 55, 65)
-BTN_HOVER = (70, 75, 85)
-BTN_BORDER = (180, 150, 100)
-BTN_TEXT = (255, 245, 220)
+# Buttons & UI Elements (Updated to Royal Blue / Sapphire)
+BTN_NORMAL = (35, 75, 120)       # Deep Sapphire Blue
+BTN_HOVER = (50, 95, 145)        # Brightened Sapphire
+BTN_BORDER = (218, 165, 32)      # Thick Gold
+BTN_TEXT = (255, 255, 255)       # Pure White for contrast
 BRASS_TEXT = (255, 235, 180)
 BRASS_BORDER = (190, 160, 110)
 TEXT_COLOR = (245, 245, 245)

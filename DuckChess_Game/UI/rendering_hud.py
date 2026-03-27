@@ -2,7 +2,7 @@ import pygame
 from DuckChess_Game.UI.settings import *
 
 class HUDRenderingMixin:
-	"""Handles in-game UI overlays with modern tactile 3D buttons and optimized text rendering."""
+	"""Handles in-game UI overlays with glossy, colorful jewel buttons."""
 
 	def draw_eval_bar(self, current_board):
 		"""Draws the dynamic material evaluation bar."""
@@ -75,12 +75,12 @@ class HUDRenderingMixin:
 					
 					self.screen.blit(self._history_text_cache[cache_key], (rect.x + 8, y + 4))
 
-		# Navigation buttons with the new modern design
+		# Navigation buttons using the new jewel design
 		for lbl, k in [("<<", 'start'), ("<", 'prev'), (">", 'next'), (">>", 'end')]:
 			self.draw_hud_button(self.nav_btns[k], lbl, self.nav_btns[k].collidepoint(mouse))
 
 	def draw_in_game_hud(self):
-		"""Draws the bottom control bar with modern 3D tactile buttons [cite: 81-83]."""
+		"""Draws the bottom control bar with vibrant jewel-style buttons [cite: 81-83]."""
 		hud = pygame.Rect(20, self.screen_h - 70, self.screen_w - PANEL_WIDTH - 40, 60)
 		self.draw_glass_panel(hud)
 
@@ -105,30 +105,37 @@ class HUDRenderingMixin:
 			self.draw_hud_button(r, lbl, r.collidepoint(mouse))
 
 	def draw_hud_button(self, rect, text, hover):
-		"""Renders a sleek, modern 3D tactile button replacing the old wireframe pills."""
-		depth = 3
-		radius = 6
+		"""Renders a glossy, colorful 'jewel-like' button with brass casing."""
+		radius = 14  # Rounder, 'fuller' look
 		
-		# 1. Depth/Shadow layer (The "base" of the button)
-		bg_rect = rect.copy()
-		bg_rect.y += depth
-		pygame.draw.rect(self.screen, (25, 28, 33), bg_rect, border_radius=radius)
+		# 1. Drop Shadow
+		shadow_rect = rect.copy()
+		shadow_rect.y += 3
+		pygame.draw.rect(self.screen, (0, 0, 0, 120), shadow_rect, border_radius=radius)
 		
-		# 2. Main interactive face (Pushes down on hover)
-		face_rect = rect.copy()
+		# 2. Brass Casing (Outer)
+		casing_color = (255, 215, 0) if hover else (190, 150, 60)
+		pygame.draw.rect(self.screen, casing_color, rect, border_radius=radius)
+		
+		# 3. Colored Inner Pill (The "Jewel")
+		inner_rect = rect.inflate(-4, -4)
 		if hover:
-			face_rect.y += 2  # Physical push-down effect
-			
-		face_color = (75, 82, 95) if hover else (55, 62, 72)
-		pygame.draw.rect(self.screen, face_color, face_rect, border_radius=radius)
+			inner_rect.y += 1  # Push down the inner part slightly
 		
-		# 3. Subtle top highlight border for a glossy finish
-		pygame.draw.rect(self.screen, (95, 105, 120) if hover else (80, 88, 100), face_rect, width=1, border_radius=radius)
+		# Rich Royal/Sapphire Blue color
+		core_color = BTN_HOVER if hover else BTN_NORMAL 
+		pygame.draw.rect(self.screen, core_color, inner_rect, border_radius=radius-2)
+		
+		# 4. Glossy Highlight (Top half)
+		highlight_rect = pygame.Rect(inner_rect.x, inner_rect.y, inner_rect.width, inner_rect.height // 2)
+		highlight_surf = pygame.Surface((highlight_rect.width, highlight_rect.height), pygame.SRCALPHA)
+		# Subtle white glare for the glassy effect
+		pygame.draw.rect(highlight_surf, (255, 255, 255, 25), highlight_surf.get_rect(), border_radius=radius-2)
+		self.screen.blit(highlight_surf, highlight_rect.topleft)
 
-		# 4. Crisp Text Rendering
-		txt_col = (255, 255, 255) if hover else (230, 230, 230)
-		txt_surf = FONT_UI.render(text, True, txt_col)
-		self.screen.blit(txt_surf, txt_surf.get_rect(center=face_rect.center))
+		# 5. Crisp Text
+		txt_surf = FONT_UI.render(text, True, BTN_TEXT)
+		self.screen.blit(txt_surf, txt_surf.get_rect(center=inner_rect.center))
 
 	def draw_glass_panel(self, rect):
 		"""Draws a refined frosted glass panel [cite: 83-84]."""
