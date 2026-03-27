@@ -9,7 +9,7 @@ import os
 from DuckChess_Game.Logic.logic import GameLogicMixin
 
 class HeadlessEngine(GameLogicMixin):
-	"""A lightweight, Pygame-free version of the game strictly for extremely fast RL training."""
+	"""A lightweight version of the game strictly for fast RL training."""
 	def __init__(self):
 		self.game_mode = 'rl_training' 
 		self.reset_game_state()
@@ -17,140 +17,79 @@ class HeadlessEngine(GameLogicMixin):
 class DuckChessEnv(gym.Env):
 	def __init__(self, render_mode=None):
 		super(DuckChessEnv, self).__init__()
-		
 		self.action_space = spaces.Discrete(4096) 
-		self.observation_space = spaces.Box(
-			low=0.0, 
-			high=1.0, 
-			shape=(19, 8, 8), 
-			dtype=np.float32
-		)
-		
+		self.observation_space = spaces.Box(low=0.0, high=1.0, shape=(19, 8, 8), dtype=np.float32)
 		self.render_mode = render_mode
-		self.opponent_model = None
-		self.engine = HeadlessEngine()
 		
-		self.current_episode_actions = []
+		self.engine = HeadlessEngine()
+		self.opponent_model = None
 		self.episode_counter = 0
+		self.current_episode_actions = []
+		
+		# The color the learning agent is currently playing
+		self.learning_color = 'w'
+		self.opponent_color = 'b'
 
 	def set_opponent(self, model_path):
-		"""Loads a saved MaskablePPO model to act as the Black player."""
+		"""Loads a saved MaskablePPO model to act as the Self-Play opponent."""
 		from sb3_contrib import MaskablePPO
-		try:
-			self.opponent_model = MaskablePPO.load(model_path, device="cpu")
-		except Exception as e:
-			print(f"Error loading opponent model: {e}")
+		if os.path.exists(model_path):
+			try:
+				self.opponent_model = MaskablePPO.load(model_path, device="cpu")
+			except Exception as e:
+				print(f"Error loading opponent model: {e}")
 
 	def reset(self, seed=None, options=None):
-		"""Resets the environment for a new game and increments the episode counter."""
+		"""Resets the env and randomly assigns the learning agent to White or Black."""
 		super().reset(seed=seed)
 		self.engine.reset_game_state()
 		self.current_episode_actions = []
 		self.episode_counter += 1
+
+		# Randomize learning color for Board Flipping
+		self.learning_color = np.random.choice(['w', 'b'])
+		self.opponent_color = 'b' if self.learning_color == 'w' else 'w'
+
+		# If the learning agent is Black, the opponent must make the first move
+		if self.learning_color == 'b':
+			self._play_opponent_turn()
+
 		return self.get_observation(), {}
 
 	def get_observation(self):
-		"""Calls our fast Bitboard observation encoder."""
 		return self.engine._get_obs()
 
 	def action_masks(self):
-		"""Calls our fast Bitboard action masker, safely handling stalemates."""
+		"""REQUIRED for MaskablePPO: Returns valid move mask."""
 		masks = self.engine.action_masks()
 		if not np.any(masks):
 			masks[0] = True
 		return masks
 
-	def _get_black_action(self):
-		"""Generates a move for the opponent. CURRICULUM STAGE 2: GREEDY BOT."""
+	def _get_opponent_action(self):
+		"""Phase 3: Self-Play logic."""
 		current_mask = self.action_masks()
-		
 		if self.opponent_model is not None:
 			obs = self.get_observation()
 			with th.no_grad():
-				action, _ = self.opponent_model.predict(
-					obs, 
-					action_masks=current_mask, 
-					deterministic=False
-				)
+				action, _ = self.opponent_model.predict(obs, action_masks=current_mask, deterministic=False)
 			return action
-
+		
+		# Fallback if no model is loaded yet
 		valid_actions = np.where(current_mask)[0]
-		if len(valid_actions) > 0:
-			if self.engine.phase == 'move_piece':
-				# --- GREEDY LOGIC: Prioritize captures ---
-				capture_actions = []
-				for action_idx in valid_actions:
-					_, end = self.engine._decode_move(action_idx)
-					# Check if the target square on the 2D board is not empty
-					if self.engine.board[end[0]][end[1]] is not None:
-						capture_actions.append(action_idx)
-				
-				if capture_actions:
-					return np.random.choice(capture_actions)
-			
-			return np.random.choice(valid_actions)
-		return 0
+		return np.random.choice(valid_actions) if len(valid_actions) > 0 else 0
 
 	def _save_replay(self, reason):
-		"""Saves the game log to a file for review or debugging."""
+		"""Saves the game actions to a pickle file for later review."""
 		os.makedirs("saved_replays", exist_ok=True)
 		safe_reason = "".join([c for c in reason if c.isalpha() or c.isdigit() or c=='_'])[:30]
 		filename = f"saved_replays/{safe_reason}_ep{self.episode_counter}_{int(time.time())}.pkl"
 		try:
 			with open(filename, 'wb') as f:
 				pickle.dump({'action_history': self.current_episode_actions}, f)
-			if "periodic" in reason:
-				print(f"\n[i] Sample Game Saved -> {filename}")
-			else:
-				print(f"\n[!!!] EMERGENCY SAVE: {filename} (Reason: {reason})")
-		except Exception as e:
-			print(f"Failed to save replay: {e}")
-
-	def step(self, action):
-		"""Core training loop with crash protection and periodic saving."""
-		try:
-			if not np.any(self.engine.action_masks()):
-				self._save_replay("white_stalemate")
-				return self.get_observation(), 0.0, True, False, {}
-
-			self._apply_action(action)
-			self.current_episode_actions.append(int(action))
-			
-			reward = 0.0
-			terminated = getattr(self.engine, 'game_over', False)
-			truncated = False
-
-			if terminated:
-				if self.engine.winner == 'w': reward = 1.0
-				elif self.engine.winner == 'draw': reward = 0.0
-				else: reward = -1.0
-			else:
-				while self.engine.turn == 'b' and not getattr(self.engine, 'game_over', False):
-					if not np.any(self.engine.action_masks()):
-						self._save_replay("black_stalemate")
-						self.engine.game_over = True
-						self.engine.winner = 'draw'
-						break
-						
-					black_action = self._get_black_action()
-					self._apply_action(black_action)
-					self.current_episode_actions.append(int(black_action))
-				
-				terminated = getattr(self.engine, 'game_over', False)
-				if terminated:
-					if self.engine.winner == 'w': reward = 1.0
-					elif self.engine.winner == 'draw': reward = 0.0
-					else: reward = -1.0
-
-			if terminated and self.episode_counter % 50 == 0:
-				self._save_replay("periodic_sample")
-
-			observation = self.get_observation()
-			return observation, reward, terminated, truncated, {}
-
-		except Exception as e:
-			self._save_replay(f"CRASH_{type(e).__name__}")
-			raise e
+			if "periodic" not in reason:
+				print(f"\n[!!!] SAVE: {filename} (Reason: {reason})")
+		except: pass
 
 	def _apply_action(self, action):
 		"""Decodes the action index and updates the engine."""
@@ -160,8 +99,55 @@ class DuckChessEnv(gym.Env):
 		elif self.engine.phase == 'move_duck':
 			self.engine.place_duck(end, animated=False)
 
-	def render(self):
-		pass
+	def _play_opponent_turn(self):
+		"""Loops through the opponent's turn (Piece + Duck) until it is the learning agent's turn."""
+		while self.engine.turn == self.opponent_color and not getattr(self.engine, 'game_over', False):
+			if not np.any(self.action_masks()):
+				self._save_replay(f"{self.opponent_color}_stalemate")
+				self.engine.game_over = True
+				self.engine.winner = 'draw'
+				break
+				
+			opp_action = self._get_opponent_action()
+			self._apply_action(opp_action)
+			self.current_episode_actions.append(int(opp_action))
 
-	def close(self):
-		pass
+	def step(self, action):
+		"""Core training loop for Dual-Color learning."""
+		try:
+			# 1. Apply Learning Agent's move
+			if not np.any(self.action_masks()):
+				self._save_replay(f"{self.learning_color}_stalemate")
+				return self.get_observation(), 0.0, True, False, {}
+
+			self._apply_action(action)
+			self.current_episode_actions.append(int(action))
+
+			# 2. Let the Opponent play their turn
+			if not getattr(self.engine, 'game_over', False):
+				self._play_opponent_turn()
+
+			# 3. Calculate Reward (Always from the Learning Agent's perspective)
+			reward = 0.0
+			terminated = getattr(self.engine, 'game_over', False)
+			
+			if terminated:
+				if self.engine.winner == self.learning_color: 
+					reward = 1.0
+				elif self.engine.winner == self.opponent_color: 
+					reward = -1.0
+				else: 
+					reward = 0.0
+
+			# Periodic Saves
+			if terminated and self.episode_counter % 50 == 0:
+				self._save_replay("periodic_sample")
+
+			return self.get_observation(), reward, terminated, False, {}
+
+		except Exception as e:
+			self._save_replay(f"CRASH_{type(e).__name__}")
+			raise e
+
+	def render(self): pass
+	def close(self): pass
