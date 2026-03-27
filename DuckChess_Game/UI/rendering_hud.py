@@ -2,10 +2,10 @@ import pygame
 from DuckChess_Game.UI.settings import *
 
 class HUDRenderingMixin:
-	"""Handles in-game UI overlays with premium brushed brass buttons."""
+	"""Handles in-game UI overlays with premium brushed brass buttons and optimized text rendering."""
 
 	def draw_eval_bar(self, current_board):
-		"""Draws the dynamic material evaluation bar [cite: 78-79]."""
+		"""Draws the dynamic material evaluation bar."""
 		if getattr(self, 'game_over', False): 
 			self.target_eval_score = 0 if self.winner == 'draw' else (20 if self.winner == 'w' else -20)
 		else: 
@@ -27,7 +27,7 @@ class HUDRenderingMixin:
 		self.screen.blit(txt, txt.get_rect(center=(bar_x + bar_w // 2, bar_y + 15)))
 
 	def draw_history_panel(self):
-		"""Renders the scrollable move history panel [cite: 79-81]."""
+		"""Renders the scrollable move history panel with text caching for maximum performance."""
 		panel_rect = pygame.Rect(self.screen_w - PANEL_WIDTH, 0, PANEL_WIDTH, self.screen_h)
 		self.draw_glass_panel(panel_rect)
 		self.screen.blit(FONT_STATUS.render("Move History", True, MENU_ACCENT), (self.screen_w - PANEL_WIDTH + 15, 15))
@@ -50,6 +50,9 @@ class HUDRenderingMixin:
 		self.move_click_rects = {} 
 		mouse = pygame.mouse.get_pos()
 
+		# OPTIMIZATION: Initialize text cache to avoid rendering fonts every frame
+		if not hasattr(self, '_history_text_cache'): self._history_text_cache = {}
+
 		for row in range(scroll, min(total_rows, scroll + max_rows + 1)):
 			y = 55 + (row - scroll) * row_height
 			if y > self.nav_btns['start'].top - 15: continue
@@ -59,18 +62,27 @@ class HUDRenderingMixin:
 					active = (idx == self.view_index - 1)
 					rect = pygame.Rect(self.screen_w - PANEL_WIDTH + offset[1] - 8, y, 130, row_height)
 					self.move_click_rects[idx] = rect
+					
 					if active: pygame.draw.rect(self.screen, BTN_NORMAL, rect, border_radius=4)
 					elif rect.collidepoint(mouse) and panel_rect.collidepoint(mouse):
 						pygame.draw.rect(self.screen, (60, 65, 75), rect, border_radius=4)
+					
 					txt = full_log[idx].split(' ', 1)[1] if "..." in full_log[idx] and i == 1 else full_log[idx]
-					self.screen.blit(FONT_HISTORY.render(txt, True, MENU_ACCENT if active else (220, 220, 220)), (rect.x + 8, y + 4))
+					color = MENU_ACCENT if active else (220, 220, 220)
+					
+					# Draw text using Cache
+					cache_key = (txt, color)
+					if cache_key not in self._history_text_cache:
+						self._history_text_cache[cache_key] = FONT_HISTORY.render(txt, True, color)
+					
+					self.screen.blit(self._history_text_cache[cache_key], (rect.x + 8, y + 4))
 
 		# Navigation buttons (History Panel)
 		for lbl, k in [("<<", 'start'), ("<", 'prev'), (">", 'next'), (">>", 'end')]:
 			self.draw_hud_button(self.nav_btns[k], lbl, self.nav_btns[k].collidepoint(mouse))
 
 	def draw_in_game_hud(self):
-		"""Draws the bottom control bar with pill-shaped brass buttons [cite: 81-83]."""
+		"""Draws the bottom control bar with pill-shaped brass buttons."""
 		hud = pygame.Rect(20, self.screen_h - 70, self.screen_w - PANEL_WIDTH - 40, 60)
 		self.draw_glass_panel(hud)
 
@@ -97,26 +109,22 @@ class HUDRenderingMixin:
 
 	def draw_hud_button(self, rect, text, hover):
 		"""Renders a pill-shaped button with a deep brass look and drop shadow."""
-		# Subtle Drop Shadow
 		shadow_rect = rect.copy()
 		shadow_rect.y += 2
 		pygame.draw.rect(self.screen, (0, 0, 0, 120), shadow_rect, border_radius=18)
 
-		# Main Body (Recessed look)
 		body_col = BTN_HOVER if hover else BTN_NORMAL
 		pygame.draw.rect(self.screen, body_col, rect, border_radius=18)
 		
-		# Brass Border (Glowing on hover)
 		border_col = MENU_ACCENT if hover else BTN_BORDER
 		pygame.draw.rect(self.screen, border_col, rect, width=2, border_radius=18)
 
-		# Text Styling
 		txt_col = MENU_ACCENT if hover else BRASS_TEXT
 		txt_surf = FONT_UI.render(text, True, txt_col)
 		self.screen.blit(txt_surf, txt_surf.get_rect(center=rect.center))
 
 	def draw_glass_panel(self, rect):
-		"""Draws a refined frosted glass panel [cite: 83-84]."""
+		"""Draws a refined frosted glass panel."""
 		s = pygame.Surface((rect.width, rect.height), pygame.SRCALPHA)
 		s.fill(PANEL_BG)
 		self.screen.blit(s, rect.topleft)
