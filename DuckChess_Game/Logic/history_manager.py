@@ -3,10 +3,10 @@ import copy
 import pygame
 
 class HistoryManagerMixin:
-	"""Handles game state initialization, snapshots, and replays."""
+	"""Handles game state initialization, snapshots, and replays including special move data."""
 
 	def clear_board(self):
-		"""Removes all pieces from the board."""
+		"""Removes all pieces from the board [cite: 13-14]."""
 		self.board = [[None] * 8 for _ in range(8)]
 		self.duck_pos = (-1, -1)
 		self.turn = 'w'
@@ -14,11 +14,12 @@ class HistoryManagerMixin:
 		self.history = []
 
 	def save_snapshot(self):
-		"""Saves a single point in history."""
+		"""Saves a single point in history including En Passant target."""
 		self.history.append({
 			'board': copy.deepcopy(self.board),
 			'duck_pos': self.duck_pos,
 			'prev_duck': getattr(self, 'prev_duck_pos', (-1, -1)),
+			'en_passant_target': getattr(self, 'en_passant_target', None),
 			'last_move': getattr(self, 'last_move_arrow', None),
 			'captured': copy.deepcopy(getattr(self, 'captured', {'w': [], 'b': []})),
 			'log': list(self.move_log)
@@ -26,16 +27,16 @@ class HistoryManagerMixin:
 		self.view_index = len(self.history) - 1
 
 	def reset_game_state(self):
-		"""Completely resets the game environment."""
+		"""Completely resets the game environment to the initial setup [cite: 14-15]."""
 		self.duck_pos = (-1, -1)
 		self.prev_duck_pos = (-1, -1)
+		self.en_passant_target = None
 		self.turn = 'w'
 		self.phase = 'move_piece'
 		self.selected_square = None
 		self.valid_moves = []
 		self.game_over = False
 		self.winner = None
-		self.en_passant_target = None
 		self.half_move_clock = 0
 		self.rep_history = {}
 
@@ -63,7 +64,7 @@ class HistoryManagerMixin:
 		self.save_snapshot()
 
 	def load_replay_file(self, filepath):
-		"""Loads a .pkl replay file and reconstructs history turn-by-turn."""
+		"""Loads a .pkl replay file and reconstructs history[cite: 15]."""
 		try:
 			with open(filepath, 'rb') as f:
 				game_data = pickle.load(f)
