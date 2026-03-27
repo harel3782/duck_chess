@@ -1,0 +1,15 @@
+1. The Ultimate Goal: The objective is to physically capture the opponent's King.
+
+2. No Checks or Checkmates: The concept of "check" does not exist. You can legally move your King into an attacked square or ignore an attack on your King.
+
+3. The Two-Step Turn: Every turn consists of two mandatory actions: first, make a standard chess move, and second, move the Duck.
+
+4. Mandatory Duck Relocation: The Duck must be moved every single turn. It cannot remain on its current square, and it must be placed on an empty square.
+
+5. The Indestructible Blocker: The Duck acts as a solid obstacle. Pieces cannot capture the Duck, move onto its square, or slide through it.
+
+6. Knights Leap: Because Knights jump over squares, they are the only pieces that can bypass the Duck's blocking effect (though they still cannot land on it).
+
+7. Castling Freedom: Since there is no "check", you are allowed to castle even if your King is currently attacked, or if the castling path crosses an attacked square.
+
+8. Fowling (Stalemate Win): If a player has absolutely no legal moves available (all pieces are blocked by the board state and the Duck), they are "fowled" and immediately win the game.

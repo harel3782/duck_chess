@@ -18,21 +18,22 @@ class InputHandlerMixin(MenuInputMixin, GameInputMixin, EditorInputMixin):
 				self.resize_layout(event.w, event.h)
 
 			if self.state == 'menu':
-				# FIXED: Added event.button == 1 for Left Click only
 				if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
 					self.handle_menu_click(event.pos)
+					
+			elif self.state == 'rules':
+				if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+					self.handle_rules_click(event.pos)
 					
 			elif self.state == 'edit':
 				self.handle_editor_input(event)
 				
 			elif self.state == 'game':
-				# FIXED: Added event.button == 1 for Left Click only
 				if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
 					if getattr(self, 'promotion_pending', False):
 						self.handle_promotion_click(event.pos)
 					else:
 						self.handle_mouse_down(event.pos)
-				# FIXED: Added event.button == 1 for Left Click only
 				elif event.type == pygame.MOUSEBUTTONUP and event.button == 1:
 					self.handle_mouse_up(event.pos)
 				elif event.type == pygame.MOUSEMOTION:

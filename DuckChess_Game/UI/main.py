@@ -68,6 +68,8 @@ class DuckChess(GameLogicMixin, RenderingMixin, InputHandlerMixin, AssetManagerM
 
 			if self.state == 'menu':
 				self.draw_menu()
+			elif self.state == 'rules':
+				self.draw_rules()
 			elif self.state == 'edit':
 				self.draw_editor()
 			else:
