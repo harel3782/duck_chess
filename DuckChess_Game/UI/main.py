@@ -6,6 +6,7 @@ from DuckChess_Game.Logic.logic import GameLogicMixin
 from DuckChess_Game.UI.rendering import RenderingMixin
 from DuckChess_Game.UI.input_handler import InputHandlerMixin
 from DuckChess_Game.UI.asset_manager import AssetManagerMixin
+from sb3_contrib import MaskablePPO
 
 class DuckChess(GameLogicMixin, RenderingMixin, InputHandlerMixin, AssetManagerMixin):
 	"""The main application class, orchestrating Logic, Rendering, Input, and Assets."""
@@ -25,6 +26,12 @@ class DuckChess(GameLogicMixin, RenderingMixin, InputHandlerMixin, AssetManagerM
 		self.state = 'menu'
 
 		self.init_ai()
+
+		self.rl_model = None
+		model_path = "models/duck_ppo/duck_latest.zip"
+		if os.path.exists(model_path):
+			print(f"[+] Loading RL Model for AI moves: {model_path}")
+			self.rl_model = MaskablePPO.load(model_path, device="cpu")
 
 		# Layout configuration
 		self.sq_size = 0

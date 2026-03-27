@@ -149,16 +149,35 @@ class TurnManagerMixin:
 		else: self.waiting_for_ai = False
 
 	def ai_turn(self):
-		"""AI logic with wait delay."""
+		"""AI logic using either the RL model or basic AI."""
 		if self.view_index != len(self.history) - 1 or getattr(self, 'game_over', False) or not getattr(self, 'waiting_for_ai', False): return
 		if pygame.time.get_ticks() - getattr(self, 'ai_wait_start', 0) < AI_MOVE_DELAY: return
 		
+		# IF WE HAVE AN RL MODEL LOADED
+		if hasattr(self, 'rl_model') and self.rl_model is not None:
+			obs = self._get_obs()
+			masks = self.action_masks()
+			import torch as th
+			
+			action, _ = self.rl_model.predict(obs, action_masks=masks, deterministic=True)
+			
+			if self.phase == 'move_piece':
+				start, end = self._decode_move(action)
+				self.execute_move(start, end, animated=True)
+			elif self.phase == 'move_duck':
+				_, end = self._decode_move(action)
+				self.place_duck(end, animated=True)
+			
+			self.ai_wait_start = pygame.time.get_ticks()
+			return
+
+		# FALLBACK TO BASIC AI (The old logic)
 		if self.phase == 'move_piece':
 			move = self.ai.get_piece_move(self.board, self.turn, self.get_piece_legal_moves)
 			if move:
 				self.execute_move(move[0], move[1], animated=True)
 				self.ai_wait_start = pygame.time.get_ticks() 
-			else: self.game_over, self.winner = True, ('b' if self.turn == 'w' else 'w')
+			else: self.game_over, self.winner = ('b' if self.turn == 'w' else 'w')
 		elif self.phase == 'move_duck':
 			target = self.ai.get_duck_move(self.board, getattr(self, 'duck_pos', (-1,-1)), getattr(self, 'prev_duck_pos', (-1,-1)))
 			if target: self.place_duck(target, animated=True)
