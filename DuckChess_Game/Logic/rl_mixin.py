@@ -6,11 +6,9 @@ class RLMixin:
 
 	def _get_obs(self):
 		"""Returns the current board state encoded as an observation tensor."""
-		# Instantiate locally to bypass Mixin __init__ overwriting issues
 		encoder = ObservationEncoder()
 		return encoder.encode_state(
-			board=self.board,
-			duck_pos=self.duck_pos,
+			bb_mgr=self.bb_mgr,
 			turn=self.turn,
 			en_passant_target=getattr(self, 'en_passant_target', None),
 			can_castle_func=self.can_castle
@@ -20,7 +18,7 @@ class RLMixin:
 		"""Returns a boolean array mapping all legally available moves for the current state."""
 		masker = ActionMasker()
 		return masker.get_valid_action_masks(
-			board=self.board,
+			bb_mgr=self.bb_mgr,
 			turn=self.turn,
 			phase=getattr(self, 'phase', 'move_piece'),
 			get_legal_moves_func=self.get_piece_legal_moves,
