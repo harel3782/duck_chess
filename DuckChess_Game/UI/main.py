@@ -5,13 +5,17 @@ from DuckChess_Game.UI.settings import *
 from DuckChess_Game.Logic.logic import GameLogicMixin
 from DuckChess_Game.UI.rendering import RenderingMixin
 from DuckChess_Game.UI.input_handler import InputHandlerMixin
-from DuckChess_Game.UI.asset_manager import AssetManagerMixin  # <--- הייבוא החדש
+from DuckChess_Game.UI.asset_manager import AssetManagerMixin
 
 class DuckChess(GameLogicMixin, RenderingMixin, InputHandlerMixin, AssetManagerMixin):
 	"""The main application class, orchestrating Logic, Rendering, Input, and Assets."""
 	
 	def __init__(self):
 		pygame.init()
+		
+		# ENABLE KEY REPEATING: (Delay before repeating starts: 250ms, Interval between repeats: 40ms)
+		pygame.key.set_repeat(250, 40)
+		
 		self.screen = pygame.display.set_mode((DEFAULT_WIDTH, DEFAULT_HEIGHT), pygame.RESIZABLE)
 		pygame.display.set_caption("Duck Chess")
 		self.clock = pygame.time.Clock()
