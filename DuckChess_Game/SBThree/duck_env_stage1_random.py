@@ -61,7 +61,7 @@ class DuckChessEnv(gym.Env):
 		return masks
 
 	def _get_black_action(self):
-		"""Generates a move for the opponent. CURRICULUM STAGE 2: GREEDY BOT."""
+		"""Generates a move for the opponent. CURRICULUM STAGE 1: RANDOM BOT."""
 		current_mask = self.action_masks()
 		
 		if self.opponent_model is not None:
@@ -76,29 +76,19 @@ class DuckChessEnv(gym.Env):
 
 		valid_actions = np.where(current_mask)[0]
 		if len(valid_actions) > 0:
-			if self.engine.phase == 'move_piece':
-				# --- GREEDY LOGIC: Prioritize captures ---
-				capture_actions = []
-				for action_idx in valid_actions:
-					_, end = self.engine._decode_move(action_idx)
-					# Check if the target square on the 2D board is not empty
-					if self.engine.board[end[0]][end[1]] is not None:
-						capture_actions.append(action_idx)
-				
-				if capture_actions:
-					return np.random.choice(capture_actions)
-			
+			# Pure random choice for Stage 1
 			return np.random.choice(valid_actions)
 		return 0
 
 	def _save_replay(self, reason):
-		"""Saves the game log to a file for review or debugging."""
+		"""Saves the game log to a file for periodic review, crashes, or stalemates."""
 		os.makedirs("saved_replays", exist_ok=True)
 		safe_reason = "".join([c for c in reason if c.isalpha() or c.isdigit() or c=='_'])[:30]
 		filename = f"saved_replays/{safe_reason}_ep{self.episode_counter}_{int(time.time())}.pkl"
 		try:
 			with open(filename, 'wb') as f:
 				pickle.dump({'action_history': self.current_episode_actions}, f)
+			
 			if "periodic" in reason:
 				print(f"\n[i] Sample Game Saved -> {filename}")
 			else:
@@ -107,7 +97,7 @@ class DuckChessEnv(gym.Env):
 			print(f"Failed to save replay: {e}")
 
 	def step(self, action):
-		"""Core training loop with crash protection and periodic saving."""
+		"""Core training loop wrapped in a global try-except to catch all crashes."""
 		try:
 			if not np.any(self.engine.action_masks()):
 				self._save_replay("white_stalemate")
@@ -142,6 +132,7 @@ class DuckChessEnv(gym.Env):
 					elif self.engine.winner == 'draw': reward = 0.0
 					else: reward = -1.0
 
+			# --- PERIODIC SAVING ---
 			if terminated and self.episode_counter % 50 == 0:
 				self._save_replay("periodic_sample")
 
