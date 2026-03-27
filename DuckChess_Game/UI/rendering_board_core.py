@@ -5,7 +5,7 @@ class BoardCoreRenderingMixin:
 	"""Handles the physical 8x8 grid rendering with static surface caching and King threat highlights."""
 
 	def _draw_base_board(self):
-		"""Draws the walnut and maple inlay squares using a cached surface without the yellow border [cite: 80-81]."""
+		"""Draws the walnut and maple inlay squares using a cached surface without the yellow border."""
 		if not hasattr(self, '_cached_board_surface') or getattr(self, '_cached_sq_size', 0) != self.sq_size:
 			self._cached_sq_size = self.sq_size
 			surf_size = self.sq_size * 8 + 30
@@ -33,7 +33,7 @@ class BoardCoreRenderingMixin:
 		self.screen.blit(self._cached_board_surface, (self.board_x - 15, self.board_y - 15))
 
 	def draw_game(self, hidden_square=None):
-		"""Master render function with Duck Chess rules and optimized visual indicators [cite: 81-83]."""
+		"""Master render function with Duck Chess rules and optimized visual indicators."""
 		self.draw_menu_background()
 		is_live = (self.view_index == len(self.history) - 1)
 		snap = None if is_live else self.history[self.view_index]
@@ -89,13 +89,17 @@ class BoardCoreRenderingMixin:
 		self.draw_history_panel()
 		self.draw_in_game_hud()
 
-		# --- THE FIX: Display the Promotion UI if needed ---
+		# --- UI Overlays ---
 		if is_live and getattr(self, 'promotion_pending', False):
-			if hasattr(self, 'draw_promotion_ui'):
-				self.draw_promotion_ui()
+			if hasattr(self, 'draw_promotion_ui'): self.draw_promotion_ui()
+
+		# Draw the Game Over modal on top if needed
+		if is_live and getattr(self, 'game_over', False):
+			if hasattr(self, 'draw_game_over_ui'): self.draw_game_over_ui()
+
 
 	def draw_duck(self, r, c):
-		"""Renders the duck sprite centered on a square[cite: 84]."""
+		"""Renders the duck sprite centered on a square."""
 		x, y = self.get_screen_pos(r, c)
 		if 'duck' in self.scaled_images:
 			img = self.scaled_images['duck']
