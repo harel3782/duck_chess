@@ -1,10 +1,12 @@
 import pygame
 from DuckChess_Game.UI.settings import *
+from DuckChess_Game.Logic.constants import *
 
 class BaseRenderingMixin:
 	"""Core layout math, window resizing, and common drawing helpers."""
 
 	def resize_layout(self, w, h):
+		"""Recalculates board and UI element positions based on new window dimensions [cite: 67-68]."""
 		self.screen_w, self.screen_h = w, h
 		bottom_hud_space = 90
 		available_w = w - self.panel_width - self.side_margin * 2
@@ -42,10 +44,12 @@ class BaseRenderingMixin:
 		self.nav_btns['end'] = pygame.Rect(px + 10 + (bw + 5) * 3, by, bw, bh)
 
 	def get_screen_pos(self, r, c):
+		"""Converts board indices to screen pixel coordinates [cite: 68-69]."""
 		dr, dc = (7 - r, 7 - c) if self.player_side == 'b' else (r, c)
 		return self.board_x + dc * self.sq_size, self.board_y + dr * self.sq_size
 
 	def get_board_pos(self, px, py):
+		"""Converts screen pixel coordinates to board indices[cite: 69]."""
 		rx, ry = px - self.board_x, py - self.board_y
 		if rx < 0 or ry < 0: return -1, -1
 		c, r = rx // self.sq_size, ry // self.sq_size
@@ -53,6 +57,7 @@ class BaseRenderingMixin:
 		return (7 - r, 7 - c) if self.player_side == 'b' else (r, c)
 
 	def _draw_piece_sprite(self, p, x, y):
+		"""Draws the piece image or falls back to Unicode characters ."""
 		key = f"{p.color}{p.type}"
 		if key in self.scaled_images:
 			self.screen.blit(self.scaled_images[key], (x, y))
@@ -67,6 +72,7 @@ class BaseRenderingMixin:
 			self.screen.blit(sf, rc)
 
 	def _draw_highlight_square(self, r, c, rgba_color):
+		"""Draws a semi-transparent colored overlay on a specific square[cite: 70]."""
 		x, y = self.get_screen_pos(r, c)
 		s = pygame.Surface((self.sq_size, self.sq_size), pygame.SRCALPHA)
 		s.fill(rgba_color)

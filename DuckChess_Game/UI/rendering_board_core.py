@@ -5,7 +5,7 @@ class BoardCoreRenderingMixin:
 	"""Handles the physical 8x8 grid rendering with static surface caching and King threat highlights."""
 
 	def _draw_base_board(self):
-		"""Draws the walnut and maple inlay squares using a cached surface without the yellow border."""
+		"""Draws the walnut and maple inlay squares using a cached surface without the yellow border [cite: 80-81]."""
 		if not hasattr(self, '_cached_board_surface') or getattr(self, '_cached_sq_size', 0) != self.sq_size:
 			self._cached_sq_size = self.sq_size
 			surf_size = self.sq_size * 8 + 30
@@ -13,8 +13,6 @@ class BoardCoreRenderingMixin:
 			
 			frame_rect = pygame.Rect(0, 0, surf_size, surf_size)
 			pygame.draw.rect(self._cached_board_surface, BOARD_FRAME, frame_rect, border_radius=4)
-			
-			# Removed the secondary yellow border line completely for a cleaner look
 
 			f_coord = pygame.font.SysFont("Arial", 11, bold=True)
 			for r in range(8):
@@ -35,7 +33,7 @@ class BoardCoreRenderingMixin:
 		self.screen.blit(self._cached_board_surface, (self.board_x - 15, self.board_y - 15))
 
 	def draw_game(self, hidden_square=None):
-		"""Master render function with Duck Chess rules and optimized visual indicators."""
+		"""Master render function with Duck Chess rules and optimized visual indicators [cite: 81-83]."""
 		self.draw_menu_background()
 		is_live = (self.view_index == len(self.history) - 1)
 		snap = None if is_live else self.history[self.view_index]
@@ -53,7 +51,6 @@ class BoardCoreRenderingMixin:
 
 		for r in range(8):
 			for c in range(8):
-				# Draw last move highlights for pieces
 				if last_m and ((r, c) in last_m): self._draw_highlight_square(r, c, LAST_MOVE_COLOR)
 				if p_duck and (r, c) == p_duck: self._draw_highlight_square(r, c, LAST_MOVE_COLOR)
 
@@ -92,8 +89,13 @@ class BoardCoreRenderingMixin:
 		self.draw_history_panel()
 		self.draw_in_game_hud()
 
+		# --- THE FIX: Display the Promotion UI if needed ---
+		if is_live and getattr(self, 'promotion_pending', False):
+			if hasattr(self, 'draw_promotion_ui'):
+				self.draw_promotion_ui()
+
 	def draw_duck(self, r, c):
-		"""Renders the duck sprite centered on a square."""
+		"""Renders the duck sprite centered on a square[cite: 84]."""
 		x, y = self.get_screen_pos(r, c)
 		if 'duck' in self.scaled_images:
 			img = self.scaled_images['duck']

@@ -12,11 +12,12 @@ class TurnManagerMixin:
 		p = self.board[start[0]][start[1]]
 		if not p: return
 
-		# Save the move coordinates for the visual highlight
 		self.last_move_arrow = (start, end)
-
 		ep_target = getattr(self, 'en_passant_target', None)
 		is_capture = self.board[end[0]][end[1]] or (p.type == PAWN and end == ep_target)
+		
+		# Identify Castling: King moves 2 horizontal squares
+		is_castle = (p.type == KING and abs(start[1] - end[1]) == 2)
 		
 		move_str = p.type if p.type != PAWN else ""
 		if is_capture: move_str += "x"
@@ -38,8 +39,19 @@ class TurnManagerMixin:
 		else:
 			self.half_move_clock = getattr(self, 'half_move_clock', 0) + 1
 
+		# --- SOUND LOGIC ---
+		enemy_color = 'b' if self.turn == 'w' else 'w'
+		is_check = self.is_in_check(enemy_color)
+
 		if hasattr(self, 'play_sound') and getattr(self, 'game_mode', '') != 'replay':
-			self.play_sound('capture' if captured else 'move')
+			if is_check:
+				self.play_sound('move_check')
+			elif is_castle:
+				self.play_sound('castle')
+			elif captured:
+				self.play_sound('capture')
+			else:
+				self.play_sound('move')
 
 		if captured and captured.type == KING:
 			self.current_move_str += "#"
@@ -49,6 +61,8 @@ class TurnManagerMixin:
 				self.move_log.append(f"{self.turn_number}... {self.current_move_str}")
 				
 			self.game_over, self.winner = True, self.turn
+			if hasattr(self, 'play_sound') and getattr(self, 'game_mode', '') != 'replay':
+				self.play_sound('game_over')
 			self.save_snapshot()
 		else:
 			promote_rank = 0 if p.color == 'w' else 7
@@ -65,9 +79,32 @@ class TurnManagerMixin:
 				 (game_mode == 'black_ai' and self.turn == 'w')
 		if is_auto:
 			pawn.type, self.current_move_str = QUEEN, self.current_move_str + "=Q"
+			if hasattr(self, 'play_sound') and game_mode != 'replay': 
+				self.play_sound('promote')
 			self.prev_duck_pos, self.phase = self.duck_pos, 'move_duck'
 		else:
 			self.promotion_pending, self.promotion_coords = True, pos
+
+	def promote_pawn(self, type_char):
+		"""Handles manual pawn promotion from the UI."""
+		if not getattr(self, 'promotion_coords', None): return
+		r, c = self.promotion_coords
+		self.board[r][c].type = type_char
+		self.current_move_str += f"={type_char}"
+		self.promotion_pending = False
+		self.promotion_coords = None
+		
+		# Play promotion sound, or check sound if the new piece causes a check
+		enemy_color = 'b' if self.turn == 'w' else 'w'
+		is_check = self.is_in_check(enemy_color)
+
+		if hasattr(self, 'play_sound'): 
+			if is_check:
+				self.play_sound('move_check')
+			else:
+				self.play_sound('promote')
+			
+		self.prev_duck_pos, self.phase = self.duck_pos, 'move_duck'
 
 	def place_duck(self, pos, animated=True):
 		"""Finalizes turn by placing the duck."""
@@ -81,6 +118,10 @@ class TurnManagerMixin:
 			self.turn_number += 1
 			
 		self.duck_pos, self.phase, self.turn = pos, 'move_piece', ('b' if self.turn == 'w' else 'w')
+		
+		if hasattr(self, 'play_sound') and getattr(self, 'game_mode', '') != 'replay':
+			self.play_sound('notify')
+
 		self.save_snapshot()
 		self.check_game_end_conditions()
 		
