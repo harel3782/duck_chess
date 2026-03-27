@@ -30,10 +30,12 @@ class ActionMasker:
 		sr, sc = start
 		er, ec = end
 		if sr == -1: sr, sc = 0, 0 # Fallback for initial duck placement
-		return (sr * 8 + sc) * 64 + (er * 8 + ec)
+		return int((sr * 8 + sc) * 64 + (er * 8 + ec))
 
 	def decode_move(self, action_index):
 		"""Converts an integer index (0-4095) back to start and end coordinates."""
+		# STRIP NUMPY TYPE: Convert strictly to standard python integer
+		action_index = int(action_index) 
 		start_sq = action_index // 64
 		end_sq = action_index % 64
 		return (start_sq // 8, start_sq % 8), (end_sq // 8, end_sq % 8)
