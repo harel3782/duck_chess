@@ -1,11 +1,12 @@
 import pygame
 from DuckChess_Game.UI.settings import *
+from DuckChess_Game.Logic.constants import *
 
 class EditorRenderingMixin:
 	"""Handles the rendering of the board editor and its tools."""
 
 	def draw_editor(self):
-		"""Renders the custom board builder interface [cite: 143-155]."""
+		"""Renders the custom board builder interface."""
 		self.draw_menu_background()
 
 		# Main Board Area
@@ -32,7 +33,7 @@ class EditorRenderingMixin:
 						pygame.draw.rect(self.screen, (255, 255, 255, 50), (x, y, self.sq_size, self.sq_size))
 					self.screen.blit(self.scaled_images[key], (x, y))
 
-		# Duck & Trash in Palette
+		# Duck and Trash in Palette
 		y_misc = self.board_y + 6 * (self.sq_size + 10)
 		if 'duck' in self.scaled_images: self.screen.blit(self.scaled_images['duck'], (px, y_misc))
 		
@@ -61,4 +62,8 @@ class EditorRenderingMixin:
 
 		for lbl, btn in [("MENU", self.editor_menu_btn), ("CLEAR", self.editor_clear_btn), ("PLAY", self.editor_play_btn)]:
 			btn.update(self.screen_w - {"MENU":410, "CLEAR":280, "PLAY":150}[lbl], self.screen_h - 58, 120, 36)
-			if lbl != "PLAY" or valid: self.draw_styled_button(btn, lbl, btn.collidepoint(mouse))
+			if lbl != "PLAY" or valid: 
+				if hasattr(self, 'draw_hud_button'):
+					self.draw_hud_button(btn, lbl, btn.collidepoint(mouse))
+				else:
+					self.draw_styled_button(btn, lbl, btn.collidepoint(mouse))
