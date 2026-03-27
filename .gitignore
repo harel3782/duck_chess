@@ -6,8 +6,6 @@ build/
 .idea/
 
 # ML Data - DO NOT TRACK IN GIT
-models/
-*.zip
 *.pkl
 DuckChess_Game/SBThree/saved_replays/
 
