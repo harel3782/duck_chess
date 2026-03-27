@@ -8,9 +8,12 @@ class TurnManagerMixin:
 	"""Handles movement logic, state updates, and 50-move rule maintenance."""
 
 	def execute_move(self, start, end, animated=True):
-		"""Executes a move, updates clocks, and handles piece capture [cite: 29-30]."""
+		"""Executes a move, updates clocks, and sets the last move highlight."""
 		p = self.board[start[0]][start[1]]
 		if not p: return
+
+		# Save the move coordinates for the visual highlight
+		self.last_move_arrow = (start, end)
 
 		ep_target = getattr(self, 'en_passant_target', None)
 		is_capture = self.board[end[0]][end[1]] or (p.type == PAWN and end == ep_target)
@@ -38,7 +41,6 @@ class TurnManagerMixin:
 		if hasattr(self, 'play_sound') and getattr(self, 'game_mode', '') != 'replay':
 			self.play_sound('capture' if captured else 'move')
 
-		# KING CAPTURE: Instant win. Append the '#' move directly to the history log.
 		if captured and captured.type == KING:
 			self.current_move_str += "#"
 			if self.turn == 'w':
@@ -56,7 +58,7 @@ class TurnManagerMixin:
 				self.prev_duck_pos, self.phase = self.duck_pos, 'move_duck'
 
 	def _handle_auto_promotion(self, pawn, pos):
-		"""Logic for automatic promotion [cite: 30-31]."""
+		"""Logic for automatic promotion."""
 		game_mode = getattr(self, 'game_mode', '')
 		is_auto = game_mode in ('rl_training', 'replay') or \
 				 (game_mode == 'white_ai' and self.turn == 'b') or \
@@ -68,7 +70,7 @@ class TurnManagerMixin:
 			self.promotion_pending, self.promotion_coords = True, pos
 
 	def place_duck(self, pos, animated=True):
-		"""Finalizes turn by placing the duck [cite: 31-32]."""
+		"""Finalizes turn by placing the duck."""
 		if self.board[pos[0]][pos[1]] or pos == self.prev_duck_pos: return
 		coords = NotationHelper.get_notation_coords(pos[0], pos[1])
 		log_entry = f"{self.current_move_str} @ {coords}"

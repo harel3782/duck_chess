@@ -5,7 +5,7 @@ class BoardCoreRenderingMixin:
 	"""Handles the physical 8x8 grid rendering with static surface caching and King threat highlights."""
 
 	def _draw_base_board(self):
-		"""Draws the walnut and maple inlay squares using a cached surface for high FPS [cite: 71-72]."""
+		"""Draws the walnut and maple inlay squares using a cached surface without the yellow border."""
 		if not hasattr(self, '_cached_board_surface') or getattr(self, '_cached_sq_size', 0) != self.sq_size:
 			self._cached_sq_size = self.sq_size
 			surf_size = self.sq_size * 8 + 30
@@ -13,7 +13,8 @@ class BoardCoreRenderingMixin:
 			
 			frame_rect = pygame.Rect(0, 0, surf_size, surf_size)
 			pygame.draw.rect(self._cached_board_surface, BOARD_FRAME, frame_rect, border_radius=4)
-			pygame.draw.rect(self._cached_board_surface, BTN_BORDER, frame_rect, width=2, border_radius=4)
+			
+			# Removed the secondary yellow border line completely for a cleaner look
 
 			f_coord = pygame.font.SysFont("Arial", 11, bold=True)
 			for r in range(8):
@@ -34,7 +35,7 @@ class BoardCoreRenderingMixin:
 		self.screen.blit(self._cached_board_surface, (self.board_x - 15, self.board_y - 15))
 
 	def draw_game(self, hidden_square=None):
-		"""Master render function with Duck Chess rules and optimized visual indicators [cite: 72-74]."""
+		"""Master render function with Duck Chess rules and optimized visual indicators."""
 		self.draw_menu_background()
 		is_live = (self.view_index == len(self.history) - 1)
 		snap = None if is_live else self.history[self.view_index]
@@ -48,11 +49,11 @@ class BoardCoreRenderingMixin:
 		w_in_check = self.is_in_check('w', b)
 		b_in_check = self.is_in_check('b', b)
 
-		# FIX: In PvP mode, both sides are considered the "player's side" for drawing legal moves
 		is_player_turn = (getattr(self, 'game_mode', '') == 'pvp' or self.turn == self.player_side)
 
 		for r in range(8):
 			for c in range(8):
+				# Draw last move highlights for pieces
 				if last_m and ((r, c) in last_m): self._draw_highlight_square(r, c, LAST_MOVE_COLOR)
 				if p_duck and (r, c) == p_duck: self._draw_highlight_square(r, c, LAST_MOVE_COLOR)
 
