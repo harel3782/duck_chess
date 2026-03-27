@@ -56,15 +56,16 @@ def train():
 	latest_path = os.path.join(MODEL_DIR, "duck_latest")
 	latest_zip = latest_path + ".zip"
 
-	# 3. Check for existing model to RESUME training safely
+	# 3. Check for existing model to RESUME training safely with stability fixes
 	if os.path.exists(latest_zip):
-		print(f"\n[+] Found existing model at {latest_zip}. Resuming training!")
+		print(f"\n[+] Found existing model at {latest_zip}. Resuming training with Stability Fixes!")
 		model = MaskablePPO.load(
 			latest_path, 
 			env=env, 
 			tensorboard_log=LOG_DIR,
 			custom_objects={
-				"learning_rate": 0.0002,
+				"learning_rate": 0.00007, # Lowered for stage 2 stability
+				"target_kl": 0.015,       # Emergency brake to prevent Simplex crashes
 				"n_steps": 1024,
 				"batch_size": 64
 			}
@@ -77,7 +78,8 @@ def train():
 			policy_kwargs=policy_kwargs,
 			verbose=1, 
 			tensorboard_log=LOG_DIR,
-			learning_rate=0.0002,
+			learning_rate=0.00007,
+			target_kl=0.015,
 			n_steps=1024,
 			batch_size=64   
 		)
@@ -85,10 +87,13 @@ def train():
 	for i in range(TOTAL_ITERATIONS):
 		print(f"\n--- Iteration {i+1} Start ---")
 		
+		# Added versioning to the log name to avoid overlapping lines in TensorBoard
+		log_name = f"run_stage2_stable_iter_{i}"
+		
 		model.learn(
 			total_timesteps=STEPS_PER_ITERATION,
 			reset_num_timesteps=False,
-			tb_log_name="run_resume" if os.path.exists(latest_zip) else f"run_iter_{i}"
+			tb_log_name=log_name
 		)
 
 		# Save versions
