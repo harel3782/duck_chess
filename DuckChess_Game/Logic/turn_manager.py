@@ -27,7 +27,9 @@ class TurnManagerMixin:
 		if animated and hasattr(self, 'animate_move_visual'):
 			self.animate_move_visual(start, end, p, is_duck=False)
 
-		captured = MoveExecutor().execute_piece_move(self.board, start, end, ep_target)
+		# Pass the bitboard manager to the executor to keep states synced
+		bb_mgr = getattr(self, 'bb_mgr', None)
+		captured = MoveExecutor().execute_piece_move(self.board, start, end, ep_target, bb_mgr)
 
 		if p.type == PAWN and abs(start[0] - end[0]) == 2:
 			self.en_passant_target = ((start[0] + end[0]) // 2, start[1])
@@ -78,6 +80,10 @@ class TurnManagerMixin:
 				 (game_mode == 'white_ai' and self.turn == 'b') or \
 				 (game_mode == 'black_ai' and self.turn == 'w')
 		if is_auto:
+			if hasattr(self, 'bb_mgr'):
+				self.bb_mgr.remove_piece(pawn.color, PAWN, pos[0], pos[1])
+				self.bb_mgr.add_piece(pawn.color, QUEEN, pos[0], pos[1])
+
 			pawn.type, self.current_move_str = QUEEN, self.current_move_str + "=Q"
 			if hasattr(self, 'play_sound') and game_mode != 'replay': 
 				self.play_sound('promote')
@@ -89,36 +95,47 @@ class TurnManagerMixin:
 		"""Handles manual pawn promotion from the UI."""
 		if not getattr(self, 'promotion_coords', None): return
 		r, c = self.promotion_coords
-		self.board[r][c].type = type_char
+		pawn = self.board[r][c]
+
+		if hasattr(self, 'bb_mgr'):
+			self.bb_mgr.remove_piece(pawn.color, PAWN, r, c)
+			self.bb_mgr.add_piece(pawn.color, type_char, r, c)
+
+		pawn.type = type_char
 		self.current_move_str += f"={type_char}"
 		self.promotion_pending = False
 		self.promotion_coords = None
 		
-		# Play promotion sound, or check sound if the new piece causes a check
 		enemy_color = 'b' if self.turn == 'w' else 'w'
 		is_check = self.is_in_check(enemy_color)
 
 		if hasattr(self, 'play_sound'): 
-			if is_check:
-				self.play_sound('move_check')
-			else:
-				self.play_sound('promote')
+			if is_check: self.play_sound('move_check')
+			else: self.play_sound('promote')
 			
 		self.prev_duck_pos, self.phase = self.duck_pos, 'move_duck'
 
 	def place_duck(self, pos, animated=True):
 		"""Finalizes turn by placing the duck."""
-		if self.board[pos[0]][pos[1]] or pos == self.prev_duck_pos: return
+		if self.board[pos[0]][pos[1]] or pos == getattr(self, 'prev_duck_pos', (-1, -1)): return
 		coords = NotationHelper.get_notation_coords(pos[0], pos[1])
 		log_entry = f"{self.current_move_str} @ {coords}"
 		
-		if self.turn == 'w': self.move_log.append(f"{self.turn_number}. {log_entry}")
+		if hasattr(self, 'bb_mgr'):
+			self.bb_mgr.move_duck(pos[0], pos[1])
+			
+		self.duck_pos, self.phase, self.turn = pos, 'move_piece', ('b' if self.turn == 'w' else 'w')
+
+		# --- PARALLEL STATE SANITY CHECK ---
+		if hasattr(self, 'bb_mgr'):
+			if not self.bb_mgr.verify_sync(self.board, self.duck_pos):
+				print("CRITICAL WARNING: The Bitboard engine is out of sync with the 2D board!")
+
+		if self.turn == 'b': self.move_log.append(f"{self.turn_number}. {log_entry}") 
 		else:
 			self.move_log.append(f"{self.turn_number}... {log_entry}")
 			self.turn_number += 1
 			
-		self.duck_pos, self.phase, self.turn = pos, 'move_piece', ('b' if self.turn == 'w' else 'w')
-		
 		if hasattr(self, 'play_sound') and getattr(self, 'game_mode', '') != 'replay':
 			self.play_sound('notify')
 
@@ -133,8 +150,8 @@ class TurnManagerMixin:
 
 	def ai_turn(self):
 		"""AI logic with wait delay."""
-		if self.view_index != len(self.history) - 1 or self.game_over or not getattr(self, 'waiting_for_ai', False): return
-		if pygame.time.get_ticks() - self.ai_wait_start < AI_MOVE_DELAY: return
+		if self.view_index != len(self.history) - 1 or getattr(self, 'game_over', False) or not getattr(self, 'waiting_for_ai', False): return
+		if pygame.time.get_ticks() - getattr(self, 'ai_wait_start', 0) < AI_MOVE_DELAY: return
 		
 		if self.phase == 'move_piece':
 			move = self.ai.get_piece_move(self.board, self.turn, self.get_piece_legal_moves)
@@ -143,5 +160,5 @@ class TurnManagerMixin:
 				self.ai_wait_start = pygame.time.get_ticks() 
 			else: self.game_over, self.winner = True, ('b' if self.turn == 'w' else 'w')
 		elif self.phase == 'move_duck':
-			target = self.ai.get_duck_move(self.board, self.duck_pos, self.prev_duck_pos)
+			target = self.ai.get_duck_move(self.board, getattr(self, 'duck_pos', (-1,-1)), getattr(self, 'prev_duck_pos', (-1,-1)))
 			if target: self.place_duck(target, animated=True)

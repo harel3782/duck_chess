@@ -1,17 +1,20 @@
 import pickle
 import copy
 import pygame
+from DuckChess_Game.Logic.bitboard_manager import BitboardManager
 
 class HistoryManagerMixin:
 	"""Handles game state initialization, snapshots, and replays including special move data."""
 
 	def clear_board(self):
-		"""Removes all pieces from the board [cite: 13-14]."""
+		"""Removes all pieces from the board."""
 		self.board = [[None] * 8 for _ in range(8)]
 		self.duck_pos = (-1, -1)
 		self.turn = 'w'
 		self.move_log = []
 		self.history = []
+		if hasattr(self, 'bb_mgr'):
+			self.bb_mgr = BitboardManager()
 
 	def save_snapshot(self):
 		"""Saves a single point in history including En Passant target."""
@@ -27,7 +30,7 @@ class HistoryManagerMixin:
 		self.view_index = len(self.history) - 1
 
 	def reset_game_state(self):
-		"""Completely resets the game environment to the initial setup [cite: 14-15]."""
+		"""Completely resets the game environment to the initial setup."""
 		self.duck_pos = (-1, -1)
 		self.prev_duck_pos = (-1, -1)
 		self.en_passant_target = None
@@ -64,7 +67,7 @@ class HistoryManagerMixin:
 		self.save_snapshot()
 
 	def load_replay_file(self, filepath):
-		"""Loads a .pkl replay file and reconstructs history[cite: 15]."""
+		"""Loads a .pkl replay file and reconstructs history."""
 		try:
 			with open(filepath, 'rb') as f:
 				game_data = pickle.load(f)

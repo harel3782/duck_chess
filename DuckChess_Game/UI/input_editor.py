@@ -16,6 +16,8 @@ class EditorInputMixin:
 			if hasattr(self, 'editor_play_btn') and self.editor_play_btn.collidepoint((mx, my)):
 				if self.validate_editor_board():
 					self.state, self.game_mode, self.phase = 'game', 'pvp', 'move_piece'
+					if hasattr(self, 'sync_bitboards_to_2d'):
+						self.sync_bitboards_to_2d()
 					self.save_snapshot()
 					return
 			if hasattr(self, 'editor_clear_btn') and self.editor_clear_btn.collidepoint((mx, my)):
