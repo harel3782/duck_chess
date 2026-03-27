@@ -2,10 +2,10 @@ import pygame
 import sys
 
 class MenuInputMixin:
-	"""Handles user input specifically for the main menu."""
+	"""Handles user input specifically for the main menu and rules screen."""
 
 	def handle_menu_click(self, pos):
-		"""Main Menu interactions with standard OS file dialog for replays [cite: 45-46]."""
+		"""Main Menu interactions."""
 		if not hasattr(self, 'menu_rects'): return
 		
 		for key, rect in self.menu_rects.items():
@@ -25,10 +25,13 @@ class MenuInputMixin:
 					self.clear_board()
 					self.init_board()
 					self.state = 'edit'
+				elif key == 'rules':
+					self.state = 'rules'
 				elif key == 'replay':
 					import tkinter as tk
 					from tkinter import filedialog
-					root = tk.Tk(); root.withdraw()
+					root = tk.Tk()
+					root.withdraw()
 					file_path = filedialog.askopenfilename(
 						title="Select Duck Chess Replay",
 						filetypes=[("Replay Files", "*.pkl"), ("All Files", "*.*")]
@@ -40,3 +43,9 @@ class MenuInputMixin:
 				elif key == 'quit':
 					pygame.quit()
 					sys.exit()
+
+	def handle_rules_click(self, pos):
+		"""Handles clicks on the Rules screen."""
+		if hasattr(self, 'rules_back_btn') and self.rules_back_btn.collidepoint(pos):
+			if hasattr(self, 'play_sound'): self.play_sound('move')
+			self.state = 'menu'
