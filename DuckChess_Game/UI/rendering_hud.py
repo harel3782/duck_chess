@@ -2,7 +2,7 @@ import pygame
 from DuckChess_Game.UI.settings import *
 
 class HUDRenderingMixin:
-	"""Handles in-game UI overlays with premium brushed brass buttons and optimized text rendering."""
+	"""Handles in-game UI overlays with modern tactile 3D buttons and optimized text rendering."""
 
 	def draw_eval_bar(self, current_board):
 		"""Draws the dynamic material evaluation bar."""
@@ -27,7 +27,7 @@ class HUDRenderingMixin:
 		self.screen.blit(txt, txt.get_rect(center=(bar_x + bar_w // 2, bar_y + 15)))
 
 	def draw_history_panel(self):
-		"""Renders the scrollable move history panel with text caching for maximum performance."""
+		"""Renders the scrollable move history panel with text caching for maximum performance [cite: 79-81]."""
 		panel_rect = pygame.Rect(self.screen_w - PANEL_WIDTH, 0, PANEL_WIDTH, self.screen_h)
 		self.draw_glass_panel(panel_rect)
 		self.screen.blit(FONT_STATUS.render("Move History", True, MENU_ACCENT), (self.screen_w - PANEL_WIDTH + 15, 15))
@@ -50,7 +50,6 @@ class HUDRenderingMixin:
 		self.move_click_rects = {} 
 		mouse = pygame.mouse.get_pos()
 
-		# OPTIMIZATION: Initialize text cache to avoid rendering fonts every frame
 		if not hasattr(self, '_history_text_cache'): self._history_text_cache = {}
 
 		for row in range(scroll, min(total_rows, scroll + max_rows + 1)):
@@ -63,26 +62,25 @@ class HUDRenderingMixin:
 					rect = pygame.Rect(self.screen_w - PANEL_WIDTH + offset[1] - 8, y, 130, row_height)
 					self.move_click_rects[idx] = rect
 					
-					if active: pygame.draw.rect(self.screen, BTN_NORMAL, rect, border_radius=4)
+					if active: pygame.draw.rect(self.screen, (65, 75, 85), rect, border_radius=4)
 					elif rect.collidepoint(mouse) and panel_rect.collidepoint(mouse):
-						pygame.draw.rect(self.screen, (60, 65, 75), rect, border_radius=4)
+						pygame.draw.rect(self.screen, (50, 58, 68), rect, border_radius=4)
 					
 					txt = full_log[idx].split(' ', 1)[1] if "..." in full_log[idx] and i == 1 else full_log[idx]
 					color = MENU_ACCENT if active else (220, 220, 220)
 					
-					# Draw text using Cache
 					cache_key = (txt, color)
 					if cache_key not in self._history_text_cache:
 						self._history_text_cache[cache_key] = FONT_HISTORY.render(txt, True, color)
 					
 					self.screen.blit(self._history_text_cache[cache_key], (rect.x + 8, y + 4))
 
-		# Navigation buttons (History Panel)
+		# Navigation buttons with the new modern design
 		for lbl, k in [("<<", 'start'), ("<", 'prev'), (">", 'next'), (">>", 'end')]:
 			self.draw_hud_button(self.nav_btns[k], lbl, self.nav_btns[k].collidepoint(mouse))
 
 	def draw_in_game_hud(self):
-		"""Draws the bottom control bar with pill-shaped brass buttons."""
+		"""Draws the bottom control bar with modern 3D tactile buttons [cite: 81-83]."""
 		hud = pygame.Rect(20, self.screen_h - 70, self.screen_w - PANEL_WIDTH - 40, 60)
 		self.draw_glass_panel(hud)
 
@@ -94,13 +92,12 @@ class HUDRenderingMixin:
 
 		self.screen.blit(FONT_STATUS.render(status, True, col), (40, self.screen_h - 50))
 
-		# Define Action Buttons
 		mouse = pygame.mouse.get_pos()
 		eval_txt = "Hide Eval" if getattr(self, 'show_eval', True) else "Show Eval"
 		btns = [("Menu", self.menu_btn_rect), (eval_txt, self.eval_btn_rect), ("Reset", self.restart_btn_rect)]
 		if getattr(self, 'game_mode', '') == 'pvp': btns.insert(1, ("Flip", self.flip_btn_rect))
 
-		# Render buttons as pill-shaped brass plaques
+		# Apply layout for the new buttons
 		btn_w, btn_h, spacing = 95, 36, 12
 		start_x = hud.right - (btn_w + spacing) * len(btns) - 15
 		for i, (lbl, r) in enumerate(btns):
@@ -108,23 +105,33 @@ class HUDRenderingMixin:
 			self.draw_hud_button(r, lbl, r.collidepoint(mouse))
 
 	def draw_hud_button(self, rect, text, hover):
-		"""Renders a pill-shaped button with a deep brass look and drop shadow."""
-		shadow_rect = rect.copy()
-		shadow_rect.y += 2
-		pygame.draw.rect(self.screen, (0, 0, 0, 120), shadow_rect, border_radius=18)
-
-		body_col = BTN_HOVER if hover else BTN_NORMAL
-		pygame.draw.rect(self.screen, body_col, rect, border_radius=18)
+		"""Renders a sleek, modern 3D tactile button replacing the old wireframe pills."""
+		depth = 3
+		radius = 6
 		
-		border_col = MENU_ACCENT if hover else BTN_BORDER
-		pygame.draw.rect(self.screen, border_col, rect, width=2, border_radius=18)
+		# 1. Depth/Shadow layer (The "base" of the button)
+		bg_rect = rect.copy()
+		bg_rect.y += depth
+		pygame.draw.rect(self.screen, (25, 28, 33), bg_rect, border_radius=radius)
+		
+		# 2. Main interactive face (Pushes down on hover)
+		face_rect = rect.copy()
+		if hover:
+			face_rect.y += 2  # Physical push-down effect
+			
+		face_color = (75, 82, 95) if hover else (55, 62, 72)
+		pygame.draw.rect(self.screen, face_color, face_rect, border_radius=radius)
+		
+		# 3. Subtle top highlight border for a glossy finish
+		pygame.draw.rect(self.screen, (95, 105, 120) if hover else (80, 88, 100), face_rect, width=1, border_radius=radius)
 
-		txt_col = MENU_ACCENT if hover else BRASS_TEXT
+		# 4. Crisp Text Rendering
+		txt_col = (255, 255, 255) if hover else (230, 230, 230)
 		txt_surf = FONT_UI.render(text, True, txt_col)
-		self.screen.blit(txt_surf, txt_surf.get_rect(center=rect.center))
+		self.screen.blit(txt_surf, txt_surf.get_rect(center=face_rect.center))
 
 	def draw_glass_panel(self, rect):
-		"""Draws a refined frosted glass panel."""
+		"""Draws a refined frosted glass panel [cite: 83-84]."""
 		s = pygame.Surface((rect.width, rect.height), pygame.SRCALPHA)
 		s.fill(PANEL_BG)
 		self.screen.blit(s, rect.topleft)
