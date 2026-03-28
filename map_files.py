@@ -2,13 +2,14 @@ import os
 from pathlib import Path
 
 def generate_tree(dir_path: Path, prefix: str = '', exclude_dirs=None):
-	"""Generates a directory tree, ignoring virtual environments and cache folders."""
+	"""Generates a directory tree, ignoring virtual environments, cache folders, and replays."""
 	
 	# Default directories to ignore to keep the tree clean
 	if exclude_dirs is None:
 		exclude_dirs = {
 			'.git', 'node_modules', '__pycache__', 'dist', 'build', 
-			'.vercel', '.venv', 'venv', 'env', '.idea', '.vscode'
+			'.vercel', '.venv', 'venv', 'env', '.idea', '.vscode',
+			'saved_replays'
 		}
 		
 	try:
