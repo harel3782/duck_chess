@@ -5,10 +5,10 @@ import torch.nn as nn
 import numpy as np
 from sb3_contrib import MaskablePPO
 from stable_baselines3.common.torch_layers import BaseFeaturesExtractor
-from DuckChess_Game.SBThree.duck_env import DuckChessEnv
+from DuckChess_Game.SBThree.duck_env_stage4_dense import DuckChessEnvStage4
 
 class DuckChessCNN(BaseFeaturesExtractor):
-	"""Custom CNN for 8x8 board processing. Tailored for 19 layers of input."""
+	"""Custom CNN for 8x8 board processing."""
 	def __init__(self, observation_space, features_dim=256):
 		super().__init__(observation_space, features_dim)
 		n_input_channels = observation_space.shape[0]
@@ -31,85 +31,73 @@ class DuckChessCNN(BaseFeaturesExtractor):
 		return self.linear(self.cnn(observations))
 
 # Global Constants
-TOTAL_ITERATIONS = 10
+TOTAL_ITERATIONS = 15 # Extended for Stage 4
 STEPS_PER_ITERATION = 100000 
 MODEL_DIR = "models/duck_ppo/"
 LOG_DIR = "./tensorboard_logs/"
 
-# --- SET THIS TO YOUR HIGHEST duck_v[X] NUMBER + 1 ---
-START_ITERATION = 6  # e.g., if you have duck_v7.zip, set this to 8.
-
 def train():
 	os.makedirs(MODEL_DIR, exist_ok=True)
 
-	# Initialize Environment
-	env = DuckChessEnv() 
+	# Initialize Stage 4 Environment (Dense Rewards)
+	env = DuckChessEnvStage4() 
 
-	# Policy Configuration
 	policy_kwargs = dict(
 		features_extractor_class=DuckChessCNN,
 		features_extractor_kwargs=dict(features_dim=256),
 	)
 
-	latest_path = os.path.join(MODEL_DIR, "duck_latest")
+	base_model_path = os.path.join(MODEL_DIR, "stage3_selfplay_v4.zip")
+	latest_path = os.path.join(MODEL_DIR, "stage4_dense_latest")
 	latest_zip = latest_path + ".zip"
 
-	# Load the model with strict anti-crash parameters
-	if os.path.exists(latest_zip):
-		print(f"\n[+] Found existing model at {latest_zip}. Resuming STAGE 3 from iteration {START_ITERATION}!")
+	if os.path.exists(base_model_path):
+		print(f"\n[+] Found base model at {base_model_path}. Starting STAGE 4 (Dense Rewards)!")
 		model = MaskablePPO.load(
-			latest_path, 
+			base_model_path, 
 			env=env, 
 			tensorboard_log=LOG_DIR,
 			custom_objects={
-				"learning_rate": 0.00002, # Further lowered for extreme stability
+				"learning_rate": 0.00001, # Lowered for stability
 				"target_kl": 0.01,
-				"ent_coef": 0.02,         # Increased randomness to push away from zero-probabilities
-				"max_grad_norm": 0.3,     # CRITICAL: Clips gradients to prevent numerical explosion in PyTorch
+				"ent_coef": 0.05,         # Increased significantly to force exploration
+				"max_grad_norm": 0.3,     # Strict gradient clipping
 				"n_steps": 1024,
-				"batch_size": 64
+				"batch_size": 64,
+				"stats_window_size": 100
 			}
 		)
+		# Set initial opponent to the base model
+		if hasattr(env, 'set_attr'):
+			env.set_attr("set_opponent", base_model_path)
+		else:
+			env.set_opponent(base_model_path)
 	else:
-		print("\n[+] No existing model found. Starting fresh training!")
-		model = MaskablePPO(
-			"CnnPolicy", 
-			env, 
-			policy_kwargs=policy_kwargs,
-			verbose=1, 
-			tensorboard_log=LOG_DIR,
-			learning_rate=0.00002,
-			target_kl=0.01,
-			ent_coef=0.02,
-			n_steps=1024,
-			batch_size=64   
-		)
+		print(f"\n[-] ERROR: Base model {base_model_path} not found. Please check filenames.")
+		return
 
-	# Resume training from the specified iteration up to TOTAL_ITERATIONS
-	for i in range(START_ITERATION, TOTAL_ITERATIONS):
-		print(f"\n--- Stage 3 (Self-Play) Iteration {i+1} Start ---")
+	# Start Stage 4 Iterations
+	for i in range(TOTAL_ITERATIONS):
+		print(f"\n--- Stage 4 (Dense Rewards) Iteration {i} Start ---")
 		
-		# Bulletproof logging name using a timestamp to prevent graph overlap
-		log_name = f"run_stage3_selfplay_iter_{i}_{int(time.time())}"
+		log_name = f"run_stage4_dense_iter_{i}"
 		
 		model.learn(
 			total_timesteps=STEPS_PER_ITERATION,
-			reset_num_timesteps=False, # Keep False to maintain a continuous X-axis
+			reset_num_timesteps=False, 
 			tb_log_name=log_name
 		)
 
-		# Save versioned and latest models
-		v_path = os.path.join(MODEL_DIR, f"duck_v{i}")
+		v_path = os.path.join(MODEL_DIR, f"stage4_dense_v{i}")
 		model.save(v_path)
 		model.save(latest_path)
 
-		# Update the opponent to the newly trained model
 		if hasattr(env, 'set_attr'):
 			env.set_attr("set_opponent", latest_zip)
 		else:
 			env.set_opponent(latest_zip)
 			
-		print(f"--- Iteration {i+1} Complete: Self-Play Opponent Updated ---")
+		print(f"--- Iteration {i} Complete: Opponent Updated ---")
 
 if __name__ == "__main__":
 	train()
