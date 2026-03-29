@@ -5,7 +5,7 @@ import torch.nn as nn
 import numpy as np
 from sb3_contrib import MaskablePPO
 from stable_baselines3.common.torch_layers import BaseFeaturesExtractor
-from DuckChess_Game.SBThree.duck_env_stage4_dense import DuckChessEnvStage4
+from DuckChess_Game.SBThree.duck_env_stage5_strategic import DuckChessEnvStage5
 
 class DuckChessCNN(BaseFeaturesExtractor):
 	"""Custom CNN for 8x8 board processing."""
@@ -31,7 +31,7 @@ class DuckChessCNN(BaseFeaturesExtractor):
 		return self.linear(self.cnn(observations))
 
 # Global Constants
-TOTAL_ITERATIONS = 15 # Extended for Stage 4
+TOTAL_ITERATIONS = 15 
 STEPS_PER_ITERATION = 100000 
 MODEL_DIR = "models/duck_ppo/"
 LOG_DIR = "./tensorboard_logs/"
@@ -39,29 +39,30 @@ LOG_DIR = "./tensorboard_logs/"
 def train():
 	os.makedirs(MODEL_DIR, exist_ok=True)
 
-	# Initialize Stage 4 Environment (Dense Rewards)
-	env = DuckChessEnvStage4() 
+	# Initialize Stage 5 Environment (Strategic Duck)
+	env = DuckChessEnvStage5() 
 
 	policy_kwargs = dict(
 		features_extractor_class=DuckChessCNN,
 		features_extractor_kwargs=dict(features_dim=256),
 	)
 
-	base_model_path = os.path.join(MODEL_DIR, "stage3_selfplay_v4.zip")
-	latest_path = os.path.join(MODEL_DIR, "stage4_dense_latest")
+	# Load the stable v6 model from Stage 4 to build upon
+	base_model_path = os.path.join(MODEL_DIR, "stage4_dense_v6.zip")
+	latest_path = os.path.join(MODEL_DIR, "stage5_strategic_latest")
 	latest_zip = latest_path + ".zip"
 
 	if os.path.exists(base_model_path):
-		print(f"\n[+] Found base model at {base_model_path}. Starting STAGE 4 (Dense Rewards)!")
+		print(f"\n[+] Found base model at {base_model_path}. Starting STAGE 5 (Strategic Duck)!")
 		model = MaskablePPO.load(
 			base_model_path, 
 			env=env, 
 			tensorboard_log=LOG_DIR,
 			custom_objects={
-				"learning_rate": 0.00001, # Lowered for stability
+				"learning_rate": 0.00001, # Kept low for stability
 				"target_kl": 0.01,
-				"ent_coef": 0.05,         # Increased significantly to force exploration
-				"max_grad_norm": 0.3,     # Strict gradient clipping
+				"ent_coef": 0.04,         # High enough to explore duck placements
+				"max_grad_norm": 0.3,     # CRITICAL: Strict gradient clipping to prevent explosion
 				"n_steps": 1024,
 				"batch_size": 64,
 				"stats_window_size": 100
@@ -76,11 +77,11 @@ def train():
 		print(f"\n[-] ERROR: Base model {base_model_path} not found. Please check filenames.")
 		return
 
-	# Start Stage 4 Iterations
+	# Start Stage 5 Iterations
 	for i in range(TOTAL_ITERATIONS):
-		print(f"\n--- Stage 4 (Dense Rewards) Iteration {i} Start ---")
+		print(f"\n--- Stage 5 (Strategic Duck) Iteration {i} Start ---")
 		
-		log_name = f"run_stage4_dense_iter_{i}"
+		log_name = f"run_stage5_strategic_iter_{i}"
 		
 		model.learn(
 			total_timesteps=STEPS_PER_ITERATION,
@@ -88,7 +89,7 @@ def train():
 			tb_log_name=log_name
 		)
 
-		v_path = os.path.join(MODEL_DIR, f"stage4_dense_v{i}")
+		v_path = os.path.join(MODEL_DIR, f"stage5_strategic_v{i}")
 		model.save(v_path)
 		model.save(latest_path)
 
