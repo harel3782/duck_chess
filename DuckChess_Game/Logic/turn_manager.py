@@ -176,7 +176,13 @@ class TurnManagerMixin:
 			masks = self.action_masks()
 			import torch as th
 			
-			action, _ = self.rl_model.predict(obs, action_masks=masks, deterministic=True)
+			# --- THE "HYBRID" APPROACH ---
+			# Use random sampling for the first 5 turns to create variety,
+			# then switch to strict deterministic (greedy) play for the rest of the game.
+			current_turn = getattr(self, 'turn_number', 1)
+			is_deterministic = current_turn > 5
+			
+			action, _ = self.rl_model.predict(obs, action_masks=masks, deterministic=is_deterministic)
 			
 			if self.phase == 'move_piece':
 				start, end = self._decode_move(action)
