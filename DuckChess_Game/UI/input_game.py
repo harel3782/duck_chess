@@ -1,4 +1,5 @@
 import pygame
+from DuckChess_Game.Logic.save_manager import SaveManager
 
 class GameInputMixin:
 	"""Handles user input during active gameplay with click-to-move support."""
@@ -48,6 +49,36 @@ class GameInputMixin:
 				if hasattr(self, 'play_sound'): self.play_sound('move')
 				self.state = 'menu'
 				return
+			
+			# Logic for the new Save Button
+			if hasattr(self, 'btn_save') and getattr(self, 'btn_save').collidepoint(pos):
+				if not getattr(self, 'game_saved', False):
+					if hasattr(self, 'play_sound'): self.play_sound('notify')
+					
+					# Determine player identities based on game_mode
+					w_player, b_player = "Human", "Human"
+					if self.game_mode == 'white_ai':
+						w_player, b_player = "AI (Stage 5)", "Human"
+					elif self.game_mode == 'black_ai':
+						w_player, b_player = "Human", "AI (Stage 5)"
+					elif self.game_mode == 'rl_training':
+						w_player, b_player = "AI (RL)", "AI (RL)"
+						
+					winner_str = "Draw"
+					if self.winner == 'w': winner_str = "White"
+					elif self.winner == 'b': winner_str = "Black"
+					
+					SaveManager.save_game(
+						move_history=self.move_log,
+						replay_actions=getattr(self, 'replay_actions', []), # PASSED TO SAVER
+						game_mode=self.game_mode,
+						white_player=w_player,
+						black_player=b_player,
+						winner=winner_str
+					)
+					self.game_saved = True
+				return
+				
 			return # Block physical board clicks if game over overlay is up
 
 		# 5. Board Interaction

@@ -32,11 +32,14 @@ class MenuInputMixin:
 					from tkinter import filedialog
 					root = tk.Tk()
 					root.withdraw()
+					
+					# Updated to allow JSON saves as well as PKL logs
 					file_path = filedialog.askopenfilename(
 						title="Select Duck Chess Replay",
-						filetypes=[("Replay Files", "*.pkl"), ("All Files", "*.*")]
+						filetypes=[("Replay Files", "*.json;*.pkl"), ("JSON Games", "*.json"), ("AI Pickles", "*.pkl"), ("All Files", "*.*")]
 					)
 					root.destroy()
+					
 					if file_path:
 						if hasattr(self, 'play_sound'): self.play_sound('notify')
 						self.load_replay_file(file_path)

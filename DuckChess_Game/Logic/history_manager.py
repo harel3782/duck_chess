@@ -1,6 +1,8 @@
 import pickle
+import json
 import copy
 import pygame
+import os
 from DuckChess_Game.Logic.bitboard_manager import BitboardManager
 
 class HistoryManagerMixin:
@@ -42,6 +44,10 @@ class HistoryManagerMixin:
 		self.winner = None
 		self.half_move_clock = 0
 		self.rep_history = {}
+		
+		# Reset save status and action tracker for new games
+		self.game_saved = False
+		self.replay_actions = []
 
 		self.move_log = []
 		self.last_move_arrow = None
@@ -67,28 +73,48 @@ class HistoryManagerMixin:
 		self.save_snapshot()
 
 	def load_replay_file(self, filepath):
-		"""Loads a .pkl replay file and reconstructs history."""
+		"""Loads a .pkl or .json replay file and reconstructs history."""
+		if not os.path.exists(filepath): return
+		
 		try:
-			with open(filepath, 'rb') as f:
-				game_data = pickle.load(f)
+			if filepath.endswith('.json'):
+				with open(filepath, 'r', encoding='utf-8') as f:
+					game_data = json.load(f)
+				actions = game_data.get('replay_actions', [])
+				
+				if not actions: return
+				
+				self.reset_game_state()
+				self.game_mode, self.state = 'replay', 'game'
+				
+				for act in actions:
+					if act['type'] == 'piece':
+						self.execute_move(tuple(act['start']), tuple(act['end']), animated=False)
+					elif act['type'] == 'duck':
+						self.place_duck(tuple(act['pos']), animated=False)
+					elif act['type'] == 'promote':
+						self.promote_pawn(act['piece'])
+						
+			else:
+				with open(filepath, 'rb') as f:
+					game_data = pickle.load(f)
+					
+				actions = game_data.get('action_history', [])
+				if not actions: return
+				
+				self.reset_game_state()
+				self.game_mode, self.state = 'replay', 'game'
+				self.replay_learning_color = game_data.get('learning_color', 'unknown')
+				
+				for act in actions:
+					start, end = getattr(self, '_decode_move')(act)
+					if self.phase == 'move_piece':
+						self.execute_move(start, end, animated=False)
+					elif self.phase == 'move_duck':
+						self.place_duck(end, animated=False)
+						
 		except Exception as e:
 			print(f"Failed to load replay: {e}")
 			return
-
-		actions = game_data.get('action_history', [])
-		if not actions: return
-
-		self.reset_game_state()
-		self.game_mode, self.state = 'replay', 'game'
-		
-		# --- קריאת מידע על השחקנים ---
-		self.replay_learning_color = game_data.get('learning_color', 'unknown')
-
-		for act in actions:
-			(sr, sc), (er, ec) = getattr(self, '_decode_move')(act)
-			if self.phase == 'move_piece':
-				self.execute_move((sr, sc), (er, ec), animated=False)
-			elif self.phase == 'move_duck':
-				self.place_duck((er, ec), animated=False)
 
 		self.view_index = len(self.history) - 1

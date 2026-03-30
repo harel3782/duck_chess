@@ -12,6 +12,11 @@ class TurnManagerMixin:
 		p = self.board[start[0]][start[1]]
 		if not p: return
 
+		# --- RECORD ACTION FOR JSON REPLAYS ---
+		if getattr(self, 'game_mode', '') != 'replay':
+			if not hasattr(self, 'replay_actions'): self.replay_actions = []
+			self.replay_actions.append({'type': 'piece', 'start': start, 'end': end})
+
 		self.last_move_arrow = (start, end)
 		ep_target = getattr(self, 'en_passant_target', None)
 		is_capture = self.board[end[0]][end[1]] or (p.type == PAWN and end == ep_target)
@@ -94,6 +99,12 @@ class TurnManagerMixin:
 	def promote_pawn(self, type_char):
 		"""Handles manual pawn promotion from the UI."""
 		if not getattr(self, 'promotion_coords', None): return
+		
+		# --- RECORD ACTION FOR JSON REPLAYS ---
+		if getattr(self, 'game_mode', '') != 'replay':
+			if not hasattr(self, 'replay_actions'): self.replay_actions = []
+			self.replay_actions.append({'type': 'promote', 'piece': type_char})
+
 		r, c = self.promotion_coords
 		pawn = self.board[r][c]
 
@@ -118,6 +129,12 @@ class TurnManagerMixin:
 	def place_duck(self, pos, animated=True):
 		"""Finalizes turn by placing the duck."""
 		if self.board[pos[0]][pos[1]] or pos == getattr(self, 'prev_duck_pos', (-1, -1)): return
+		
+		# --- RECORD ACTION FOR JSON REPLAYS ---
+		if getattr(self, 'game_mode', '') != 'replay':
+			if not hasattr(self, 'replay_actions'): self.replay_actions = []
+			self.replay_actions.append({'type': 'duck', 'pos': pos})
+
 		coords = NotationHelper.get_notation_coords(pos[0], pos[1])
 		log_entry = f"{self.current_move_str} @ {coords}"
 		
