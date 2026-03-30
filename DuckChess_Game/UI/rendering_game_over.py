@@ -10,7 +10,8 @@ class GameOverRenderingMixin:
 		if not getattr(self, 'game_over', False) or not is_live: 
 			return
 
-		box_w, box_h = 420, 240
+		# Slightly increased height to accommodate the new Save button
+		box_w, box_h = 420, 290 
 		start_x = self.board_x + (self.sq_size * 8 - box_w) // 2
 		start_y = self.board_y + (self.sq_size * 8 - box_h) // 2
 		container = pygame.Rect(start_x, start_y, box_w, box_h)
@@ -54,9 +55,20 @@ class GameOverRenderingMixin:
 
 		# 6. Render Action Buttons
 		mouse = pygame.mouse.get_pos()
-		self.btn_rematch = pygame.Rect(container.left + 45, container.bottom - 75, 150, 40)
-		self.btn_menu_go = pygame.Rect(container.right - 195, container.bottom - 75, 150, 40)
+		
+		# Move Rematch and Menu buttons slightly up
+		self.btn_rematch = pygame.Rect(container.left + 45, container.bottom - 125, 150, 40)
+		self.btn_menu_go = pygame.Rect(container.right - 195, container.bottom - 125, 150, 40)
+		
+		# Center the new Save Game button below them
+		self.btn_save = pygame.Rect(container.centerx - 75, container.bottom - 65, 150, 40)
 
 		if hasattr(self, 'draw_hud_button'):
 			self.draw_hud_button(self.btn_rematch, "Rematch", self.btn_rematch.collidepoint(mouse))
 			self.draw_hud_button(self.btn_menu_go, "Main Menu", self.btn_menu_go.collidepoint(mouse))
+			
+			# Change text if the game was already saved
+			if getattr(self, 'game_saved', False):
+				self.draw_hud_button(self.btn_save, "Saved!", False)
+			else:
+				self.draw_hud_button(self.btn_save, "Save Game", self.btn_save.collidepoint(mouse))

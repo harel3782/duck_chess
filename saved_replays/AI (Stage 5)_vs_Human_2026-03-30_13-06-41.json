@@ -1,0 +1,139 @@
+{
+	"date_played": "2026-03-30_13-06-41",
+	"game_mode": "white_ai",
+	"players": {
+		"white": "AI (Stage 5)",
+		"black": "Human"
+	},
+	"result": "White",
+	"moves": [
+		"1. e4 @ e6",
+		"1... g6 @ h4",
+		"2. Qf3 @ c4",
+		"2... Bh6 @ d5",
+		"3. Qxf7 @ e6",
+		"3... Bxd2 @ h4",
+		"4. Qxe8#"
+	],
+	"replay_actions": [
+		{
+			"type": "piece",
+			"start": [
+				6,
+				4
+			],
+			"end": [
+				4,
+				4
+			]
+		},
+		{
+			"type": "duck",
+			"pos": [
+				2,
+				4
+			]
+		},
+		{
+			"type": "piece",
+			"start": [
+				1,
+				6
+			],
+			"end": [
+				2,
+				6
+			]
+		},
+		{
+			"type": "duck",
+			"pos": [
+				4,
+				7
+			]
+		},
+		{
+			"type": "piece",
+			"start": [
+				7,
+				3
+			],
+			"end": [
+				5,
+				5
+			]
+		},
+		{
+			"type": "duck",
+			"pos": [
+				4,
+				2
+			]
+		},
+		{
+			"type": "piece",
+			"start": [
+				0,
+				5
+			],
+			"end": [
+				2,
+				7
+			]
+		},
+		{
+			"type": "duck",
+			"pos": [
+				3,
+				3
+			]
+		},
+		{
+			"type": "piece",
+			"start": [
+				5,
+				5
+			],
+			"end": [
+				1,
+				5
+			]
+		},
+		{
+			"type": "duck",
+			"pos": [
+				2,
+				4
+			]
+		},
+		{
+			"type": "piece",
+			"start": [
+				2,
+				7
+			],
+			"end": [
+				6,
+				3
+			]
+		},
+		{
+			"type": "duck",
+			"pos": [
+				4,
+				7
+			]
+		},
+		{
+			"type": "piece",
+			"start": [
+				1,
+				5
+			],
+			"end": [
+				0,
+				4
+			]
+		}
+	]
+}
