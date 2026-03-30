@@ -9,7 +9,7 @@ def generate_tree(dir_path: Path, prefix: str = '', exclude_dirs=None):
 		exclude_dirs = {
 			'.git', 'node_modules', '__pycache__', 'dist', 'build', 
 			'.vercel', '.venv', 'venv', 'env', '.idea', '.vscode',
-			'saved_replays'
+			'saved_replays', 'wandb', '.qodana'
 		}
 		
 	try:
