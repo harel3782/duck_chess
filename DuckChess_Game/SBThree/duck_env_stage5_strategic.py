@@ -96,7 +96,11 @@ class DuckChessEnvStage5(gym.Env):
 		filename = f"saved_replays/{safe_reason}_ep{self.episode_counter}_{int(time.time())}.pkl"
 		try:
 			with open(filename, 'wb') as f:
-				pickle.dump({'action_history': self.current_episode_actions}, f)
+				pickle.dump({
+					'action_history': self.current_episode_actions,
+					'learning_color': self.learning_color, # <-- הוספנו
+					'opponent_color': self.opponent_color  # <-- הוספנו
+				}, f)
 		except: pass
 
 	def _apply_action(self, action):
