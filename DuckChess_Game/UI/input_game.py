@@ -23,7 +23,9 @@ class GameInputMixin:
 		if self.restart_btn_rect.collidepoint(pos): self.reset_game_state(); return
 		if hasattr(self, 'eval_btn_rect') and self.eval_btn_rect.collidepoint(pos): self.show_eval = not getattr(self, 'show_eval', True); return
 		if self.menu_btn_rect.collidepoint(pos): self.state = 'menu'; return
-		if getattr(self, 'game_mode', '') == 'pvp' and hasattr(self, 'flip_btn_rect') and self.flip_btn_rect.collidepoint(pos):
+		
+		# --- Added 'replay' to the condition so Flip works ---
+		if getattr(self, 'game_mode', '') in ['pvp', 'replay'] and hasattr(self, 'flip_btn_rect') and self.flip_btn_rect.collidepoint(pos):
 			self.player_side = 'b' if self.player_side == 'w' else 'w'; return
 
 		# 3. History Panel Interaction
@@ -40,7 +42,8 @@ class GameInputMixin:
 		is_live = (self.view_index == len(self.history) - 1)
 
 		# 4. Game Over Overlay Interaction
-		if is_live and getattr(self, 'game_over', False):
+		# --- Skipped if in replay mode to allow unhindered viewing ---
+		if is_live and getattr(self, 'game_over', False) and getattr(self, 'game_mode', '') != 'replay':
 			if hasattr(self, 'btn_rematch') and getattr(self, 'btn_rematch').collidepoint(pos):
 				if hasattr(self, 'play_sound'): self.play_sound('move')
 				self.reset_game_state()
@@ -58,9 +61,9 @@ class GameInputMixin:
 					# Determine player identities based on game_mode
 					w_player, b_player = "Human", "Human"
 					if self.game_mode == 'white_ai':
-						w_player, b_player = "AI (Stage 5)", "Human"
-					elif self.game_mode == 'black_ai':
 						w_player, b_player = "Human", "AI (Stage 5)"
+					elif self.game_mode == 'black_ai':
+						w_player, b_player = "AI (Stage 5)", "Human"
 					elif self.game_mode == 'rl_training':
 						w_player, b_player = "AI (RL)", "AI (RL)"
 						
@@ -70,7 +73,7 @@ class GameInputMixin:
 					
 					SaveManager.save_game(
 						move_history=self.move_log,
-						replay_actions=getattr(self, 'replay_actions', []), # PASSED TO SAVER
+						replay_actions=getattr(self, 'replay_actions', []),
 						game_mode=self.game_mode,
 						white_player=w_player,
 						black_player=b_player,

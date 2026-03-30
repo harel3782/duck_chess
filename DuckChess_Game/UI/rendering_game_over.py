@@ -6,6 +6,10 @@ class GameOverRenderingMixin:
 
 	def draw_game_over_ui(self):
 		"""Renders a frosted glass modal with the match results and action buttons."""
+		# --- Don't show Game Over screen during replays ---
+		if getattr(self, 'game_mode', '') == 'replay':
+			return
+
 		is_live = getattr(self, 'view_index', -1) == len(getattr(self, 'history', [])) - 1
 		if not getattr(self, 'game_over', False) or not is_live: 
 			return
