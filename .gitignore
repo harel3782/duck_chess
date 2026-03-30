@@ -7,7 +7,34 @@ build/
 
 # ML Data - DO NOT TRACK IN GIT
 *.pkl
-DuckChess_Game/SBThree/saved_replays/
 
 # Ignored text files
 duck_chess_full_code.txt
+
+#	Python cache files
+__pycache__/
+*.py[cod]
+*$py.class
+
+#	Virtual environments
+.venv/
+venv/
+env/
+
+#	IDE and OS files
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+#	Project logs and trained models
+tensorboard_logs.zip
+
+
+#	Weights & Biases local files
+wandb/
+debug-cli.*.log
+*.log
+
+#	Qodana / Scanning tools
+.qodana/

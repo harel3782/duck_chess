@@ -84,10 +84,21 @@ class HUDRenderingMixin:
 		self.draw_glass_panel(hud)
 
 		is_live = (self.view_index == len(self.history) - 1)
+		
+		# --- ההיגיון החדש לתצוגת הסטטוס ---
 		if getattr(self, 'game_over', False):
 			status, col = ("GAME OVER", TEXT_COLOR)
-		elif not is_live: status, col = "VIEWING HISTORY", (200, 200, 255)
-		else: status, col = f"{'WHITE' if self.turn == 'w' else 'BLACK'} TO {self.phase.replace('_', ' ').upper()}", (220, 220, 220)
+		elif not is_live:
+			# אם אנחנו בריפליי ויש לנו מידע על הצבעים
+			if getattr(self, 'game_mode', '') == 'replay' and hasattr(self, 'replay_learning_color') and self.replay_learning_color in ['w', 'b']:
+				w_name = "Learner" if self.replay_learning_color == 'w' else "Opponent"
+				b_name = "Learner" if self.replay_learning_color == 'b' else "Opponent"
+				status = f"REPLAY: White ({w_name}) vs Black ({b_name})"
+			else:
+				status = "VIEWING HISTORY"
+			col = (200, 200, 255)
+		else: 
+			status, col = f"{'WHITE' if self.turn == 'w' else 'BLACK'} TO {self.phase.replace('_', ' ').upper()}", (220, 220, 220)
 
 		self.screen.blit(FONT_STATUS.render(status, True, col), (40, self.screen_h - 50))
 

@@ -80,6 +80,9 @@ class HistoryManagerMixin:
 
 		self.reset_game_state()
 		self.game_mode, self.state = 'replay', 'game'
+		
+		# --- קריאת מידע על השחקנים ---
+		self.replay_learning_color = game_data.get('learning_color', 'unknown')
 
 		for act in actions:
 			(sr, sc), (er, ec) = getattr(self, '_decode_move')(act)
