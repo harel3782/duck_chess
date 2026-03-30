@@ -87,6 +87,11 @@ class HistoryManagerMixin:
 				self.reset_game_state()
 				self.game_mode, self.state = 'replay', 'game'
 				
+				# --- Extract player names for HUD ---
+				players = game_data.get('players', {})
+				self.replay_white_name = players.get('white', 'Unknown')
+				self.replay_black_name = players.get('black', 'Unknown')
+				
 				for act in actions:
 					if act['type'] == 'piece':
 						self.execute_move(tuple(act['start']), tuple(act['end']), animated=False)

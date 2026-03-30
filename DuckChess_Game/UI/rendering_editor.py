@@ -55,10 +55,13 @@ class EditorRenderingMixin:
 		self.screen.blit(self.font_status.render("EDITOR: Ready" if valid else "EDITOR MODE", True, (50, 200, 50) if valid else (200, 50, 50)), (40, self.screen_h - 50))
 
 		self.editor_turn_btn = pygame.Rect(self.screen_w - 560, self.screen_h - 58, 140, 36)
-		pygame.draw.rect(self.screen, EVAL_WHITE if self.turn == 'w' else EVAL_BLACK, self.editor_turn_btn, border_radius=6)
-		pygame.draw.rect(self.screen, BTN_BORDER, self.editor_turn_btn, width=1, border_radius=6)
-		t_surf = self.font_ui.render("Turn: WHITE" if self.turn == 'w' else "Turn: BLACK", True, (0,0,0) if self.turn == 'w' else (255,255,255))
-		self.screen.blit(t_surf, t_surf.get_rect(center=self.editor_turn_btn.center))
+		turn_txt = "Turn: WHITE" if self.turn == 'w' else "Turn: BLACK"
+		
+		# Now using the standard premium HUD button format
+		if hasattr(self, 'draw_hud_button'):
+			self.draw_hud_button(self.editor_turn_btn, turn_txt, self.editor_turn_btn.collidepoint(mouse))
+		else:
+			self.draw_styled_button(self.editor_turn_btn, turn_txt, self.editor_turn_btn.collidepoint(mouse))
 
 		for lbl, btn in [("MENU", self.editor_menu_btn), ("CLEAR", self.editor_clear_btn), ("PLAY", self.editor_play_btn)]:
 			btn.update(self.screen_w - {"MENU":410, "CLEAR":280, "PLAY":150}[lbl], self.screen_h - 58, 120, 36)

@@ -84,19 +84,27 @@ class HUDRenderingMixin:
 		self.draw_glass_panel(hud)
 
 		is_live = (self.view_index == len(self.history) - 1)
+		is_replay = (getattr(self, 'game_mode', '') == 'replay')
 		
-		# --- ההיגיון החדש לתצוגת הסטטוס ---
-		if getattr(self, 'game_over', False):
-			status, col = ("GAME OVER", TEXT_COLOR)
-		elif not is_live:
-			# אם אנחנו בריפליי ויש לנו מידע על הצבעים
-			if getattr(self, 'game_mode', '') == 'replay' and hasattr(self, 'replay_learning_color') and self.replay_learning_color in ['w', 'b']:
+		# --- Status logic ---
+		if is_replay:
+			if hasattr(self, 'replay_white_name') and hasattr(self, 'replay_black_name'):
+				status = f"REPLAY: {self.replay_white_name} (W) vs {self.replay_black_name} (B)"
+			elif hasattr(self, 'replay_learning_color') and self.replay_learning_color in ['w', 'b']:
 				w_name = "Learner" if self.replay_learning_color == 'w' else "Opponent"
 				b_name = "Learner" if self.replay_learning_color == 'b' else "Opponent"
 				status = f"REPLAY: White ({w_name}) vs Black ({b_name})"
 			else:
-				status = "VIEWING HISTORY"
+				status = "VIEWING REPLAY"
+				
+			if not is_live:
+				status += " (History)"
 			col = (200, 200, 255)
+			
+		elif getattr(self, 'game_over', False):
+			status, col = ("GAME OVER", TEXT_COLOR)
+		elif not is_live:
+			status, col = ("VIEWING HISTORY", (200, 200, 255))
 		else: 
 			status, col = f"{'WHITE' if self.turn == 'w' else 'BLACK'} TO {self.phase.replace('_', ' ').upper()}", (220, 220, 220)
 
@@ -105,7 +113,10 @@ class HUDRenderingMixin:
 		mouse = pygame.mouse.get_pos()
 		eval_txt = "Hide Eval" if getattr(self, 'show_eval', True) else "Show Eval"
 		btns = [("Menu", self.menu_btn_rect), (eval_txt, self.eval_btn_rect), ("Reset", self.restart_btn_rect)]
-		if getattr(self, 'game_mode', '') == 'pvp': btns.insert(1, ("Flip", self.flip_btn_rect))
+		
+		# --- Added 'replay' to the condition so Flip shows up ---
+		if getattr(self, 'game_mode', '') in ['pvp', 'replay']: 
+			btns.insert(1, ("Flip", self.flip_btn_rect))
 
 		btn_w, btn_h, spacing = 95, 36, 12
 		start_x = hud.right - (btn_w + spacing) * len(btns) - 15
