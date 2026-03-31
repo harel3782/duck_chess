@@ -63,5 +63,5 @@ The AI is trained progressively to master the chaos of Duck Chess:
 
 ### 📷 Screenshots
 
-<img src="game_play.png" alt="Duck Chess Gameplay" width="800">
+<img src="game_play2.png" alt="Duck Chess Gameplay" width="800">
 <img src="menu.png" alt="Duck Chess Gameplay" width="800">
