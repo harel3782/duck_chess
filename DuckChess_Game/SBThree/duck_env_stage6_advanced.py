@@ -16,10 +16,10 @@ class HeadlessEngine(GameLogicMixin):
 		self.game_mode = 'rl_training' 
 		self.reset_game_state()
 
-class DuckChessEnvStage5(gym.Env):
-	"""Stage 5 Environment: Focuses on Strategic Duck Placement and Threat Reduction."""
+class DuckChessEnvStage6(gym.Env):
+	"""Stage 6 Environment: Strategic Duck Placement, Threat Reduction, and Time Penalties."""
 	def __init__(self, render_mode=None):
-		super(DuckChessEnvStage5, self).__init__()
+		super(DuckChessEnvStage6, self).__init__()
 		self.action_space = spaces.Discrete(4096) 
 		self.observation_space = spaces.Box(low=0.0, high=1.0, shape=(19, 8, 8), dtype=np.float32)
 		self.render_mode = render_mode
@@ -32,9 +32,10 @@ class DuckChessEnvStage5(gym.Env):
 		self.learning_color = 'w'
 		self.opponent_color = 'b'
 		
-		# Strategic Scaling Factors
-		self.material_scale = 0.15
-		self.defense_bonus = 0.03 # Reward for each threat blocked by the duck
+		# Scaling Factors
+		self.material_scale = 0.05
+		self.defense_bonus = 0.03 
+		self.step_penalty = -0.005 # Penalty to encourage faster wins
 		self.checker = RulesChecker()
 
 	def set_opponent(self, model_path):
@@ -55,13 +56,13 @@ class DuckChessEnvStage5(gym.Env):
 			for c in range(8):
 				p = board[r][c]
 				if p and p.color == color:
-					# We use a trick: temporarily treat the piece as a King 
-					# to see if it's attacked using the existing is_in_check logic.
+					# Temporarily treat the piece as a King to see if it's attacked
 					if self.checker.is_in_check(color, board, duck):
 						threats += 1
 		return threats
 
 	def reset(self, seed=None, options=None):
+		"""Resets the environment and assigns colors."""
 		super().reset(seed=seed)
 		self.engine.reset_game_state()
 		self.current_episode_actions = []
@@ -76,32 +77,26 @@ class DuckChessEnvStage5(gym.Env):
 		return self.engine._get_obs()
 
 	def action_masks(self):
-		"""Generates the valid action mask, FORCING king captures if available."""
+		"""Generates the valid action mask, forcing king captures if available."""
 		masks = self.engine.action_masks()
 		
-		# If no moves are available at all, return the fail-safe
 		if not np.any(masks):
 			masks[0] = True
 			return masks
 
-		# Only check for forced captures during the piece movement phase
 		if getattr(self.engine, 'phase', '') == 'move_piece':
 			forced_capture_mask = np.zeros(4096, dtype=bool)
 			found_king_capture = False
-			
 			board = self.engine.board
 			
-			# Scan the generated mask to find any move that lands on the enemy King
 			for action in np.where(masks)[0]:
 				start, end = self.engine._decode_move(action)
 				target_piece = board[end[0]][end[1]]
 				
-				# If this valid move targets the enemy King, it's a winning move!
 				if target_piece and target_piece.type == KING and target_piece.color != self.engine.turn:
 					forced_capture_mask[action] = True
 					found_king_capture = True
 					
-			# If we found a way to win instantly, ONLY allow those winning moves
 			if found_king_capture:
 				return forced_capture_mask
 
@@ -160,9 +155,9 @@ class DuckChessEnvStage5(gym.Env):
 			self._apply_action(action)
 			self.current_episode_actions.append(int(action))
 
-			# 3. If a full turn cycle is complete, let opponent play and check results
+			# 3. Complete turn cycle and opponent play
 			duck_bonus = 0
-			if self.engine.phase == 'move_piece': # We just finished placing a duck
+			if self.engine.phase == 'move_piece':
 				threats_after = self._count_threats(self.learning_color)
 				if threats_before > threats_after:
 					duck_bonus = (threats_before - threats_after) * self.defense_bonus
@@ -177,12 +172,15 @@ class DuckChessEnvStage5(gym.Env):
 			else:
 				material_diff = old_material - new_material
 
-			reward = (material_diff * self.material_scale) + duck_bonus
+			# Combine components: Material + Defense Bonus + Step Penalty
+			reward = (material_diff * self.material_scale) + duck_bonus + self.step_penalty
 			terminated = getattr(self.engine, 'game_over', False)
 			
 			if terminated:
-				if self.engine.winner == self.learning_color: reward += 1.0
-				elif self.engine.winner == self.opponent_color: reward -= 1.0
+				if self.engine.winner == self.learning_color:
+					reward += 1.0
+				elif self.engine.winner == self.opponent_color:
+					reward -= 1.0
 
 			if terminated and self.episode_counter % 1000 == 0:
 				self._save_replay("periodic_sample")
@@ -192,3 +190,6 @@ class DuckChessEnvStage5(gym.Env):
 		except Exception as e:
 			self._save_replay(f"CRASH_{type(e).__name__}")
 			raise e
+
+	def render(self): pass
+	def close(self): pass
