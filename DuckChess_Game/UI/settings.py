@@ -3,9 +3,10 @@ import os
 
 # --- Visual Assets ---
 def get_asset_path(filename):
-	"""Resolves absolute paths for external assets."""
+	"""Resolves absolute paths for external assets from the root assets directory."""
 	current_file_dir = os.path.dirname(os.path.abspath(__file__))
-	assets_dir = os.path.normpath(os.path.join(current_file_dir, "..", "assets"))
+	# Navigate up twice: UI -> DuckChess_Game -> Root, then into assets
+	assets_dir = os.path.normpath(os.path.join(current_file_dir, "..", "..", "assets"))
 	return os.path.join(assets_dir, filename)
 
 # --- Premium Walnut & Clean UI Palette ---
