@@ -1,6 +1,6 @@
 # 🦆 Duck Chess - AI Engine & UI
 
-**A complete Game Environment and Reinforcement Learning Agent for the "Duck Chess" variant.**
+**A Developing Environment and Reinforcement Learning Agent for the "Duck Chess" variant.**
 
 > 🎓 **B.Sc. Final Project in Computer Science @ Afeka College of Engineering**
 
@@ -64,3 +64,4 @@ The AI is trained progressively to master the chaos of Duck Chess:
 ### 📷 Screenshots
 
 <img src="game_play.png" alt="Duck Chess Gameplay" width="800">
+<img src="menu.png" alt="Duck Chess Gameplay" width="800">
