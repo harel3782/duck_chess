@@ -28,7 +28,7 @@ class DuckChess(GameLogicMixin, RenderingMixin, InputHandlerMixin, AssetManagerM
 		self.init_ai()
 
 		self.rl_model = None
-		model_path = "models/duck_ppo/stage6_strategic_v107.zip"
+		model_path = "models/duck_ppo/stage7_robust_v167.zip"
 		if os.path.exists(model_path):
 			print(f"[+] Loading RL Model for AI moves: {model_path}")
 			self.rl_model = MaskablePPO.load(model_path, device="cpu")

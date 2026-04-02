@@ -4,12 +4,12 @@ import random
 import torch
 from stable_baselines3 import PPO
 from sb3_contrib import MaskablePPO
-from stable_baselines3.common.callbacks import CheckpointCallback, BaseCallback
+from stable_baselines3.common.callbacks import BaseCallback
 
 # Disable PyTorch strict validation to prevent float32 Simplex() crashes
 torch.distributions.Distribution.set_default_validate_args(False)
 
-from DuckChess_Game.SBThree.duck_env_stage7_robust import DuckChessEnvStage7
+from DuckChess_Game.SBThree.duck_env_stage8_positional import DuckChessEnvStage8
 
 class PoolOpponentCallback(BaseCallback):
 	"""Randomly selects an opponent from the history pool to prevent overfitting."""
@@ -20,11 +20,12 @@ class PoolOpponentCallback(BaseCallback):
 
 	def _on_step(self) -> bool:
 		if self.num_timesteps % self.update_freq == 0:
-			stage7_dir = os.path.join("models", "duck_ppo", "stage 7")
-			current_path = os.path.join(stage7_dir, f"stage7_robust_v{self.num_timesteps // self.update_freq}.zip")
+			# Save the current model to the stage 8 directory
+			stage8_dir = os.path.join("models", "duck_ppo", "stage 8")
+			current_path = os.path.join(stage8_dir, f"stage8_positional_v{self.num_timesteps // self.update_freq}.zip")
 			self.model.save(current_path)
 			
-			# Pick a random historical model from ANY stage directory
+			# Pick a random historical model from ANY stage directory to act as the opponent
 			all_models = glob.glob(os.path.join("models", "duck_ppo", "stage *", "*.zip"))
 			if all_models:
 				chosen_opponent = random.choice(all_models)
@@ -38,18 +39,19 @@ def get_latest_model(model_dir, prefix):
 	models = glob.glob(os.path.join(model_dir, f"{prefix}_v*.zip"))
 	if not models:
 		return None
+	# Extract the version number to find the absolute latest
 	latest_model = max(models, key=lambda p: int(p.split('_v')[-1].split('.zip')[0]))
 	return latest_model
 
-def train_stage7(total_timesteps=3_000_000):
-	"""Stage 7: Robustness Training against an Opponent Pool."""
-	env = DuckChessEnvStage7()
+def train_stage8(total_timesteps=3_000_000):
+	"""Stage 8: Positional Mastery Training against an Opponent Pool."""
+	env = DuckChessEnvStage8()
 	
 	base_models_dir = os.path.join("models", "duck_ppo")
+	stage8_dir = os.path.join(base_models_dir, "stage 8")
 	stage7_dir = os.path.join(base_models_dir, "stage 7")
-	stage6_dir = os.path.join(base_models_dir, "stage 6")
 	
-	os.makedirs(stage7_dir, exist_ok=True)
+	os.makedirs(stage8_dir, exist_ok=True)
 	
 	custom_objects = {
 		"learning_rate": 1e-5,
@@ -57,44 +59,49 @@ def train_stage7(total_timesteps=3_000_000):
 		"clip_range": 0.15
 	}
 	
-	latest_stage7 = get_latest_model(stage7_dir, "stage7_robust")
+	# Try to resume Stage 8 if it was already started
+	latest_stage8 = get_latest_model(stage8_dir, "stage8_positional")
 	
-	if latest_stage7:
-		print(f"Resuming Stage 7 from: {latest_stage7}")
+	if latest_stage8:
+		print(f"Resuming Stage 8 from: {latest_stage8}")
 		model = MaskablePPO.load(
-			latest_stage7, 
+			latest_stage8, 
 			env=env, 
-			tensorboard_log="./tensorboard_logs/Stage7_Combined/",
+			tensorboard_log="./tensorboard_logs/Stage8_Combined/",
 			custom_objects=custom_objects
 		)
-		env.set_opponent(latest_stage7)
+		env.set_opponent(latest_stage8)
 	else:
-		base_model = os.path.join(stage6_dir, "stage6_advanced_latest.zip")
+		# Start fresh from the best Stage 7 model
+		base_model = os.path.join(stage7_dir, "stage7_robust_latest.zip")
 		if not os.path.exists(base_model):
-			print(f"Error: Base model {base_model} not found!")
+			print(f"Error: Base model {base_model} not found! Please check the path.")
 			return
 			
-		print(f"Loading Stage 6 model ({base_model}) to start Robustness training...")
+		print(f"Loading Stage 7 model ({base_model}) to start Positional Mastery training...")
 		model = MaskablePPO.load(
 			base_model, 
 			env=env, 
-			tensorboard_log="./tensorboard_logs/Stage7_Combined/", 
+			tensorboard_log="./tensorboard_logs/Stage8_Combined/", 
 			custom_objects=custom_objects
 		)
 		env.set_opponent(base_model)
 	
+	# Use the Opponent Pool Callback
 	pool_callback = PoolOpponentCallback(env.unwrapped, update_freq=50000, verbose=1)
 	
-	print(f"Starting Stage 7 Training for {total_timesteps} timesteps...")
+	print(f"Starting Stage 8 Training for {total_timesteps} timesteps...")
 	model.learn(
 		total_timesteps=total_timesteps, 
 		reset_num_timesteps=False, 
-		tb_log_name="run_stage7_robust",
+		tb_log_name="run_stage8_positional",
 		callback=pool_callback
 	)
 	
-	model.save(os.path.join(stage7_dir, "stage7_robust_latest"))
-	print("Stage 7 Training Complete.")
+	# Save the final result
+	model.save(os.path.join(stage8_dir, "stage8_positional_latest"))
+	print("Stage 8 Training Complete.")
 
 if __name__ == "__main__":
-	train_stage7(total_timesteps=3_000_000)
+	# Start the Stage 8 training
+	train_stage8(total_timesteps=3_000_000)
