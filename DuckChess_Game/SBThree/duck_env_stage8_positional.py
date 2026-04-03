@@ -34,10 +34,11 @@ class DuckChessEnvStage8(gym.Env):
 		
 		# Strategic Scaling Factors
 		self.material_scale = 0.05
-		self.loss_penalty_multiplier = 1.5  # Losing a piece hurts 1.5x more than capturing
+		self.loss_penalty_multiplier = 1.5	# Losing a piece hurts 1.5x more than capturing
 		self.castling_bonus = 0.2
 		self.development_bonus = 0.05
 		self.defense_bonus = 0.03
+		self.duck_blocking_scale = 0.015	# Reward scale for reducing opponent mobility
 		self.step_penalty = -0.005
 		self.checker = RulesChecker()
 
@@ -61,6 +62,17 @@ class DuckChessEnvStage8(gym.Env):
 					if self.checker.is_in_check(color, board, duck):
 						threats += 1
 		return threats
+
+	def _calculate_mobility(self, color):
+		"""Calculates the total number of legal moves available to a specific color."""
+		mobility = 0
+		for r in range(8):
+			for c in range(8):
+				p = self.engine.board[r][c]
+				if p and p.color == color:
+					moves = self.engine.get_piece_legal_moves(r, c)
+					mobility += len(moves)
+		return mobility
 
 	def reset(self, seed=None, options=None):
 		super().reset(seed=seed)
@@ -182,6 +194,11 @@ class DuckChessEnvStage8(gym.Env):
 			threats_before = self._count_threats(self.learning_color)
 			old_material = self.engine.calculate_material_score(self.engine.board)
 
+			# Track opponent mobility BEFORE the duck is placed
+			opp_mobility_before = 0
+			if self.engine.phase == 'move_duck':
+				opp_mobility_before = self._calculate_mobility(self.opponent_color)
+
 			# Check positional moves before applying the action
 			pos_bonus = 0
 			if self.engine.phase == 'move_piece':
@@ -202,10 +219,17 @@ class DuckChessEnvStage8(gym.Env):
 			self.current_episode_actions.append(int(action))
 
 			duck_bonus = 0
+			blocking_bonus = 0
+
 			if self.engine.phase == 'move_piece':
 				threats_after = self._count_threats(self.learning_color)
 				if threats_before > threats_after:
 					duck_bonus = (threats_before - threats_after) * self.defense_bonus
+
+				# Calculate mobility reduction caused by the new duck placement
+				opp_mobility_after = self._calculate_mobility(self.opponent_color)
+				if opp_mobility_before > opp_mobility_after:
+					blocking_bonus = (opp_mobility_before - opp_mobility_after) * self.duck_blocking_scale
 				
 				if not getattr(self.engine, 'game_over', False):
 					self._play_opponent_turn()
@@ -223,7 +247,8 @@ class DuckChessEnvStage8(gym.Env):
 			else:
 				material_reward = material_diff * self.material_scale
 
-			reward = material_reward + duck_bonus + pos_bonus + self.step_penalty
+			# Integrate the new blocking_bonus into the final reward step
+			reward = material_reward + duck_bonus + pos_bonus + blocking_bonus + self.step_penalty
 			terminated = getattr(self.engine, 'game_over', False)
 			
 			if terminated:
