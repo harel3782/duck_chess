@@ -9,10 +9,10 @@ from stable_baselines3.common.callbacks import BaseCallback
 # Disable PyTorch strict validation to prevent float32 Simplex() crashes
 torch.distributions.Distribution.set_default_validate_args(False)
 
-from DuckChess_Game.SBThree.duck_env_stage8_positional import DuckChessEnvStage8
+from DuckChess_Game.SBThree.duck_env_stage9_selfplay import DuckChessEnvStage9
 
-class PoolOpponentCallback(BaseCallback):
-	"""Randomly selects an opponent from the history pool to prevent overfitting."""
+class StrictSelfPlayCallback(BaseCallback):
+	"""Updates the opponent to always be the absolute latest saved model."""
 	def __init__(self, env, update_freq=50000, verbose=0):
 		super().__init__(verbose)
 		self.env = env
@@ -20,18 +20,18 @@ class PoolOpponentCallback(BaseCallback):
 
 	def _on_step(self) -> bool:
 		if self.num_timesteps % self.update_freq == 0:
-			# Save the current model to the stage 8 directory
-			stage8_dir = os.path.join("models", "duck_ppo", "stage 8")
-			current_path = os.path.join(stage8_dir, f"stage8_positional_v{self.num_timesteps // self.update_freq}.zip")
+			# Save the current model to the stage 9 directory
+			stage9_dir = os.path.join("models", "duck_ppo", "stage 9")
+			os.makedirs(stage9_dir, exist_ok=True)
+			
+			current_path = os.path.join(stage9_dir, f"stage9_selfplay_v{self.num_timesteps // self.update_freq}.zip")
 			self.model.save(current_path)
 			
-			# Pick a random historical model from ANY stage directory to act as the opponent
-			all_models = glob.glob(os.path.join("models", "duck_ppo", "stage *", "*.zip"))
-			if all_models:
-				chosen_opponent = random.choice(all_models)
-				self.env.set_opponent(chosen_opponent)
-				if self.verbose > 0:
-					print(f"[{self.num_timesteps}] Opponent swapped to historical version: {os.path.basename(chosen_opponent)}")
+			# Immediately load this newly saved model as the opponent
+			self.env.set_opponent(current_path)
+			
+			if self.verbose > 0:
+				print(f"[{self.num_timesteps}] Opponent updated to the absolute latest version: {os.path.basename(current_path)}")
 		return True
 
 def get_latest_model(model_dir, prefix):
@@ -39,19 +39,18 @@ def get_latest_model(model_dir, prefix):
 	models = glob.glob(os.path.join(model_dir, f"{prefix}_v*.zip"))
 	if not models:
 		return None
-	# Extract the version number to find the absolute latest
 	latest_model = max(models, key=lambda p: int(p.split('_v')[-1].split('.zip')[0]))
 	return latest_model
 
-def train_stage8(total_timesteps=3_000_000):
-	"""Stage 8: Positional Mastery Training against an Opponent Pool."""
-	env = DuckChessEnvStage8()
+def train_stage9(total_timesteps=3_000_000):
+	"""Stage 9: Pure Self-Play Training."""
+	env = DuckChessEnvStage9()
 	
 	base_models_dir = os.path.join("models", "duck_ppo")
+	stage9_dir = os.path.join(base_models_dir, "stage 9")
 	stage8_dir = os.path.join(base_models_dir, "stage 8")
-	stage7_dir = os.path.join(base_models_dir, "stage 7")
 	
-	os.makedirs(stage8_dir, exist_ok=True)
+	os.makedirs(stage9_dir, exist_ok=True)
 	
 	custom_objects = {
 		"learning_rate": 1e-5,
@@ -59,49 +58,49 @@ def train_stage8(total_timesteps=3_000_000):
 		"clip_range": 0.15
 	}
 	
-	# Try to resume Stage 8 if it was already started
-	latest_stage8 = get_latest_model(stage8_dir, "stage8_positional")
+	latest_stage9 = get_latest_model(stage9_dir, "stage9_selfplay")
 	
-	if latest_stage8:
-		print(f"Resuming Stage 8 from: {latest_stage8}")
+	if latest_stage9:
+		print(f"Resuming Stage 9 from: {latest_stage9}")
 		model = MaskablePPO.load(
-			latest_stage8, 
+			latest_stage9, 
 			env=env, 
-			tensorboard_log="./tensorboard_logs/Stage8_Combined/",
+			tensorboard_log="./tensorboard_logs/Stage9_Combined/",
 			custom_objects=custom_objects
 		)
-		env.set_opponent(latest_stage8)
+		env.set_opponent(latest_stage9)
 	else:
-		# Start fresh from the best Stage 7 model
-		base_model = os.path.join(stage7_dir, "stage7_robust_latest.zip")
-		if not os.path.exists(base_model):
-			print(f"Error: Base model {base_model} not found! Please check the path.")
-			return
-			
-		print(f"Loading Stage 7 model ({base_model}) to start Positional Mastery training...")
+		# Start fresh from the best Stage 8 model
+		base_model = get_latest_model(stage8_dir, "stage8_positional")
+		if not base_model or not os.path.exists(base_model):
+			# Fallback to the latest explicit zip if dynamic search fails
+			base_model = os.path.join(stage8_dir, "stage8_positional_latest.zip")
+			if not os.path.exists(base_model):
+				print(f"Error: Base model {base_model} not found! Please check the path.")
+				return
+				
+		print(f"Loading Stage 8 model ({base_model}) to start Pure Self-Play training...")
 		model = MaskablePPO.load(
 			base_model, 
 			env=env, 
-			tensorboard_log="./tensorboard_logs/Stage8_Combined/", 
+			tensorboard_log="./tensorboard_logs/Stage9_Combined/", 
 			custom_objects=custom_objects
 		)
 		env.set_opponent(base_model)
 	
-	# Use the Opponent Pool Callback
-	pool_callback = PoolOpponentCallback(env.unwrapped, update_freq=50000, verbose=1)
+	# Use the Strict Self-Play Callback
+	sp_callback = StrictSelfPlayCallback(env.unwrapped, update_freq=50000, verbose=1)
 	
-	print(f"Starting Stage 8 Training for {total_timesteps} timesteps...")
+	print(f"Starting Stage 9 Training for {total_timesteps} timesteps...")
 	model.learn(
 		total_timesteps=total_timesteps, 
 		reset_num_timesteps=False, 
-		tb_log_name="run_stage8_positional",
-		callback=pool_callback
+		tb_log_name="run_stage9_selfplay",
+		callback=sp_callback
 	)
 	
-	# Save the final result
-	model.save(os.path.join(stage8_dir, "stage8_positional_latest"))
-	print("Stage 8 Training Complete.")
+	model.save(os.path.join(stage9_dir, "stage9_selfplay_latest"))
+	print("Stage 9 Training Complete.")
 
 if __name__ == "__main__":
-	# Start the Stage 8 training
-	train_stage8(total_timesteps=3_000_000)
+	train_stage9(total_timesteps=3_000_000)
