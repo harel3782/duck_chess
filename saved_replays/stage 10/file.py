@@ -37,6 +37,4 @@ def analyze_replay(filepath):
 	print("-" * 40 + "\n")
 
 # Process the three latest replay files
-analyze_replay("periodic_sample_ep59000_1774963574.pkl")
-analyze_replay("periodic_sample_ep60000_1774963847.pkl")
-analyze_replay("periodic_sample_ep61000_1774964122.pkl")
+analyze_replay("periodic_ep4000_1775424129_9f8795.pkl")
