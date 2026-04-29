@@ -1,60 +1,56 @@
-🦆 Duck Chess - RL Engine & UI
-Pure Python Reinforcement Learning Engine for the "Duck Chess" variant.
+# 🦆 Duck Chess - UI Implementation
 
-⚠️ State: Full RL engine operational. C++ dependencies eliminated. Project built entirely in Python. Final Project for B.Sc. Software Engineering.
+**A Python-based graphical interface for the "Duck Chess" variant.**
 
-📖 Project Core
-Duck Chess variant constraints: Players execute standard move, then relocate neutral Duck to empty square. Duck blocks line of sight.
-System trains MaskablePPO agent via dynamic self-play league and Alpha-Beta opponent punishing.
+> ⚠️ **Note:** This repository currently focuses on the **User Interface (UI)** and game rules implementation. It serves as the foundation for my upcoming B.Sc. Final Project, where I will develop and integrate a custom C++ Chess Engine using Reinforcement Learning.
 
-🛠️ Tech Stack
-Language: Python 3.11 / 3.12 (Python 3.13 unsupported due to PyTorch memory faults).
+---
 
-Algorithm: MaskablePPO (sb3-contrib, stable-baselines3).
+### 📖 About the Project
 
-Matrix Engine: PyTorch, Numpy.
+**Duck Chess** is a chess variant where, in addition to moving a piece, players must move a "Duck" (a neutral blocker piece) to an empty square. The Duck cannot be captured and blocks lines of sight for sliding pieces.
 
-Environment Wrapper: Gymnasium.
+This project implements the full rules of the game and provides a graphical environment to play it manually. It is built to communicate with a future backend engine via standard protocols (like UCI or custom pipes).
 
-Evaluation Interface: Playwright (Chromium web scraping).
+### 🛠️ Tech Stack
 
-✨ Architecture & Logic
-Observation Space: Box(19, 8, 8, dtype=float32). 19 Bitboards mapping pieces, duck location, and legal action masks.
+* **Language:** Python 3.10+
+* **Graphics:** Pygame
+* **Future Integration:** C++ (for the Engine/AI)
 
-Action Space: Discrete(4096). Single integer output. Engine translates integer to (start_row, start_col) and (end_row, end_col).
+### ✨ Features
 
-Training Mechanics:
+* **Full Rules Implementation:** Legal move generation including Duck placement, castling, and en passant.
+* **Interactive UI:** Drag-and-drop mechanics for pieces and the Duck.
+* **Visual Validations:** Highlights legal moves and prevents illegal placements.
+* **Modular Design:** Separated logic for the Board, Pieces, and Graphics to easily plug in an AI engine later
 
-Multiprocessing parallelization via SubprocVecEnv bypassing GIL.
+### 🚀 Roadmap (Final Project Goals)
 
-Chief Worker topology to isolate I/O operations and .pkl generation.
+This UI is the first step towards a complete Chess Engine. The next phases include:
+1.  **Engine Development:** Writing a high-performance Move Generator in **C++**.
+2.  **AI Implementation:** Implementing Minimax with Alpha-Beta pruning, and exploring **Reinforcement Learning** for evaluation functions.
+3.  **Integration:** Connecting this Python UI with the C++ Engine executable.
 
-League Self-Play: Agent trains against dynamic pool of historical model snapshots (Stage 10).
+---
 
-Sparse Rewards: +1.0 Win, -1.0 Loss. Zero intermediate rewards. Forces pure checkmate-driven logic (Stage 11).
+### 💻 How to Run
 
-Alpha-Beta Punisher: 30% opponent pool utilizes Depth 1 greedy search to punish undefended material.
+1.  Clone the repository:
+    ```bash
+    git clone [https://github.com/harel3782/YOUR_REPO_NAME.git](https://github.com/harel3782/YOUR_REPO_NAME.git)
+    ```
+2.  Install dependencies:
+    ```bash
+    pip install pygame
+    ```
+3.  Run the game:
+    ```bash
+    python main.py
+    ```
 
-🚀 Run Instructions
-Clone repository:
+---
 
-Bash
-	git clone https://github.com/harel3782/YOUR_REPO_NAME.git
-Initialize virtual environment (Python 3.11 or 3.12 required):
+### 📷 Screenshots
 
-Bash
-	py -3.12 -m venv .venv
-	.\.venv\Scripts\activate
-Install dependencies:
-
-Bash
-	pip install torch stable-baselines3 sb3-contrib pygame playwright tensorboard
-	playwright install
-Execute training protocol:
-
-Bash
-	python -m DuckChess_Game.SBThree.train
-Execute Playwright UI evaluation:
-
-Bash
-	python -m DuckChess_Game.playwright.eval_vs_peter
+<img src="game_play.png">
