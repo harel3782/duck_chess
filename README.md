@@ -1,56 +1,26 @@
-# 🦆 Duck Chess - UI Implementation
+# Duck Chess AI 🦆
 
-**A Python-based graphical interface for the "Duck Chess" variant.**
+A comprehensive Duck Chess engine and user interface developed as a Computer Science final project.
 
-> ⚠️ **Note:** This repository currently focuses on the **User Interface (UI)** and game rules implementation. It serves as the foundation for my upcoming B.Sc. Final Project, where I will develop and integrate a custom C++ Chess Engine using Reinforcement Learning.
+## Overview
+Duck Chess is a strategic variant where a "duck" piece acts as a dynamic obstacle. This project features a full game engine, a graphical user interface, and an AI agent trained via Reinforcement Learning.
 
----
+## Core Features
+*	**Engine (Pure Python):** High-performance game logic for move generation and duck placement.
+*	**Variant Logic:** Full implementation of Duck Chess rules (Capture the King, Blocking Mechanics).
+*	**Graphical UI:** Interactive board rendering with real-time move validation and state updates.
 
-### 📖 About the Project
+## AI & Reinforcement Learning
+The AI is developed using **Stable Baselines3** to master the unique positioning strategies of Duck Chess.
 
-**Duck Chess** is a chess variant where, in addition to moving a piece, players must move a "Duck" (a neutral blocker piece) to an empty square. The Duck cannot be captured and blocks lines of sight for sliding pieces.
+### Training Progress
+1.	**Environment Design:** Developed a custom environment compatible with RL frameworks.
+2.	**State Representation:** Formulated multi-layered feature maps to represent board occupancy and duck position.
+3.	**Action Masking:** Integrated strict action masks to ensure valid move selection during training.
+4.	**Reward Shaping:** Designed and refined reward functions to optimize piece coordination and defensive duck placement.
+5.	**Baseline Training:** Completed initial training iterations to establish a performance foundation.
 
-This project implements the full rules of the game and provides a graphical environment to play it manually. It is built to communicate with a future backend engine via standard protocols (like UCI or custom pipes).
-
-### 🛠️ Tech Stack
-
-* **Language:** Python 3.10+
-* **Graphics:** Pygame
-* **Future Integration:** C++ (for the Engine/AI)
-
-### ✨ Features
-
-* **Full Rules Implementation:** Legal move generation including Duck placement, castling, and en passant.
-* **Interactive UI:** Drag-and-drop mechanics for pieces and the Duck.
-* **Visual Validations:** Highlights legal moves and prevents illegal placements.
-* **Modular Design:** Separated logic for the Board, Pieces, and Graphics to easily plug in an AI engine later
-
-### 🚀 Roadmap (Final Project Goals)
-
-This UI is the first step towards a complete Chess Engine. The next phases include:
-1.  **Engine Development:** Writing a high-performance Move Generator in **C++**.
-2.  **AI Implementation:** Implementing Minimax with Alpha-Beta pruning, and exploring **Reinforcement Learning** for evaluation functions.
-3.  **Integration:** Connecting this Python UI with the C++ Engine executable.
-
----
-
-### 💻 How to Run
-
-1.  Clone the repository:
-    ```bash
-    git clone [https://github.com/harel3782/YOUR_REPO_NAME.git](https://github.com/harel3782/YOUR_REPO_NAME.git)
-    ```
-2.  Install dependencies:
-    ```bash
-    pip install pygame
-    ```
-3.  Run the game:
-    ```bash
-    python main.py
-    ```
-
----
-
-### 📷 Screenshots
-
-<img src="game_play.png">
+## Tech Stack
+*	**Language:** Python
+*	**AI Framework:** Stable Baselines3
+*	**Libraries:** [Add specific libraries like NumPy, Pygame, etc., if applicable]
