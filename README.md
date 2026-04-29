@@ -1,68 +1,60 @@
-Duck Chess RL Engine
-Architecture
-Core: Python (Pure Python, no C++).
+🦆 Duck Chess - RL Engine & UI
+Pure Python Reinforcement Learning Engine for the "Duck Chess" variant.
+
+⚠️ State: Full RL engine operational. C++ dependencies eliminated. Project built entirely in Python. Final Project for B.Sc. Software Engineering.
+
+📖 Project Core
+Duck Chess variant constraints: Players execute standard move, then relocate neutral Duck to empty square. Duck blocks line of sight.
+System trains MaskablePPO agent via dynamic self-play league and Alpha-Beta opponent punishing.
+
+🛠️ Tech Stack
+Language: Python 3.11 / 3.12 (Python 3.13 unsupported due to PyTorch memory faults).
 
 Algorithm: MaskablePPO (sb3-contrib, stable-baselines3).
 
+Matrix Engine: PyTorch, Numpy.
+
 Environment Wrapper: Gymnasium.
 
-Framework: PyTorch.
+Evaluation Interface: Playwright (Chromium web scraping).
 
-State & Action Space
-Observation Space: Box(19, 8, 8, dtype=float32). 19 Bitboards representing piece locations, duck location, and valid action masks.
+✨ Architecture & Logic
+Observation Space: Box(19, 8, 8, dtype=float32). 19 Bitboards mapping pieces, duck location, and legal action masks.
 
-Action Space: Discrete(4096). Neural network outputs a single integer. Engine decodes integer to (start_row, start_col) and (end_row, end_col).
+Action Space: Discrete(4096). Single integer output. Engine translates integer to (start_row, start_col) and (end_row, end_col).
 
-Training Progression
-Early Stages (1-9)
-Fundamental mechanics. Legal move generation.
+Training Mechanics:
 
-Dense rewards based on material capture and basic positioning.
+Multiprocessing parallelization via SubprocVecEnv bypassing GIL.
 
-Stage 10: League Play
-Introduced dynamic Self-Play against historical model snapshots.
+Chief Worker topology to isolate I/O operations and .pkl generation.
 
-Optimization for high-mobility and endgame checkmates.
+League Self-Play: Agent trains against dynamic pool of historical model snapshots (Stage 10).
 
-Stage 11: Alpha-Beta Punisher & Sparse Rewards
-Opponent Distribution: 30% Alpha-Beta Depth 1 (Greedy tactical execution), 70% RL League (Historical/Latest clones).
+Sparse Rewards: +1.0 Win, -1.0 Loss. Zero intermediate rewards. Forces pure checkmate-driven logic (Stage 11).
 
-Reward Function: True Sparse Rewards. 0.0 for all intermediate steps. +1.0 for Win, -1.0 for Loss.
+Alpha-Beta Punisher: 30% opponent pool utilizes Depth 1 greedy search to punish undefended material.
 
-Logic: Eliminates point-farming exploits. Forces pure checkmate-driven logic. Depth 1 opponent punishes undefended pieces instantly, training the model to be a hyper-aggressive hunter.
+🚀 Run Instructions
+Clone repository:
 
-Infrastructure & Multiprocessing
-Python Runtime
-Requirement: Python 3.11 or 3.12.
+Bash
+	git clone https://github.com/harel3782/YOUR_REPO_NAME.git
+Initialize virtual environment (Python 3.11 or 3.12 required):
 
-Constraint: Python 3.13 is unsupported. Causes silent C++ Segmentation Faults during PyTorch MaskablePPO.load() unpickling.
+Bash
+	py -3.12 -m venv .venv
+	.\.venv\Scripts\activate
+Install dependencies:
 
-Multiprocessing Engine
-Parallelization: SubprocVecEnv. Bypasses Python GIL by allocating each environment to an isolated CPU process.
+Bash
+	pip install torch stable-baselines3 sb3-contrib pygame playwright tensorboard
+	playwright install
+Execute training protocol:
 
-Chief Worker Architecture: Resolves I/O throttling and duplicate logs. Environments are assigned explicit IDs. Only Worker 0 (Chief) is permitted to write .pkl replay logs to disk.
+Bash
+	python -m DuckChess_Game.SBThree.train
+Execute Playwright UI evaluation:
 
-Checkpointing: Dynamic file retrieval. train.py auto-detects the latest .zip model via creation timestamp and resumes total_timesteps dynamically (reset_num_timesteps=False).
-
-KL Divergence Control: target_kl configured to 0.05 to prevent excessive Early Stopping while maintaining policy stability.
-
-Evaluation & UI Integration
-Tool: Playwright (Headless/Headed Chromium).
-
-Environment: DuckPeterEnv custom Gymnasium wrapper.
-
-Inference Pipeline:
-
-PPO Agent predicts action index (0-4095).
-
-HeadlessEngine decodes index to matrix coordinates (r, c).
-
-Bridge logic maps matrices to algebraic coordinates (e.g., "e2", "e4").
-
-Playwright translates algebraic strings to SVG pixel coordinates and physical mouse clicks.
-
-Playwright waits for opponent UI response.
-
-Data scraper reads SVG rect, path (highest opacity arrow), and circle (radius sorting for duck).
-
-Scraped data mapped back to 19x8x8 Bitboards for the next tensor calculation.
+Bash
+	python -m DuckChess_Game.playwright.eval_vs_peter
