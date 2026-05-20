@@ -37,7 +37,7 @@ def make_env(rank):
 	return _init
 
 def train():
-	n_envs = 16 # Adjust based on server CPU cores
+	n_envs = 8 # Adjust based on server CPU cores
 	vec_env = SubprocVecEnv([make_env(i) for i in range(n_envs)])
 	
 	base_models = glob.glob("models/duck_ppo/stage 11/*.zip")

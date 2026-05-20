@@ -68,7 +68,7 @@ def train():
 	
 	callback = LeagueCallback(update_freq=500000)
 	model.learn(total_timesteps=10_000_000, callback=callback, tb_log_name="run_stage11_sparse")
-	model.save("models/duck_ppo/stage 11/stage11_sparse_final")
+	model.save("models/duck_ppo/stage 12/stage12_final_v24")
 
 if __name__ == "__main__":
 	train()
