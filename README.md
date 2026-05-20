@@ -23,4 +23,3 @@ The AI is developed using **Stable Baselines3** to master the unique positioning
 ## Tech Stack
 *	**Language:** Python
 *	**AI Framework:** Stable Baselines3
-*	**Libraries:** [Add specific libraries like NumPy, Pygame, etc., if applicable]
