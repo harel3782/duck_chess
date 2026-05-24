@@ -32,7 +32,9 @@ class ObservationEncoder:
 
 		# Channel 13: En Passant target
 		if en_passant_target:
-			obs[13][en_passant_target[0]][en_passant_target[1]] = 1.0
+			er, ec = en_passant_target
+			if 0 <= er <= 7 and 0 <= ec <= 7:
+				obs[13][er][ec] = 1.0
 
 		# Channel 14: Turn (1.0 for White, 0.0 for Black)
 		if turn == 'w':

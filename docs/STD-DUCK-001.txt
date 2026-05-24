@@ -1,0 +1,778 @@
+================================================================================
+                  SOFTWARE TEST DESIGN (STD)
+                     Duck Chess Engine - Test Cases
+================================================================================
+
+Document ID: STD-DUCK-001
+Version: 1.0
+Date: 2026-05-20
+Linked STP: STP-DUCK-001
+
+================================================================================
+1. INTRODUCTION
+================================================================================
+
+This document specifies the individual test cases that implement the strategy
+defined in STP-DUCK-001. Each test case maps to one or more test items and is
+grounded in the actual source code of DuckChess_Game/Logic/. Test cases are
+executable with: python -m pytest tests/ -v
+
+Test identification scheme: TC-<MODULE>-<NNN>
+
+Modules:
+  BB  = BitboardManager
+  RC  = RulesChecker
+  MG  = MoveGeneration
+  AM  = ActionMasker
+  OE  = ObservationEncoder
+  EG  = EndgameChecker
+  MP  = MovePipeline
+  GV  = GameStateValidator
+  ENV = RL Environment
+
+================================================================================
+2. TEST CASES
+================================================================================
+
+================================================================================
+2.1 BITBOARDMANAGER (TI-01)
+================================================================================
+
+TC-BB-001: set_bit places single bit at corner a8 (sq=0)
+  Preconditions:  Fresh empty BitboardManager
+  Steps:          Call set_bit(0, 0)
+  Expected:       get_bit(result, 0) is True; all other 63 bits are 0
+  Postconditions: Bitboard = 1
+
+TC-BB-002: set_bit places single bit at corner h1 (sq=63)
+  Preconditions:  Fresh empty BitboardManager
+  Steps:          Call set_bit(0, 63)
+  Expected:       get_bit(result, 63) is True; all other bits are 0
+  Postconditions: Bitboard = 2^63
+
+TC-BB-003: clear_bit removes a previously set bit
+  Preconditions:  Bitboard with bit 27 set
+  Steps:          Call clear_bit(bitboard, 27)
+  Expected:       get_bit(result, 27) is False; other set bits unchanged
+  Postconditions: Bit 27 = 0
+
+TC-BB-004: coords_to_square maps all four corners correctly
+  Preconditions:  Any state
+  Steps:          coords_to_square(0,0), (0,7), (7,0), (7,7)
+  Expected:       Returns 0, 7, 56, 63 respectively
+  Postconditions: No state change
+
+TC-BB-005: add_piece sets white_occupancy bit
+  Preconditions:  Fresh BitboardManager
+  Steps:          add_piece('w', PAWN, 6, 0)
+  Expected:       get_bit(white_occupancy, 48) is True; black_occupancy unchanged
+  Postconditions: white_occupancy bit 48 = 1
+
+TC-BB-006: add_piece for black does not set white_occupancy
+  Preconditions:  Fresh BitboardManager
+  Steps:          add_piece('b', PAWN, 1, 0)
+  Expected:       get_bit(white_occupancy, 8) is False;
+                  get_bit(black_occupancy, 8) is True
+  Postconditions: Correct occupancy
+
+TC-BB-007: remove_piece clears all occupancy
+  Preconditions:  BitboardManager with one white pawn at (6,0)
+  Steps:          remove_piece('w', PAWN, 6, 0)
+  Expected:       white_occupancy == 0, all_occupancy == 0
+  Postconditions: All bitboards zero
+
+TC-BB-008: move_duck sets duck_board and does not affect occupancy
+  Preconditions:  Fresh BitboardManager
+  Steps:          move_duck(3, 3)
+  Expected:       get_bit(duck_board, 27) is True; white_occupancy and
+                  black_occupancy both 0
+  Postconditions: Duck separated from occupancy
+
+TC-BB-009: move_duck clears previous square
+  Preconditions:  BitboardManager with duck at (3,3)
+  Steps:          move_duck(4, 4)
+  Expected:       get_bit(duck_board, 27) is False;
+                  get_bit(duck_board, 36) is True
+  Postconditions: Only bit 36 set
+
+TC-BB-010: move_duck with (-1,-1) clears duck_board
+  Preconditions:  BitboardManager with duck at any square
+  Steps:          move_duck(-1, -1)
+  Expected:       duck_board == 0
+  Postconditions: No duck on board
+
+TC-BB-011: verify_sync passes on starting position
+  Preconditions:  HeadlessEngine after reset_game_state()
+  Steps:          Call bb_mgr.verify_sync(board, duck_pos)
+  Expected:       Returns True
+  Postconditions: Sync confirmed
+
+TC-BB-012: verify_sync fails when bb has extra piece not on 2D board
+  Preconditions:  Starting position + manually set extra bit
+  Steps:          Set extra pawn bit in bb_mgr, do not update 2D board
+  Expected:       Returns False
+  Postconditions: Desync detected
+
+TC-BB-013: verify_sync fails when duck_pos mismatches
+  Preconditions:  Duck at (3,3) in bitboard but duck_pos = (-1,-1)
+  Steps:          Call verify_sync(board, (-1,-1))
+  Expected:       Returns False
+  Postconditions: Duck mismatch detected
+
+================================================================================
+2.2 RULESCHECKER (TI-03)
+================================================================================
+
+TC-RC-001: White not in check at starting position
+  Preconditions:  Standard starting board
+  Steps:          is_in_check('w', board, (-1,-1))
+  Expected:       Returns False
+  Postconditions: No state change
+
+TC-RC-002: Black not in check at starting position
+  Preconditions:  Standard starting board
+  Steps:          is_in_check('b', board, (-1,-1))
+  Expected:       Returns False
+  Postconditions: No state change
+
+TC-RC-003: Black knight on (5,3) gives check to white king at (7,4)
+  Preconditions:  Board with black knight at (5,3), white king at (7,4)
+  Steps:          is_in_check('w', board, (-1,-1))
+  Expected:       Returns True
+  Postconditions: No state change
+
+TC-RC-004: Knight check not blocked by intervening piece
+  Preconditions:  Board as TC-RC-003 plus white pawn at (6,3)
+  Steps:          is_in_check('w', board, (-1,-1))
+  Expected:       Returns True (knight jumps)
+  Postconditions: No state change
+
+TC-RC-005: Rook on same rank gives check
+  Preconditions:  White king at (4,4), black rook at (4,0), empty row
+  Steps:          is_in_check('w', board, (-1,-1))
+  Expected:       Returns True
+  Postconditions: No state change
+
+TC-RC-006: Rook check blocked by own piece
+  Preconditions:  As TC-RC-005 + white pawn at (4,2)
+  Steps:          is_in_check('w', board, (-1,-1))
+  Expected:       Returns False
+  Postconditions: No state change
+
+TC-RC-007: Duck blocks rook ray to king
+  Preconditions:  As TC-RC-005 + duck at (4,2)
+  Steps:          is_in_check('w', board, (4,2))
+  Expected:       Returns False
+  Postconditions: No state change
+
+TC-RC-008: Duck blocks queen diagonal to king
+  Preconditions:  White king at (4,4), black queen at (1,1), duck at (3,3)
+  Steps:          is_in_check('w', board, (3,3))
+  Expected:       Returns False
+  Postconditions: No state change
+
+TC-RC-009: Duck does NOT block knight
+  Preconditions:  White king at (7,4), black knight at (5,3), duck at (6,4)
+  Steps:          is_in_check('w', board, (6,4))
+  Expected:       Returns True (duck irrelevant)
+  Postconditions: No state change
+
+TC-RC-010: Black pawn at (6,3) gives check to white king at (7,4)
+  Preconditions:  Board with black pawn at (6,3)
+  Steps:          is_in_check('w', board, (-1,-1))
+  Expected:       Returns True
+  Postconditions: No state change
+
+TC-RC-011: White pawn at (1,3) gives check to black king at (0,4)
+  Preconditions:  Board with white pawn at (1,3)
+  Steps:          is_in_check('b', board, (-1,-1))
+  Expected:       Returns True
+  Postconditions: No state change
+
+TC-RC-012: Adjacent kings mutually in check
+  Preconditions:  White king at (4,4), black king at (4,5)
+  Steps:          is_in_check('w', board, (-1,-1))
+  Expected:       Returns True
+  Postconditions: No state change
+
+TC-RC-013: Bishop on diagonal gives check
+  Preconditions:  White king at (4,4), black bishop at (1,1)
+  Steps:          is_in_check('w', board, (-1,-1))
+  Expected:       Returns True
+  Postconditions: No state change
+
+TC-RC-014: Queen gives check on file
+  Preconditions:  White king at (4,4), black queen at (0,4)
+  Steps:          is_in_check('w', board, (-1,-1))
+  Expected:       Returns True
+  Postconditions: No state change
+
+================================================================================
+2.3 MOVEGENERATION (TI-02 + TI-04)
+================================================================================
+
+TC-MG-001: White has exactly 20 legal moves at start
+  Preconditions:  HeadlessEngine at starting position
+  Steps:          Sum all white legal moves across all squares
+  Expected:       Total = 20
+  Postconditions: No state change
+
+TC-MG-002: Black has exactly 20 legal moves at start
+  Preconditions:  HeadlessEngine at starting position
+  Steps:          Sum all black legal moves across all squares
+  Expected:       Total = 20
+  Postconditions: No state change
+
+TC-MG-003: White a-pawn can single and double push
+  Preconditions:  Starting position
+  Steps:          get_piece_legal_moves(6, 0)
+  Expected:       Contains (5,0) and (4,0)
+  Postconditions: No state change
+
+TC-MG-004: White pawn double-push blocked by piece at e3
+  Preconditions:  Piece placed at (5, 4)
+  Steps:          get_piece_legal_moves(6, 4)
+  Expected:       Contains (5,4) only; NOT (4,4)
+  Postconditions: No state change
+
+TC-MG-005: Black a-pawn can single and double push
+  Preconditions:  Starting position
+  Steps:          get_piece_legal_moves(1, 0)
+  Expected:       Contains (2,0) and (3,0)
+  Postconditions: No state change
+
+TC-MG-006: All 8 black pawns can double-push at start
+  Preconditions:  Starting position
+  Steps:          Check all get_piece_legal_moves(1, c) for c in 0-7
+  Expected:       Each contains two-square destination
+  Postconditions: No state change
+
+TC-MG-007: Duck on rook's path stops sliding moves
+  Preconditions:  White rook cleared to open file; duck placed mid-file
+  Steps:          get_piece_legal_moves(rook_r, rook_c)
+  Expected:       Rook cannot reach squares beyond duck
+  Postconditions: No state change
+
+TC-MG-008: Duck on queen diagonal stops diagonal moves
+  Preconditions:  Queen on open diagonal; duck mid-diagonal
+  Steps:          get_piece_legal_moves(queen_r, queen_c)
+  Expected:       Queen cannot reach squares beyond duck
+  Postconditions: No state change
+
+TC-MG-009: En passant target appears after white double-push
+  Preconditions:  White pawn moves from (6,4) to (4,4)
+  Steps:          Check en_passant_target and get_piece_legal_moves for
+                  black adjacent pawn
+  Expected:       En passant capture square in black pawn moves
+  Postconditions: en_passant_target = (5,4)
+
+TC-MG-010: En passant blocked when duck on capture square
+  Preconditions:  EP target set at (5,4); duck at (5,4)
+  Steps:          get_piece_legal_moves for black adjacent pawn
+  Expected:       EP capture NOT in legal moves
+  Postconditions: No state change
+
+TC-MG-011: Kingside castling not available at start (path blocked)
+  Preconditions:  Starting position
+  Steps:          Check can_castle(7, 4, True)
+  Expected:       Returns False (f1, g1 occupied)
+  Postconditions: No state change
+
+TC-MG-012: Kingside castling available after clearing f1 and g1
+  Preconditions:  Clear squares (7,5) and (7,6)
+  Steps:          can_castle(7, 4, True)
+  Expected:       Returns True
+  Postconditions: No state change
+
+TC-MG-013: Castling blocked by duck on f1
+  Preconditions:  Castling-ready position; duck at (7,5)
+  Steps:          can_castle(7, 4, True)
+  Expected:       Returns False
+  Postconditions: No state change
+
+TC-MG-014: Castling blocked after king has moved
+  Preconditions:  Move king and return; has_moved = True
+  Steps:          can_castle(7, 4, True)
+  Expected:       Returns False
+  Postconditions: No state change
+
+TC-MG-015: Queenside castling available after clearing b1, c1, d1
+  Preconditions:  Clear squares (7,1), (7,2), (7,3)
+  Steps:          can_castle(7, 4, False)
+  Expected:       Returns True
+  Postconditions: No state change
+
+================================================================================
+2.4 ACTIONMASKER (TI-05)
+================================================================================
+
+TC-AM-001: encode->decode roundtrip for corner (0,0)->(7,7)
+  Preconditions:  ActionMasker instance
+  Steps:          decode_move(encode_move((0,0),(7,7)))
+  Expected:       Returns ((0,0),(7,7))
+  Postconditions: No state change
+
+TC-AM-002: Full 64x64 action space roundtrip
+  Preconditions:  ActionMasker instance
+  Steps:          For all (r1,c1,r2,c2), encode then decode
+  Expected:       All 4096 pairs return original coordinates
+  Postconditions: No state change
+
+TC-AM-003: All encode outputs in [0, 4095]
+  Preconditions:  ActionMasker instance
+  Steps:          Encode all 4096 pairs
+  Expected:       All results in range [0, 4095]
+  Postconditions: No state change
+
+TC-AM-004: Piece phase mask at start has exactly 20 True bits
+  Preconditions:  HeadlessEngine at start, phase='move_piece'
+  Steps:          get_valid_action_masks(...)
+  Expected:       mask.sum() == 20
+  Postconditions: No state change
+
+TC-AM-005: Mask dtype is bool
+  Preconditions:  Any valid state
+  Steps:          get_valid_action_masks(...)
+  Expected:       mask.dtype == np.bool_
+  Postconditions: No state change
+
+TC-AM-006: Mask length is always 4096
+  Preconditions:  Any valid state
+  Steps:          len(get_valid_action_masks(...))
+  Expected:       Returns 4096
+  Postconditions: No state change
+
+TC-AM-007: Every True bit in piece mask decodes to a legal move
+  Preconditions:  HeadlessEngine at start
+  Steps:          Decode all True indices in mask
+  Expected:       Each decoded (start,end) is in get_piece_legal_moves(start)
+  Postconditions: No state change
+
+TC-AM-008: Duck phase mask: all True bits decode from=(0,0)
+  Preconditions:  Phase = 'move_duck', duck at (3,3)
+  Steps:          Get duck mask, decode all True bits
+  Expected:       All have start square (0,0)
+  Postconditions: No state change
+
+TC-AM-009: Duck mask excludes previous duck position
+  Preconditions:  Duck prev at (3,3), duck phase
+  Steps:          Check mask for action encoding any->(3,3)
+  Expected:       All actions with end=(3,3) are False
+  Postconditions: No state change
+
+TC-AM-010: Duck mask excludes occupied squares
+  Preconditions:  Knight at (4,4) in duck phase
+  Steps:          Check mask for action encoding any->(4,4)
+  Expected:       All actions with end=(4,4) are False
+  Postconditions: No state change
+
+TC-AM-011: Duck phase does not collide with piece indices
+           (Regression: from=(-1,-1) bug)
+  Preconditions:  Duck phase with piece on (0,0)
+  Steps:          Verify duck mask does not include (0,0) as destination
+  Expected:       (0,0) excluded from duck destinations if occupied
+  Postconditions: No state change
+
+================================================================================
+2.5 OBSERVATIONENCODER (TI-06)
+================================================================================
+
+TC-OE-001: Output shape is (19, 8, 8)
+  Preconditions:  Starting position
+  Steps:          encode_state(bb_mgr, 'w', None, can_castle_func).shape
+  Expected:       (19, 8, 8)
+  Postconditions: No state change
+
+TC-OE-002: Output dtype is float32
+  Preconditions:  Starting position
+  Steps:          Check .dtype
+  Expected:       np.float32
+  Postconditions: No state change
+
+TC-OE-003: Channel 0 has exactly 8 ones (white pawns)
+  Preconditions:  Starting position
+  Steps:          obs[0].sum()
+  Expected:       8.0
+  Postconditions: No state change
+
+TC-OE-004: White pawns occupy row 6 only in channel 0
+  Preconditions:  Starting position
+  Steps:          obs[0, 6, :].sum()
+  Expected:       8.0; all other rows sum to 0
+  Postconditions: No state change
+
+TC-OE-005: Black pawns in channel 6 occupy row 1
+  Preconditions:  Starting position
+  Steps:          obs[6, 1, :].sum()
+  Expected:       8.0
+  Postconditions: No state change
+
+TC-OE-006: White king in channel 5 at e1 (row 7, col 4)
+  Preconditions:  Starting position
+  Steps:          obs[5, 7, 4]
+  Expected:       1.0; channel 5 sum = 1
+  Postconditions: No state change
+
+TC-OE-007: Black king in channel 11 at e8 (row 0, col 4)
+  Preconditions:  Starting position
+  Steps:          obs[11, 0, 4]
+  Expected:       1.0; channel 11 sum = 1
+  Postconditions: No state change
+
+TC-OE-008: Channel 12 all zeros before duck placement
+  Preconditions:  Starting position, no duck
+  Steps:          obs[12].sum()
+  Expected:       0.0
+  Postconditions: No state change
+
+TC-OE-009: Channel 12 has 1 at duck position after placement
+  Preconditions:  Duck placed at (3,3)
+  Steps:          obs[12, 3, 3]
+  Expected:       1.0; channel 12 sum = 1
+  Postconditions: No state change
+
+TC-OE-010: Channel 13 all zeros when en_passant_target is None
+  Preconditions:  No EP target
+  Steps:          obs[13].sum()
+  Expected:       0.0
+  Postconditions: No state change
+
+TC-OE-011: Channel 13 set at valid EP target (5,4)
+  Preconditions:  en_passant_target = (5,4)
+  Steps:          obs[13, 5, 4]
+  Expected:       1.0; channel 13 sum = 1
+  Postconditions: No state change
+
+TC-OE-012: Out-of-bounds EP target (row=8) is silently ignored
+  Preconditions:  en_passant_target = (8, 3)
+  Steps:          obs[13].sum()
+  Expected:       0.0 (no crash, no encoding)
+  Postconditions: No state change
+
+TC-OE-013: Negative EP target silently ignored
+  Preconditions:  en_passant_target = (-1, 3)
+  Steps:          obs[13].sum()
+  Expected:       0.0
+  Postconditions: No state change
+
+TC-OE-014: Channel 14 all ones when turn = 'w'
+  Preconditions:  turn = 'w'
+  Steps:          obs[14].sum()
+  Expected:       64.0
+  Postconditions: No state change
+
+TC-OE-015: Channel 14 all zeros when turn = 'b'
+  Preconditions:  turn = 'b'
+  Steps:          obs[14].sum()
+  Expected:       0.0
+  Postconditions: No state change
+
+TC-OE-016: Castling channels 15-18 all zero when no rights
+  Preconditions:  Pieces moved, all castling lost
+  Steps:          obs[15:19].sum()
+  Expected:       0.0
+  Postconditions: No state change
+
+TC-OE-017: All castling channels filled (64 each) when all rights present
+  Preconditions:  Fresh starting position
+  Steps:          obs[15].sum(), obs[16].sum(), etc.
+  Expected:       Each = 64.0
+  Postconditions: No state change
+
+================================================================================
+2.6 ENDGAMECHECKER (TI-07)
+================================================================================
+
+TC-EG-001: Fowling: player with no legal moves wins (not loses)
+  Preconditions:  Board constructed so current player has no legal moves
+  Steps:          check_game_end_conditions()
+  Expected:       game_over = True; winner == self.turn (stalemate player)
+  Postconditions: Game over
+
+TC-EG-002: 50-move rule triggers draw at half_move_clock = 100
+  Preconditions:  Set half_move_clock = 100
+  Steps:          check_game_end_conditions()
+  Expected:       game_over = True; winner = 'draw'
+  Postconditions: Game over
+
+TC-EG-003: No game end at half_move_clock = 99
+  Preconditions:  Set half_move_clock = 99
+  Steps:          check_game_end_conditions()
+  Expected:       game_over = False
+  Postconditions: Game continues
+
+TC-EG-004: Material score at start is 0
+  Preconditions:  Starting position
+  Steps:          calculate_material_score(board)
+  Expected:       0 (symmetric)
+  Postconditions: No state change
+
+TC-EG-005: Material score after removing a white queen is -9
+  Preconditions:  Starting position minus white queen
+  Steps:          calculate_material_score(board)
+  Expected:       -9
+  Postconditions: No state change
+
+TC-EG-006: King capture not counted in material
+  Preconditions:  Board with only kings
+  Steps:          calculate_material_score(board)
+  Expected:       0
+  Postconditions: No state change
+
+TC-EG-007: check_game_end_conditions is idempotent when game already over
+  Preconditions:  game_over = True
+  Steps:          Call twice
+  Expected:       State unchanged on second call
+  Postconditions: No double-trigger
+
+================================================================================
+2.7 MOVEPIPELINE (TI-08)
+================================================================================
+
+TC-MP-001: Basic pawn move with valid duck placement succeeds
+  Preconditions:  HeadlessEngine at start
+  Steps:          execute_full_turn((6,4),(4,4),(3,3))
+  Expected:       result.ok = True; turn = 'b'; phase = 'move_piece'
+  Postconditions: Duck at (3,3); black to move
+
+TC-MP-002: Turn advances to black after successful full turn
+  Preconditions:  After TC-MP-001
+  Steps:          Check engine.turn
+  Expected:       'b'
+  Postconditions: Black to move
+
+TC-MP-003: Duck placed at correct position after full turn
+  Preconditions:  After TC-MP-001
+  Steps:          Check engine.duck_pos
+  Expected:       (3,3)
+  Postconditions: Duck confirmed
+
+TC-MP-004: Captured piece returned in TurnResult
+  Preconditions:  Setup piece to be captured
+  Steps:          execute_full_turn(capture_move, duck_dest)
+  Expected:       result.captured_piece is not None
+  Postconditions: Piece removed from board
+
+TC-MP-005: Wrong phase (move_duck) rejects with no state mutation
+  Preconditions:  Set engine.phase = 'move_duck'
+  Steps:          execute_full_turn((6,4),(4,4),(3,3))
+  Expected:       result.ok = False; board unchanged
+  Postconditions: State unchanged
+
+TC-MP-006: Illegal piece move rejected with no state mutation
+  Preconditions:  Starting position
+  Steps:          execute_full_turn((6,4),(3,4),(3,3)) (triple push)
+  Expected:       result.ok = False; board unchanged
+  Postconditions: State unchanged
+
+TC-MP-007: Wrong color piece rejected
+  Preconditions:  White to move; attempt to move black pawn
+  Steps:          execute_full_turn((1,4),(2,4),(3,3))
+  Expected:       result.ok = False
+  Postconditions: State unchanged
+
+TC-MP-008: Empty start square rejected
+  Preconditions:  Any state
+  Steps:          execute_full_turn((5,4),(4,4),(3,3))
+  Expected:       result.ok = False
+  Postconditions: State unchanged
+
+TC-MP-009: Duck on occupied square rejected
+  Preconditions:  Duck destination = white pawn square
+  Steps:          execute_full_turn((6,4),(4,4), (6,3))
+  Expected:       result.ok = False OR atomic failure if piece moved
+  Postconditions: Caller must handle
+
+TC-MP-010: Duck on previous duck position rejected
+  Preconditions:  prev_duck_pos = (3,3)
+  Steps:          execute_full_turn((6,4),(4,4),(3,3))
+  Expected:       result.ok = False (duck dest = prev_pos)
+  Postconditions: State unchanged
+
+TC-MP-011: is_valid_piece_move: e2->e3 valid
+  Preconditions:  Starting position
+  Steps:          is_valid_piece_move((6,4),(5,4))
+  Expected:       Returns True
+  Postconditions: No state change
+
+TC-MP-012: is_valid_piece_move: e2->e5 invalid (triple push)
+  Preconditions:  Starting position
+  Steps:          is_valid_piece_move((6,4),(3,4))
+  Expected:       Returns False
+  Postconditions: No state change
+
+TC-MP-013: is_valid_duck_placement: center empty square valid
+  Preconditions:  Duck phase, center empty
+  Steps:          is_valid_duck_placement((4,4))
+  Expected:       Returns True
+  Postconditions: No state change
+
+TC-MP-014: is_valid_duck_placement: out-of-bounds rejected
+  Preconditions:  Any state
+  Steps:          is_valid_duck_placement((8,0))
+  Expected:       Returns False
+  Postconditions: No state change
+
+================================================================================
+2.8 GAMESTATEVALIDATOR (TI-09)
+================================================================================
+
+TC-GV-001: Fresh engine passes full validation
+  Preconditions:  HeadlessEngine after reset
+  Steps:          GameStateValidator.full_check(engine)
+  Expected:       report.ok = True; no issues
+  Postconditions: No state change
+
+TC-GV-002: None bb_mgr does not crash validator
+  Preconditions:  Set engine.bb_mgr = None
+  Steps:          GameStateValidator.full_check(engine)
+  Expected:       Returns ValidationReport; issues contain exception message
+  Postconditions: No crash
+
+TC-GV-003: Board sync detects extra piece in bitboard
+  Preconditions:  Add extra pawn bit to bb without updating 2D
+  Steps:          validate_board_sync(board, bb_mgr, duck_pos)
+  Expected:       report.ok = False; issue describes mismatch square
+  Postconditions: No state change
+
+TC-GV-004: Board sync detects duck position mismatch
+  Preconditions:  Duck bit at (3,3) in bb but duck_pos = (-1,-1)
+  Steps:          validate_board_sync(board, bb_mgr, (-1,-1))
+  Expected:       report.ok = False
+  Postconditions: No state change
+
+TC-GV-005: Phase consistency: invalid phase detected
+  Preconditions:  phase = 'invalid_phase'
+  Steps:          validate_phase_consistency(...)
+  Expected:       report.ok = False
+  Postconditions: No state change
+
+TC-GV-006: Phase consistency: invalid turn detected
+  Preconditions:  turn = 'x'
+  Steps:          validate_phase_consistency(...)
+  Expected:       report.ok = False
+  Postconditions: No state change
+
+TC-GV-007: Duck position out of bounds detected
+  Preconditions:  duck_pos = (9, 0)
+  Steps:          validate_phase_consistency(...)
+  Expected:       report.ok = False
+  Postconditions: No state change
+
+TC-GV-008: duck_pos == prev_duck_pos produces warning not error
+  Preconditions:  duck_pos = prev_duck_pos = (3,3)
+  Steps:          validate_phase_consistency(...)
+  Expected:       report.ok = True; warnings non-empty
+  Postconditions: No state change
+
+TC-GV-009: EP target = None is valid
+  Preconditions:  en_passant_target = None
+  Steps:          validate_en_passant(None, board)
+  Expected:       report.ok = True
+  Postconditions: No state change
+
+TC-GV-010: EP at row 5 with adjacent white pawn valid
+  Preconditions:  EP = (5,4); white pawn at (5,3) or (5,5)
+  Steps:          validate_en_passant((5,4), board)
+  Expected:       report.ok = True
+  Postconditions: No state change
+
+TC-GV-011: EP at row 3 (wrong row) invalid
+  Preconditions:  en_passant_target = (3,4)
+  Steps:          validate_en_passant((3,4), board)
+  Expected:       report.ok = False
+  Postconditions: No state change
+
+TC-GV-012: EP row > 7 invalid
+  Preconditions:  en_passant_target = (8,3)
+  Steps:          validate_en_passant((8,3), board)
+  Expected:       report.ok = False
+  Postconditions: No state change
+
+TC-GV-013: Negative EP row invalid
+  Preconditions:  en_passant_target = (-1,3)
+  Steps:          validate_en_passant((-1,3), board)
+  Expected:       report.ok = False
+  Postconditions: No state change
+
+================================================================================
+2.9 RLENV IRONMENT (TI-10)
+================================================================================
+
+TC-ENV-001: Observation space shape is (19,8,8)
+  Preconditions:  BaseDuckChessEnv instantiated
+  Steps:          env.observation_space.shape
+  Expected:       (19, 8, 8)
+  Postconditions: No state change
+
+TC-ENV-002: Observation dtype is float32
+  Preconditions:  Any state
+  Steps:          env.observation_space.dtype
+  Expected:       np.float32
+  Postconditions: No state change
+
+TC-ENV-003: Action space size is 4096
+  Preconditions:  Any state
+  Steps:          env.action_space.n
+  Expected:       4096
+  Postconditions: No state change
+
+TC-ENV-004: action_masks() returns shape (4096,)
+  Preconditions:  After reset
+  Steps:          env.action_masks().shape
+  Expected:       (4096,)
+  Postconditions: No state change
+
+TC-ENV-005: action_masks() dtype is bool
+  Preconditions:  After reset
+  Steps:          env.action_masks().dtype
+  Expected:       bool
+  Postconditions: No state change
+
+TC-ENV-006: reset() returns (obs, info) tuple
+  Preconditions:  Any state
+  Steps:          obs, info = env.reset()
+  Expected:       obs.shape = (19,8,8); info is dict
+  Postconditions: Environment reset
+
+TC-ENV-007: Episode counter increments on each reset
+  Preconditions:  Multiple resets
+  Steps:          Count reset() calls
+  Expected:       Counter increases by 1 per call
+  Postconditions: Episode tracking correct
+
+TC-ENV-008: Default color is white when not randomized
+  Preconditions:  Config: no color randomization
+  Steps:          10x env.reset(), check engine.turn
+  Expected:       All return 'w'
+  Postconditions: Consistent color
+
+TC-ENV-009: Color randomization varies between w and b
+  Preconditions:  Config: randomize_color=True
+  Steps:          50x env.reset(), collect turns
+  Expected:       Both 'w' and 'b' observed
+  Postconditions: Randomization confirmed
+
+================================================================================
+END OF STD-DUCK-001
+================================================================================
+
+NOTES AND OBSERVATIONS:
+
+1. TC-EG-001 (Fowling) is the highest-risk case — standard chess libraries
+   reverse the winner, so verify this carefully.
+
+2. TC-MP-009 has a known ATOMIC_FAILURE edge case in move_pipeline.py —
+   the piece move can succeed before the duck validation fails; the caller
+   needs to handle this case.
+
+3. TC-AM-011 is a regression test for the (-1,-1) duck sentinel bug that
+   was already fixed in action_masker.py.
+
+4. All tests assume the conftest.py fixtures are correctly initialized.
+
+5. Tests are grounded in the actual codebase structure as of 2026-05-20.
+
+6. No GPU or display server required for any test.
+
+================================================================================

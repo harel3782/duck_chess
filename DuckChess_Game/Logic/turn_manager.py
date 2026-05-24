@@ -200,7 +200,9 @@ class TurnManagerMixin:
 			if move:
 				self.execute_move(move[0], move[1], animated=True)
 				self.ai_wait_start = pygame.time.get_ticks() 
-			else: self.game_over, self.winner = ('b' if self.turn == 'w' else 'w')
+			else:
+				self.game_over, self.winner = True, ('b' if self.turn == 'w' else 'w')
+				self.waiting_for_ai = False
 		elif self.phase == 'move_duck':
 			target = self.ai.get_duck_move(self.board, getattr(self, 'duck_pos', (-1,-1)), getattr(self, 'prev_duck_pos', (-1,-1)))
 			if target: self.place_duck(target, animated=True)
