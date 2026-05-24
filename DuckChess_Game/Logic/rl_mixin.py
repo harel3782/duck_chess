@@ -1,5 +1,6 @@
 from DuckChess_Game.Logic.observation_encoder import ObservationEncoder
 from DuckChess_Game.Logic.action_masker import ActionMasker
+from DuckChess_Game.Logic.notation_helper import NotationHelper
 
 class RLMixin:
 	"""Provides a clean interface for Reinforcement Learning operations using specialized helper classes."""
@@ -53,7 +54,7 @@ class RLMixin:
 			for r in range(8):
 				for c in range(8):
 					if obs[channel][r][c] == 1.0:
-						coords = self.get_notation_coords(r, c)
+						coords = NotationHelper.get_notation_coords(r, c)
 						active_squares.append(coords)
 
 			if active_squares:

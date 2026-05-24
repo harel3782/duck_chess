@@ -27,7 +27,7 @@ class ActionMasker:
 			for i in range(64):
 				if valid_duck_squares & (1 << i):
 					dr, dc = i // 8, i % 8
-					action_idx = self.encode_move(duck_pos, (dr, dc))
+					action_idx = self.encode_move((0, 0), (dr, dc))
 					masks[action_idx] = True
 
 		return masks

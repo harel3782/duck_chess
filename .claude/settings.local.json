@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(.venv\\\\Scripts\\\\python.exe -m pip install pytest --quiet)",
+      "Bash(python -m pip install pytest --quiet)",
+      "Bash(python -m pytest --version)",
+      "Bash(python -m pytest tests/ -v --tb=short)",
+      "Bash(Get-ChildItem -Path \"c:\\\\Users\\\\harel\\\\PycharmProjects\\\\duck_chess\\\\DuckChess_Game\\\\SBThree\\\\\" -Recurse -Filter \"*.py\" | Select-Object -ExpandProperty FullName)",
+      "Bash(Get-ChildItem -Path \"c:\\\\Users\\\\harel\\\\PycharmProjects\\\\duck_chess\\\\DuckChess_Game\\\\SBThree\" -Recurse -Force)",
+      "Bash(Select-Object -ExpandProperty FullName)",
+      "Bash(python -m pytest tests/test_reward_calculator.py -v --tb=short)",
+      "Bash(python -m pytest tests/ -v --tb=short -q)"
+    ]
+  }
+}

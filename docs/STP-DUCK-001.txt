@@ -1,0 +1,314 @@
+================================================================================
+                    SOFTWARE TEST PLAN (STP)
+                         Duck Chess Engine
+================================================================================
+
+Document ID: STP-DUCK-001
+Version: 1.0
+Date: 2026-05-20
+Project: Duck Chess — Game Engine & Reinforcement Learning Pipeline
+Repository: harel3782/duck_chess
+
+================================================================================
+1. INTRODUCTION
+================================================================================
+
+1.1 PURPOSE
+This document defines the test plan for the Duck Chess game engine and RL
+training pipeline. It describes what is tested, how it is tested, and what
+constitutes acceptable quality before promotion to production checkpoints or
+release.
+
+1.2 SCOPE
+The plan covers the pure Python game engine (DuckChess_Game/Logic/), the RL
+interface layer (rl_mixin.py, action_masker.py, observation_encoder.py), the
+atomic turn pipeline (move_pipeline.py), and the diagnostic/validation layer
+(game_state_validator.py). The Pygame UI layer and SBThree training scripts
+are explicitly OUT OF SCOPE for this test cycle.
+
+1.3 OBJECTIVES
+- Confirm correct implementation of all Duck Chess rules, including fowling,
+  duck blocking, en passant, castling, and promotion.
+- Verify correctness of the RL observation tensor (19 × 8 × 8) and action mask
+  (4096-dimensional boolean array).
+- Confirm 2D board and bitboard representations remain in sync throughout all
+  legal operations.
+- Verify that the MovePipeline enforces atomicity: illegal moves produce no
+  state mutation.
+- Establish a regression baseline for further training stages.
+
+1.4 REFERENCES
+- CLAUDE.md: Project documentation
+- DuckChess_Game/Logic/logic.py: Game engine hub
+- DuckChess_Game/Logic/rl_mixin.py: RL interface
+- DuckChess_Game/SBThree/train_stage12.py: Training entry
+- pytest.ini, tests/conftest.py: Test configuration
+
+1.5 ASSUMPTIONS
+- All tests run with Python 3.12 in the .venv virtual environment.
+- Tests execute in headless mode (no Pygame window); game_mode='rl_training'
+  is set by the HeadlessEngine fixture in conftest.py.
+- No GPU is required; PyTorch CPU inference is sufficient.
+- Network access is not required.
+
+================================================================================
+2. TEST ITEMS
+================================================================================
+
+TI-01  BitboardManager              Logic/bitboard_manager.py
+       64-bit board representation, occupancy tracking
+
+TI-02  BitboardMoveGenerator        Logic/bitboard_move_gen.py
+       Fast bitwise move generation
+
+TI-03  RulesChecker                 Logic/rules_checker.py
+       Check detection across all attack vectors
+
+TI-04  MoveGenerationMixin          Logic/move_generation.py
+       Legal move generation with castling and en passant
+
+TI-05  ActionMasker                 Logic/action_masker.py
+       4096-action encoding, masking for RL
+
+TI-06  ObservationEncoder           Logic/observation_encoder.py
+       19×8×8 state tensor encoding
+
+TI-07  EndgameCheckerMixin          Logic/endgame_checker.py
+       Fowling rule, 50-move rule, material scoring
+
+TI-08  MovePipeline                 Logic/move_pipeline.py
+       Atomic two-phase turn orchestration
+
+TI-09  GameStateValidator           Logic/game_state_validator.py
+       Stateless board/phase diagnostic
+
+TI-10  BaseDuckChessEnv             SBThree/base/
+       Gymnasium RL environment wrapper
+
+================================================================================
+3. FEATURES TO BE TESTED
+================================================================================
+
+Feature                                          Module(s)   Priority
+------------------------------------------------------------------------
+Bit-level operations (set, clear, get)          TI-01       High
+Coordinate-to-square mapping                    TI-01       High
+2D ↔ bitboard synchronization                   TI-01, TI-09 High
+Legal move count at starting position (20)      TI-04       High
+Pawn double-push and blocking                   TI-02, TI-04 High
+Duck blocking of sliding pieces                 TI-02, TI-03, TI-04 High
+Duck non-blocking of knights                    TI-03       High
+En passant legality, blocking, encoding         TI-04, TI-06 High
+Castling path validation and duck interaction   TI-04       High
+Check detection (all 5 attack vectors)          TI-03       High
+Fowling rule (stalemate = win)                  TI-07       High
+50-move rule                                    TI-07       Medium
+Action encoding/decoding roundtrip (4096)       TI-05       High
+Duck phase mask: prev_pos, occupancy exclusion  TI-05       High
+Observation shape, dtype, channel correctness   TI-06       High
+Turn channel (all-ones vs all-zeros)            TI-06       High
+Castling right channels (15-18)                 TI-06       Medium
+Atomic turn rejection (no state mutation)       TI-08       High
+Duck placement validation (bounds, occupancy)   TI-08       High
+Phase and turn consistency validation           TI-09       Medium
+En passant row and adjacency validation         TI-09       Medium
+RL env reset and observation space              TI-10       Medium
+Color randomization on reset                    TI-10       Low
+
+================================================================================
+4. FEATURES NOT TO BE TESTED
+================================================================================
+
+Feature                                 Reason
+--------------------------------------------------------------------
+Pygame UI rendering                     Requires display server; visual
+                                        correctness outside this cycle
+
+MaskablePPO training convergence        Statistical outcome, not deterministic
+                                        logic
+
+TensorBoard logging                     Infrastructure concern, not game-logic
+                                        correctness
+
+Save file format compatibility          Stable; no changes in scope
+
+Alpha-beta AI quality                   Non-deterministic; behavior verified
+                                        by play outcomes
+
+Minimax AI (stub)                       Not implemented; DuckAI is random
+                                        baseline only
+
+SubprocVecEnv parallelism               SB3 library responsibility
+
+History/replay loading                  Requires external .json/.pkl fixtures
+                                        not yet standardized
+
+================================================================================
+5. TEST STRATEGY & APPROACH
+================================================================================
+
+5.1 UNIT TESTING
+All pure-logic classes (BitboardManager, RulesChecker, ActionMasker,
+ObservationEncoder, GameStateValidator, MovePipeline) are tested in isolation
+using pytest with conftest.py fixtures. Each test is stateless: a fresh
+HeadlessEngine or component instance is constructed per test.
+
+5.2 INTEGRATION TESTING
+Key integration scenarios exercise the full engine stack end-to-end:
+- A complete legal turn: piece move → duck placement → turn advance.
+- En passant setup followed by legal capture.
+- Castling with all path conditions (clear, duck-blocked, king-moved).
+- Fowling detection after duck-induced stalemate.
+
+5.3 REGRESSION TESTING
+The 192-test suite is run as a pre-merge regression gate on the master branch.
+No new stage training checkpoint is promoted unless all tests pass.
+
+5.4 BOUNDARY & EDGE-CASE TESTING
+Tests explicitly target boundary inputs:
+- Board corners (0,0), (0,7), (7,0), (7,7)
+- Sentinel values: duck_pos = (-1, -1), en_passant_target = None
+- Out-of-bounds coordinates (negative, row/col 8+)
+- Empty square operations (piece missing, no moves)
+
+5.5 PROPERTY TESTING (ROUNDTRIP)
+All (encode → decode) roundtrips for the full 64 × 64 action space are
+verified to be bijective within the valid range [0, 4095].
+
+================================================================================
+6. ITEM PASS / FAIL CRITERIA
+================================================================================
+
+Criterion                              Pass                 Fail
+------------------------------------------------------------------------
+Test suite execution                   All 192 tests pass   Any test fails
+
+Starting position legal moves          Exactly 20 per       Any other
+                                       color                count
+
+Action encoding roundtrip               All 4096 pairs       Any mismatch
+                                       bijective
+
+Observation tensor                     Shape (19,8,8),      Wrong shape
+                                       dtype float32        or dtype
+
+Illegal move state mutation            Zero state change    Any state
+                                       after rejection      change detected
+
+Fowling winner                         winner == self.turn  Any other
+                                       (stalemate color)    winner assignment
+
+Sync validation at game start           verify_sync()        Returns False
+                                       returns True
+
+================================================================================
+7. TEST DELIVERABLES
+================================================================================
+
+Deliverable                             Tool                Location
+------------------------------------------------------------------------
+Test results summary                    pytest -v           CI / terminal
+
+Coverage report                         pytest --cov        htmlcov/
+
+Test source                             Python source       tests/
+
+STP document                            Markdown            docs/STP-DUCK-001.txt
+
+STD document                            Markdown            docs/STD-DUCK-001.txt
+
+================================================================================
+8. ENVIRONMENTAL & TOOLING REQUIREMENTS
+================================================================================
+
+Requirement                             Version / Detail
+------------------------------------------------------------------------
+Python                                  3.12
+
+pytest                                  >=7.0
+
+pytest-cov                              >=4.0
+
+numpy                                   Required by RL tensor operations
+
+stable-baselines3                       Required for MaskablePPO import
+
+sb3-contrib                             Required for MaskablePPO
+
+torch                                   CPU mode; no GPU required
+
+OS                                      Windows 11 (primary), Linux CI
+                                        compatible
+
+Execution command                       python -m pytest tests/ -v
+
+================================================================================
+9. RESPONSIBILITIES
+================================================================================
+
+Role                    Name/Identity   Responsibility
+------------------------------------------------------------------------
+Developer/Tester        harel3782       Write tests, fix failures, approve
+                                        checkpoints
+
+AI Pair Programmer      Claude Sonnet   Test design, document generation
+                        4.6
+
+================================================================================
+10. SCHEDULE
+================================================================================
+
+Milestone                                   Target Date    Status
+------------------------------------------------------------------------
+Unit tests: Logic module (all files)        2026-05-20     Complete
+
+Integration: full turn pipeline             2026-05-20     Complete
+
+RL env: observation + mask tests            2026-05-20     Complete
+
+Stage 12 training checkpoint gate           Post-25 ckpts  In progress
+
+Coverage target: 80%+ on Logic/             TBD            Pending
+
+================================================================================
+11. RISKS & CONTINGENCIES
+================================================================================
+
+Risk                                    Likelihood  Impact  Mitigation
+------------------------------------------------------------------------
+Bitboard desync silent failure          Medium      High    verify_sync()
+                                                            after every
+                                                            place_duck();
+                                                            GameStateValidator
+                                                            .full_check() in CI
+
+En passant out-of-bounds silently       Low         Medium  Explicit
+ignored                                                     bounds-guard
+                                                            tests; validator
+                                                            enforces EP row
+                                                            constraint
+
+Fowling rule misimplemented             Low         Critical Dedicated
+(standard chess semantics)                                  TestFowling cases
+                                                            asserting winner ==
+                                                            stalemate_color
+
+Promotion blocking duck phase           Medium      Medium  Test promotion
+indefinitely                                                auto-complete in
+                                                            rl_training mode
+
+ATOMIC_FAILURE partial state            Medium      High    MovePipeline
+(piece moved, duck invalid)                                 tests verify no
+                                                            state mutation on
+                                                            rejection
+
+Stage 12 loading wrong checkpoint       Already             Fixed in
+                                        fixed       Low     train_stage12.py:
+                                                            sort by numeric
+                                                            version, prefer
+                                                            Stage 12 over
+                                                            Stage 11
+
+================================================================================
+END OF STP-DUCK-001
+================================================================================

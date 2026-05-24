@@ -40,11 +40,20 @@ def train():
 	n_envs = 8 # Adjust based on server CPU cores
 	vec_env = SubprocVecEnv([make_env(i) for i in range(n_envs)])
 	
-	base_models = glob.glob("models/duck_ppo/stage 11/*.zip")
-	base_model = base_models[-1] if base_models else None
-	
+	# Check for Stage 12 checkpoints first, fall back to Stage 11
+	base_models = glob.glob("models/duck_ppo/stage 12/*.zip")
+	if not base_models:
+		base_models = glob.glob("models/duck_ppo/stage 11/*.zip")
+
+	# Sort by version number (extract v{N} from filename)
+	if base_models:
+		base_models = sorted(base_models, key=lambda x: int(x.split('v')[-1].replace('.zip', '')))
+		base_model = base_models[-1]
+	else:
+		base_model = None
+
 	if not base_model:
-		print("ERROR: No base model found in stage 11.")
+		print("ERROR: No base model found in stage 12 or stage 11.")
 		return
 
 	print(f"Loading Base: {base_model}")
