@@ -70,5 +70,45 @@ def train():
 	model.learn(total_timesteps=10_000_000, callback=callback, tb_log_name="run_stage11_sparse")
 	model.save("models/duck_ppo/stage 12/stage12_final_v24")
 
+
+# Model Number 7 -> the stage-7 ("robust") checkpoint.
+MODEL_7_PATH = os.path.join("models", "duck_ppo", "stage 7", "stage7_robust_latest.zip")
+
+
+def play_model7_vs_peter(num_games=1, deterministic=True):
+	"""Run Model 7 (stage 7) live against Peter's Duck Chess analysis site.
+
+	Loads the stage-7 checkpoint and plays it through DuckPeterEnv, which drives
+	the browser via the orientation-aware PeterSiteConnector. Imported lazily so
+	the stage-11 trainer above does not require Playwright to be installed.
+	"""
+	from DuckChess_Game.playwright_game.New.duck_peter_env import DuckPeterEnv
+
+	if not os.path.exists(MODEL_7_PATH):
+		print(f"[!] Model 7 checkpoint not found: {MODEL_7_PATH}")
+		return
+
+	print(f"Loading Model 7: {MODEL_7_PATH}")
+	model = MaskablePPO.load(MODEL_7_PATH, device="cpu")
+
+	env = DuckPeterEnv()
+	try:
+		for game in range(num_games):
+			obs, _ = env.reset()
+			terminated = truncated = False
+			total_reward = 0.0
+			while not (terminated or truncated):
+				masks = env.action_masks()
+				action, _ = model.predict(obs, action_masks=masks, deterministic=deterministic)
+				obs, reward, terminated, truncated, _ = env.step(int(action))
+				total_reward += reward
+			print(f"[GAME {game + 1}/{num_games}] reward={total_reward:.3f} "
+				  f"winner={getattr(env.engine, 'winner', None)}")
+	finally:
+		env.connector.close()
+
+
 if __name__ == "__main__":
-	train()
+	# This feature branch defaults to running Model 7 against Peter's website.
+	# Call train() instead to resume the stage-11 self-play league.
+	play_model7_vs_peter()
