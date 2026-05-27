@@ -1,9 +1,12 @@
 import os
+import sys
 import glob
+import argparse
 import warnings
 warnings.filterwarnings("ignore", category=UserWarning, module="pygame")
 import random
 import torch
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from sb3_contrib import MaskablePPO
 from stable_baselines3.common.callbacks import BaseCallback
 from stable_baselines3.common.vec_env import SubprocVecEnv
@@ -108,7 +111,73 @@ def play_model7_vs_peter(num_games=1, deterministic=True):
 		env.connector.close()
 
 
+def _run_one_game(args):
+	"""Worker target for a single parallel game. Loads its own model + browser."""
+	game_index, deterministic = args
+	from DuckChess_Game.playwright_game.New.duck_peter_env import DuckPeterEnv
+	model = MaskablePPO.load(MODEL_7_PATH, device="cpu")
+	env = DuckPeterEnv()
+	try:
+		obs, _ = env.reset()
+		terminated = truncated = False
+		total_reward = 0.0
+		while not (terminated or truncated):
+			masks = env.action_masks()
+			action, _ = model.predict(obs, action_masks=masks, deterministic=deterministic)
+			obs, reward, terminated, truncated, _ = env.step(int(action))
+			total_reward += reward
+		winner = getattr(env.engine, 'winner', None)
+		print(f"[GAME {game_index}] reward={total_reward:.3f} winner={winner}")
+		return game_index, total_reward, winner
+	finally:
+		env.connector.close()
+
+
+def play_model7_vs_peter_parallel(num_games=8, deterministic=True):
+	"""Run `num_games` simultaneous games, each in its own thread + browser."""
+	if not os.path.exists(MODEL_7_PATH):
+		print(f"[!] Model 7 checkpoint not found: {MODEL_7_PATH}")
+		return
+
+	print(f"Starting {num_games} parallel games (Model 7 vs Peter)...")
+	with ThreadPoolExecutor(max_workers=num_games) as executor:
+		futures = {
+			executor.submit(_run_one_game, (i + 1, deterministic)): i
+			for i in range(num_games)
+		}
+		for future in as_completed(futures):
+			try:
+				future.result()
+			except Exception as exc:
+				print(f"[!] Game {futures[future] + 1} raised: {exc}")
+
+	print("All parallel games finished.")
+
+
 if __name__ == "__main__":
-	# This feature branch defaults to running Model 7 against Peter's website.
-	# Call train() instead to resume the stage-11 self-play league.
-	play_model7_vs_peter()
+	parser = argparse.ArgumentParser(description="Duck Chess training / evaluation runner")
+	subparsers = parser.add_subparsers(dest="mode", help="Mode to run")
+
+	# --- train ---
+	subparsers.add_parser("train", help="Resume stage-11 self-play league training")
+
+	# --- play (single sequential) ---
+	p_play = subparsers.add_parser("play", help="Play Model 7 vs Peter (sequential games)")
+	p_play.add_argument("--games", type=int, default=1, help="Number of games (default: 1)")
+	p_play.add_argument("--stochastic", action="store_true", help="Use stochastic (non-deterministic) play")
+
+	# --- parallel (8 simultaneous browsers) ---
+	p_par = subparsers.add_parser("parallel", help="Play Model 7 vs Peter in parallel browsers")
+	p_par.add_argument("--games", type=int, default=8, help="Number of simultaneous games (default: 8)")
+	p_par.add_argument("--stochastic", action="store_true", help="Use stochastic play")
+
+	args = parser.parse_args()
+
+	if args.mode == "train":
+		train()
+	elif args.mode == "play":
+		play_model7_vs_peter(num_games=args.games, deterministic=not args.stochastic)
+	elif args.mode == "parallel":
+		play_model7_vs_peter_parallel(num_games=args.games, deterministic=not args.stochastic)
+	else:
+		parser.print_help()
