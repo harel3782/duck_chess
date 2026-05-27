@@ -1,6 +1,8 @@
 import subprocess
 import re
 
+from DuckChess_Game.Logic.action_masker import ActionMasker
+
 class PeterOpponent:
     """Wrapper that mimics an SB3 model but calls Peter's Rust Engine.
 
@@ -10,6 +12,8 @@ class PeterOpponent:
     def __init__(self, binary_path):
         self.binary_path = binary_path
         self.cached_duck_action = None
+        # The engine builds ActionMasker locally per call, so own one here.
+        self._masker = ActionMasker()
 
     def predict(self, env_engine):
         # 1. Generate FEN from your current board state
@@ -35,5 +39,5 @@ class PeterOpponent:
         duck_end = to_coords(duck_note)
 
         # 4. Return the first action (Piece move) and cache the duck for the next step
-        self.cached_duck_action = env_engine.action_masker.encode_move(env_engine.duck_pos, duck_end)
-        return env_engine.action_masker.encode_move(start, end), None
+        self.cached_duck_action = self._masker.encode_move(env_engine.duck_pos, duck_end)
+        return self._masker.encode_move(start, end), None
