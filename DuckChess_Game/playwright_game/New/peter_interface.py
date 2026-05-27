@@ -9,9 +9,12 @@ class PeterSiteConnector:
 
     Coordinate conventions
     -----------------------
-    Internal model coords are (r, c) with r=0 -> rank 1, c=0 -> file 'a', so
-    (0,0)=a1 and (7,0)=a8 (consistent with ActionMasker.encode_move and
-    BitboardManager.coords_to_square = r*8 + c).
+    The model frame (see observation_encoder.py) places White's back rank at
+    r=7 and Black's at r=0 (White king at (7,4), Black king at (0,4)), with
+    c=0 -> file 'a'. The site uses the standard layout (White on rank 1), so
+    model rows are vertically mirrored relative to site ranks:
+    site_rank = 8 - r. coords_to_algebraic / algebraic_to_coords apply this
+    flip (files are preserved); without it every move lands on the wrong side.
 
     Peter renders 50px squares. With the board NOT flipped (White at the bottom),
     the top-left square a8 sits at (x=0, y=0). 'flipped' tracks the site's
@@ -115,27 +118,32 @@ class PeterSiteConnector:
             label = self.pixels_to_algebraic(x, y)
             board_map[label] = square_element
 
-        print(f"[UI] Board Mapping Completed: Mapped {len(board_map)} square locators "
-              f"(flipped={self.flipped}).")
+        # print(f"[UI] Board Mapping Completed: Mapped {len(board_map)} square locators "
+        #       f"(flipped={self.flipped}).")
         return board_map
 
     # --- COORDINATE TRANSLATION HELPERS (orientation-independent) ------------
 
     def coords_to_algebraic(self, r: int, c: int) -> str:
-        """Converts model matrix coordinates (r, c) to standard chess notation."""
-        return f"{chr(ord('a') + c)}{r + 1}"
+        """Converts model coords (r, c) to site algebraic notation.
+
+        Model frame has White's back rank at r=7, so site_rank = 8 - r
+        (files preserved). Without this flip, moves land on the wrong side.
+        """
+        return f"{chr(ord('a') + c)}{8 - r}"
 
     def algebraic_to_coords(self, algebraic_str: str):
-        """Converts standard chess notation back to model matrix coordinates (r, c)."""
+        """Converts site algebraic notation back to model coords (r, c),
+        applying the inverse vertical flip (r = 8 - rank)."""
         c = ord(algebraic_str[0]) - ord('a')
-        r = int(algebraic_str[1]) - 1
+        r = 8 - int(algebraic_str[1])
         return r, c
 
     def encode_to_action_index(self, start_algebraic: str, end_algebraic: str) -> int:
         """
-        Encodes source/destination squares into the 4096 RL action index.
-        Mirrors ActionMasker.encode_move exactly: (sr*8+sc)*64 + (er*8+ec),
-        with NO vertical flip (the previous 7-r flip mis-mirrored every move).
+        Encodes source/destination squares into the 4096 RL action index,
+        matching ActionMasker.encode_move: (sr*8+sc)*64 + (er*8+ec).
+        The algebraic<->model vertical flip is handled by algebraic_to_coords.
         """
         sr, sc = self.algebraic_to_coords(start_algebraic)
         er, ec = self.algebraic_to_coords(end_algebraic)
@@ -173,13 +181,13 @@ class PeterSiteConnector:
         p_dst = self.coords_to_algebraic(*end_coords)
 
         if phase == 'move_piece':
-            print(f"[ACTION] Physically Moving Piece: {p_src} -> {p_dst}")
+            # print(f"[ACTION] Physically Moving Piece: {p_src} -> {p_dst}")
             if p_src in self.square_map and p_dst in self.square_map:
                 self.square_map[p_src].click(force=True)
                 self.square_map[p_dst].click(force=True)
 
         elif phase == 'move_duck':
-            print(f"[ACTION] Physically Placing Duck: {p_dst}")
+            # print(f"[ACTION] Physically Placing Duck: {p_dst}")
             if p_dst in self.square_map:
                 duck_locator = self.page.locator("image[href*='duck.svg']")
                 # If the duck is already deployed on the board, pick it up first
@@ -191,21 +199,34 @@ class PeterSiteConnector:
 
     def receive_actions_from_site(self) -> list:
         """
-        Scrapes Peter's engine evaluation arrows/circles, executes them on the
-        board, and returns them as [piece_action, duck_action] in the model's
-        4096 action index space.
-        """
-        self.page.wait_for_timeout(3000)  # Wait for engine calculation to settle
+        Waits for Peter's engine arrows to appear, executes his piece move and
+        duck placement on the board, then returns [piece_action, duck_action]
+        as 4096-space RL indices.
 
+        Uses wait_for_function instead of a fixed sleep so the scraper only
+        proceeds once the DOM actually contains the expected elements.
+        """
         p_src, p_dst, p_duck = None, None, None
 
-        # 1. Scrape the best piece-move arrow (highest-opacity path)
+        # 1. Block until the engine renders a piece-move arrow (rgba-filled path).
+        #    A fixed sleep misses slow positions; this fires exactly when ready.
+        try:
+            self.page.wait_for_function(
+                """() => Array.from(document.querySelectorAll('path')).some(p => {
+                    const f = p.getAttribute('fill') || '';
+                    const m = f.match(/rgba\\(.*?,\\s*([\\d.]+)\\)/);
+                    return m && parseFloat(m[1]) > 0;
+                })""",
+                timeout=30000
+            )
+        except Exception:
+            print("[SCRAPE] Warning: timed out waiting for piece-move arrows.")
+
+        # Scrape the highest-opacity arrow = Peter's best piece move.
         paths = self.page.locator("path")
-        count = paths.count()
         best_path = None
         max_alpha = -1
-
-        for i in range(count):
+        for i in range(paths.count()):
             p = paths.nth(i)
             alpha = self.extract_alpha(p.get_attribute("fill") or "")
             if alpha > max_alpha:
@@ -216,7 +237,6 @@ class PeterSiteConnector:
             d_attr = best_path.get_attribute("d") or ""
             sx, sy = self.get_point_from_path(d_attr, 0, 1)
             tx, ty = self.get_point_from_path(d_attr, 6, 7)
-
             if sx is not None and sy is not None:
                 p_src = self.pixels_to_algebraic(sx, sy)
                 p_dst = self.pixels_to_algebraic(tx, ty)
@@ -224,35 +244,24 @@ class PeterSiteConnector:
                 self.square_map[p_src].click(force=True)
                 self.square_map[p_dst].click(force=True)
 
-        self.page.wait_for_timeout(500)
+        # 2. Wait for duck-placement circles to appear (blue rgba, r≈20 for best).
+        try:
+            self.page.wait_for_function(
+                """() => document.querySelectorAll('circle[fill*="0.35"]').length > 0""",
+                timeout=10000
+            )
+        except Exception:
+            print("[SCRAPE] Warning: timed out waiting for duck placement circles.")
 
-        # 2. Scrape the best duck placement (arrow target or translucent circle)
+        # Pick up the duck if it is already deployed on the board.
         duck_locator = self.page.locator("image[href*='duck.svg']")
         if duck_locator.count() == 1:
             duck_locator.click(force=True)
 
+        # Largest-radius blue circle = engine's top duck suggestion.
         translucent_circles = self.page.locator('circle[fill*="0.35"]')
-
-        if translucent_circles.count() == 0:
-            paths = self.page.locator("path")
-            best_duck_path = None
-            max_duck_alpha = -1
-
-            for i in range(paths.count()):
-                p = paths.nth(i)
-                alpha = self.extract_alpha(p.get_attribute("fill") or "")
-                if alpha > max_duck_alpha:
-                    max_duck_alpha = alpha
-                    best_duck_path = p
-
-            if best_duck_path:
-                d_attr = best_duck_path.get_attribute("d") or ""
-                tx, ty = self.get_point_from_path(d_attr, 6, 7)
-                if tx is not None and ty is not None:
-                    p_duck = self.pixels_to_algebraic(tx, ty)
-        else:
-            best_circle = None
-            max_radius = -1
+        if translucent_circles.count() > 0:
+            best_circle, max_radius = None, -1
             for i in range(translucent_circles.count()):
                 c = translucent_circles.nth(i)
                 r = float(c.get_attribute("r") or 0)
@@ -263,16 +272,35 @@ class PeterSiteConnector:
                 cx = float(best_circle.get_attribute("cx") or 0)
                 cy = float(best_circle.get_attribute("cy") or 0)
                 p_duck = self.pixels_to_algebraic(cx, cy)
+        else:
+            # Fallback: read duck destination from the highest-alpha path arrow.
+            paths = self.page.locator("path")
+            best_duck_path, max_duck_alpha = None, -1
+            for i in range(paths.count()):
+                p = paths.nth(i)
+                alpha = self.extract_alpha(p.get_attribute("fill") or "")
+                if alpha > max_duck_alpha:
+                    max_duck_alpha = alpha
+                    best_duck_path = p
+            if best_duck_path:
+                d_attr = best_duck_path.get_attribute("d") or ""
+                tx, ty = self.get_point_from_path(d_attr, 6, 7)
+                if tx is not None and ty is not None:
+                    p_duck = self.pixels_to_algebraic(tx, ty)
 
         if p_duck:
             print(f"[SCRAPE] Detected Peter Duck Placement: {p_duck}")
             self.square_map[p_duck].click(force=True)
 
-        # Encode strings back into the standard RL environment indices.
-        piece_action_idx = self.encode_to_action_index(p_src, p_dst) if p_src and p_dst else 0
-        # Duck moves only use the destination; 'a1' is a harmless dummy start
-        # (encodes to start index 0, matching the duck action mask convention).
-        duck_action_idx = self.encode_to_action_index("a1", p_duck) if p_duck else 0
+        # Encode back to RL action indices.
+        # -1 is used as the failure sentinel (valid indices are always >= 0).
+        piece_action_idx = self.encode_to_action_index(p_src, p_dst) if p_src and p_dst else -1
+        # Duck uses start_sq 0 (mask convention: encode_move((0,0),(dr,dc))).
+        if p_duck:
+            dr, dc = self.algebraic_to_coords(p_duck)
+            duck_action_idx = dr * 8 + dc
+        else:
+            duck_action_idx = -1
 
         return [piece_action_idx, duck_action_idx]
 
@@ -282,7 +310,7 @@ class PeterSiteConnector:
         if not checkbox.is_checked():
             checkbox.click()
 
-        print("Waiting for engine to initialize (Nodes > 0)...")
+        # print("Waiting for engine to initialize (Nodes > 0)...")
         self.page.wait_for_function(
             """() => {
                 const elements = Array.from(document.querySelectorAll('div'));

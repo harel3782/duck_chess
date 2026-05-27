@@ -111,6 +111,7 @@ class DuckPeterEnv(gym.Env):
         print(f"[RESET] Model={'WHITE' if self.learning_color == 'w' else 'BLACK'} "
               f"| Peter={'WHITE' if self.opponent_color == 'w' else 'BLACK'} "
               f"| board_flipped={self.connector.flipped}")
+        time.sleep(2)  
 
         # If the model is Black, White (Peter) moves first on the website.
         if self.learning_color == 'b':
@@ -144,8 +145,9 @@ class DuckPeterEnv(gym.Env):
         return masks
 
     def step(self, action):
-        self.engine.bb_mgr.print_current_state()
-        print(f"Phase before: {self.engine.phase}")
+        # self.engine.bb_mgr.print_current_state()
+        # print(f"Phase before: {self.engine.phase}")
+        time.sleep(2)  # Small delay for readability; adjust as needed for real-time interaction
         try:
             if not np.any(self.action_masks()):
                 return self.get_observation(), 0.0, True, False, {}
@@ -240,23 +242,54 @@ class DuckPeterEnv(gym.Env):
 
     def _play_external_opponent_turn(self):
         """
-        Intercepts internal opponent generation. Fetches external moves from 
+        Intercepts internal opponent generation. Fetches external moves from
         Peter's website using the connector, then updates the model's internal map.
+
+        receive_actions_from_site() returns -1 as the sentinel for scraping failures.
+        A failed piece action aborts the entire opponent turn (game treated as error).
+        A failed duck action falls back to the first valid mask square so the phase
+        always advances and the game can continue.
         """
         if not self.connector:
             return
 
         # Fetch actions from external handler [piece_move, duck_placement]
         peter_actions = self.connector.receive_actions_from_site()
-        
-        for peter_action in peter_actions:
-            if getattr(self.engine, 'game_over', False):
-                break
-            # Applies the movement to the model's matrix state map
-            print(f"Pre: {self.engine.phase}")
-            self._apply_action(peter_action)
-            self.current_episode_actions.append(int(peter_action))
-            print(f"Post: {self.engine.phase}")
+        piece_action, duck_action = peter_actions[0], peter_actions[1]
+
+        # --- Piece move ---
+        if getattr(self.engine, 'game_over', False):
+            return
+        if piece_action == -1:
+            print("[WARNING] Peter piece scraping failed entirely — skipping opponent turn.")
+            return
+        # print(f"Pre piece: {self.engine.phase}")
+        self._apply_action(piece_action)
+        self.current_episode_actions.append(int(piece_action))
+        # print(f"Post piece: {self.engine.phase}")
+
+        # --- Duck placement ---
+        if getattr(self.engine, 'game_over', False):
+            return
+        if duck_action != -1:
+            # print(f"Pre duck: {self.engine.phase}")
+            self._apply_action(duck_action)
+            self.current_episode_actions.append(int(duck_action))
+            # print(f"Post duck: {self.engine.phase}")
+        else:
+            # Duck scraping failed: pick the first valid mask square so the phase
+            # transitions correctly (leaving phase='move_duck' would stall the game).
+            print("[WARNING] Peter duck scraping failed — falling back to first valid square.")
+            masks = self.engine.action_masks()
+            valid = np.where(masks)[0]
+            if len(valid) > 0:
+                fallback = int(valid[0])
+                # print(f"Pre duck fallback: {self.engine.phase}")
+                self._apply_action(fallback)
+                self.current_episode_actions.append(fallback)
+                # print(f"Post duck fallback: {self.engine.phase}")
+            else:
+                print("[ERROR] No valid duck squares found — cannot advance phase.")
 
     def _save_replay(self, reason):
         save_dir = os.path.join("saved_replays", "peter_match")

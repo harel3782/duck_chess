@@ -60,7 +60,7 @@ class PeterInterface:
             # Save the actual Playwright element locator
             board_map[label] = square_element
             
-        print(f"[UI] Board Mapping Completed: Mapped {len(board_map)} element locators.")
+        # print(f"[UI] Board Mapping Completed: Mapped {len(board_map)} element locators.")
         return board_map
 
     def coords_to_algebraic(self, r, c):
@@ -145,12 +145,12 @@ class PeterInterface:
         p_dst = self.coords_to_algebraic(end[0], end[1])
 
         if engine.phase == 'move_piece':
-            print(f"[ACTION] Model Piece Move: {p_src} -> {p_dst}")
+            # print(f"[ACTION] Model Piece Move: {p_src} -> {p_dst}")
             if p_src in board_map and p_dst in board_map:
                 board_map[p_src].click(force=True)
                 board_map[p_dst].click(force=True)
         elif engine.phase == 'move_duck':
-            print(f"[ACTION] Model Duck Placement: {p_dst}")
+            # print(f"[ACTION] Model Duck Placement: {p_dst}")
             if p_dst in board_map:
                 duck_locator = self.get_page().locator("image[href*='duck.svg']")
                 if duck_locator.count() != 0:
@@ -191,7 +191,7 @@ class PeterInterface:
             if sx is not None and sy is not None:
                 p_src = pixels_to_algebraic(sx, sy)
                 p_dst = pixels_to_algebraic(tx, ty)                
-                print(f"[ACTION] Peter Piece Move: {p_src} -> {p_dst}")
+                # print(f"[ACTION] Peter Piece Move: {p_src} -> {p_dst}")
                 map_board[p_src].click(force=True)
                 map_board[p_dst].click(force=True)
             
@@ -224,7 +224,7 @@ class PeterInterface:
                 tx, ty = self.get_point_from_path(d_attr, 6, 7)
                 if tx is not None and ty is not None:
                     p_duck = pixels_to_algebraic(tx, ty)
-                    print(f"[ACTION] Peter Duck Placement: {p_duck}")        
+                    # print(f"[ACTION] Peter Duck Placement: {p_duck}")        
                     map_board[p_duck].click(force=True)
         else:        
             best_circle = None
@@ -240,7 +240,7 @@ class PeterInterface:
                 cx = float(best_circle.get_attribute("cx"))
                 cy = float(best_circle.get_attribute("cy"))
                 p_duck = pixels_to_algebraic(cx, cy)
-                print(f"[ACTION] Peter Duck Placement: {p_duck}")        
+                # print(f"[ACTION] Peter Duck Placement: {p_duck}")        
                 map_board[p_duck].click(force=True)
 
         return p_src, p_dst, last_p_duck, p_duck
