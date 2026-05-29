@@ -154,12 +154,138 @@ def play_model7_vs_peter_parallel(num_games=8, deterministic=True):
 	print("All parallel games finished.")
 
 
+def train_vs_peter_local(
+	base_model_path=None,
+	depths=(1, 2, 3, 3),
+	total_timesteps=5_000_000,
+	checkpoint_every=200_000,
+	n_envs=4,
+):
+	"""
+	Train with MaskablePPO against the local Peter engine (no browser required).
+
+	Spawns ``n_envs`` SubprocVecEnv workers, each playing against Peter at a
+	different search depth for opponent diversity.  Checkpoints are saved to
+	models/duck_ppo/peter_local/ every ``checkpoint_every`` steps.
+
+	Parameters
+	----------
+	base_model_path : str | None
+		Path to a .zip checkpoint to warm-start from.  If None, a fresh model
+		is created.
+	depths : tuple[int, ...]
+		Search depth per parallel environment.  Length must equal ``n_envs``.
+		Depths map roughly to website modes:
+		    1 → "100 steps",  2 → "1k steps",
+		    3 → "3k steps",   5 → "analysis"
+	total_timesteps : int
+		Total environment steps to train for.
+	checkpoint_every : int
+		Save a checkpoint every this many timesteps.
+	n_envs : int
+		Number of parallel environments.  Should match len(depths).
+	"""
+	from DuckChess_Game.SBThree.peter_local import (
+		PeterLocalEnv,
+		make_peter_mixed_env_factories,
+	)
+
+	assert len(depths) == n_envs, (
+		f"len(depths)={len(depths)} must equal n_envs={n_envs}"
+	)
+
+	save_dir = os.path.join("models", "duck_ppo", "peter_local")
+	os.makedirs(save_dir, exist_ok=True)
+
+	print(f"[Peter-local] depths={depths}  n_envs={n_envs}  "
+		  f"total_steps={total_timesteps:,}  checkpoint_every={checkpoint_every:,}")
+
+	vec_env = SubprocVecEnv(make_peter_mixed_env_factories(list(depths)))
+
+	custom_objects = {
+		"learning_rate": 3e-4,
+		"ent_coef": 0.01,
+		"target_kl": 0.05,
+	}
+
+	if base_model_path and os.path.exists(base_model_path):
+		print(f"[Peter-local] Warm-starting from: {base_model_path}")
+		model = MaskablePPO.load(
+			base_model_path,
+			env=vec_env,
+			tensorboard_log="./tensorboard_logs/peter_local/",
+			custom_objects=custom_objects,
+		)
+	else:
+		if base_model_path:
+			print(f"[Peter-local] Base model not found ({base_model_path}); starting fresh")
+		model = MaskablePPO(
+			"MlpPolicy",
+			vec_env,
+			learning_rate=3e-4,
+			ent_coef=0.01,
+			target_kl=0.05,
+			n_steps=512,
+			batch_size=256,
+			verbose=1,
+			tensorboard_log="./tensorboard_logs/peter_local/",
+		)
+
+	class _PeterCheckpointCallback(BaseCallback):
+		def __init__(self, save_dir, freq):
+			super().__init__()
+			self._save_dir = save_dir
+			self._freq = freq
+
+		def _on_step(self) -> bool:
+			if self.num_timesteps % self._freq == 0:
+				path = os.path.join(
+					self._save_dir,
+					f"peter_local_v{self.num_timesteps // self._freq}.zip",
+				)
+				self.model.save(path)
+				print(f"[Peter-local] Checkpoint saved → {os.path.basename(path)}")
+			return True
+
+	callback = _PeterCheckpointCallback(save_dir, checkpoint_every)
+	model.learn(
+		total_timesteps=total_timesteps,
+		callback=callback,
+		tb_log_name="peter_local",
+	)
+	final_path = os.path.join(save_dir, "peter_local_final.zip")
+	model.save(final_path)
+	print(f"[Peter-local] Training complete → {final_path}")
+
+
 if __name__ == "__main__":
 	parser = argparse.ArgumentParser(description="Duck Chess training / evaluation runner")
 	subparsers = parser.add_subparsers(dest="mode", help="Mode to run")
 
 	# --- train ---
 	subparsers.add_parser("train", help="Resume stage-11 self-play league training")
+
+	# --- train-peter (local engine, no browser) ---
+	p_peter = subparsers.add_parser(
+		"train-peter",
+		help="Train against the local Peter engine (4 envs, mixed depths)",
+	)
+	p_peter.add_argument(
+		"--base-model", default=None,
+		help="Path to a .zip checkpoint to warm-start from",
+	)
+	p_peter.add_argument(
+		"--depths", nargs="+", type=int, default=[1, 2, 3, 3],
+		help="Search depth per env (default: 1 2 3 3)",
+	)
+	p_peter.add_argument(
+		"--steps", type=int, default=5_000_000,
+		help="Total training timesteps (default: 5 000 000)",
+	)
+	p_peter.add_argument(
+		"--checkpoint-every", type=int, default=200_000,
+		help="Save checkpoint every N steps (default: 200 000)",
+	)
 
 	# --- play (single sequential) ---
 	p_play = subparsers.add_parser("play", help="Play Model 7 vs Peter (sequential games)")
@@ -175,6 +301,14 @@ if __name__ == "__main__":
 
 	if args.mode == "train":
 		train()
+	elif args.mode == "train-peter":
+		train_vs_peter_local(
+			base_model_path=args.base_model,
+			depths=tuple(args.depths),
+			total_timesteps=args.steps,
+			checkpoint_every=args.checkpoint_every,
+			n_envs=len(args.depths),
+		)
 	elif args.mode == "play":
 		play_model7_vs_peter(num_games=args.games, deterministic=not args.stochastic)
 	elif args.mode == "parallel":
