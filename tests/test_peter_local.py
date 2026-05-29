@@ -228,10 +228,15 @@ class TestPeterLocalOpponent(unittest.TestCase):
         masks = np.zeros(4096, dtype=bool)
         masks[expected] = True
 
-        self.assertEqual(opp.get_action(None, masks), expected)
+        eng = SimpleNamespace(phase="move_piece")
+        self.assertEqual(opp.get_action(eng, masks), expected)
+
+    def _make_engine_stub(self, phase="move_duck"):
+        """Return a minimal engine stub with .phase set."""
+        return SimpleNamespace(phase=phase)
 
     def test_get_action_duck_move(self):
-        # Peter returns duck move {from:8, to:8}
+        # Peter returns duck move {from:8, to:8}  (first-ever placement)
         pl  = self.pl
         opp = self._make_opp(run_return={"from": 8, "to": 8})
 
@@ -241,14 +246,30 @@ class TestPeterLocalOpponent(unittest.TestCase):
         masks = np.zeros(4096, dtype=bool)
         masks[expected] = True
 
-        self.assertEqual(opp.get_action(None, masks), expected)
+        eng = self._make_engine_stub(phase="move_duck")
+        self.assertEqual(opp.get_action(eng, masks), expected)
+
+    def test_get_action_subsequent_duck_move(self):
+        # Peter returns {from:8, to:17} (duck already on board at a2, moves to b3)
+        pl  = self.pl
+        opp = self._make_opp(run_return={"from": 8, "to": 17})
+
+        our_to   = pl._peter_sq_to_our_sq(17)  # b3 → sq 41
+        expected = our_to                       # 0 * 64 + 41
+
+        masks = np.zeros(4096, dtype=bool)
+        masks[expected] = True
+
+        eng = self._make_engine_stub(phase="move_duck")
+        self.assertEqual(opp.get_action(eng, masks), expected)
 
     def test_get_action_falls_back_when_no_pv(self):
         # Peter returns empty PV → fallback to first valid mask entry
         opp = self._make_opp(run_return=None)
         masks = np.zeros(4096, dtype=bool)
         masks[123] = True
-        action = opp.get_action(None, masks)
+        eng = SimpleNamespace(phase="move_piece")
+        action = opp.get_action(eng, masks)
         self.assertEqual(action, 123)
 
     def test_get_action_falls_back_when_move_not_in_mask(self):
@@ -259,13 +280,15 @@ class TestPeterLocalOpponent(unittest.TestCase):
         masks = np.zeros(4096, dtype=bool)
         masks[999] = True   # Peter's move is NOT here
 
-        action = opp.get_action(None, masks)
+        eng = SimpleNamespace(phase="move_piece")
+        action = opp.get_action(eng, masks)
         self.assertEqual(action, 999)   # only valid choice
 
     def test_get_action_all_masked_returns_zero(self):
         opp = self._make_opp(run_return=None)
         masks = np.zeros(4096, dtype=bool)
-        self.assertEqual(opp.get_action(None, masks), 0)
+        eng = SimpleNamespace(phase="move_piece")
+        self.assertEqual(opp.get_action(eng, masks), 0)
 
     # ---- mirror_action -------------------------------------------- #
 
@@ -284,12 +307,14 @@ class TestPeterLocalOpponent(unittest.TestCase):
         self.assertEqual(m["from"], 8)
         self.assertEqual(m["to"],   16)
 
-    def test_mirror_duck_move(self):
+    def test_mirror_first_duck_placement(self):
+        # First duck placement (duck not yet on board): from == to == target
         pl  = self.pl
         opp = self._make_opp()
+        self.assertIsNone(opp._duck_peter_sq)     # pre-condition
 
-        our_to = pl._peter_sq_to_our_sq(8)   # a2 → 48
-        action = our_to                       # 0 * 64 + 48
+        our_to = pl._peter_sq_to_our_sq(8)        # a2 → our sq 48
+        action = our_to                            # 0 * 64 + 48
 
         opp.mirror_action(action, is_duck_phase=True)
 
@@ -297,6 +322,29 @@ class TestPeterLocalOpponent(unittest.TestCase):
         m = json.loads(call_args)
         self.assertEqual(m["from"], 8)
         self.assertEqual(m["to"],   8)
+        # Duck position now tracked
+        self.assertEqual(opp._duck_peter_sq, 8)
+
+    def test_mirror_subsequent_duck_move(self):
+        # Second duck move: from == previous duck position
+        pl  = self.pl
+        opp = self._make_opp()
+
+        # Simulate duck already at a2 (Peter sq 8)
+        opp._duck_peter_sq = 8
+
+        # Now duck moves to b3 (Peter sq 17). Our sq for b3: rank=3,file=1 → peter=17
+        # our sq: row=5, col=1 → sq=41; action=41 (0*64+41)
+        our_to = pl._peter_sq_to_our_sq(17)   # b3 → our sq 41
+        action = our_to
+
+        opp.mirror_action(action, is_duck_phase=True)
+
+        call_args = opp._peter.apply_move.call_args[0][0]
+        m = json.loads(call_args)
+        self.assertEqual(m["from"], 8)    # duck was at a2 (Peter sq 8)
+        self.assertEqual(m["to"],   17)   # duck goes to b3 (Peter sq 17)
+        self.assertEqual(opp._duck_peter_sq, 17)  # updated
 
     def test_mirror_does_nothing_before_reset(self):
         pl  = self.pl
