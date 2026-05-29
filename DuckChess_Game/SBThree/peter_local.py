@@ -116,8 +116,9 @@ class PeterLocalOpponent(OpponentStrategy):
     def __init__(self, depth: int = 3, seed: int = 42) -> None:
         self.depth = depth
         self.seed  = seed
-        self._peter = None       # engine.Engine; created in reset()
-        self._engine_mod = None  # cached module reference
+        self._peter = None           # engine.Engine; created in reset()
+        self._engine_mod = None      # cached module reference
+        self._duck_peter_sq: Optional[int] = None  # Peter sq of duck, None = not yet placed
 
     # ---- lifecycle ------------------------------------------------- #
 
@@ -130,6 +131,7 @@ class PeterLocalOpponent(OpponentStrategy):
             seed=self.seed,
             care_about_threefold=True,
         )
+        self._duck_peter_sq = None   # duck not yet placed
 
     # ---- sync hook (called by PeterLocalEnv._apply_action) --------- #
 
@@ -138,10 +140,31 @@ class PeterLocalOpponent(OpponentStrategy):
         Apply one half-move from our game to Peter's shadow engine.
         Called for *every* half-move (agent and opponent alike) so the
         two engines stay in lockstep.
+
+        Duck-move encoding in Peter's engine:
+          - First-ever placement (duck not on board): from == to == target_sq
+          - All subsequent placements:               from == current_duck_sq, to == target_sq
+        We track _duck_peter_sq to supply the correct `from`.
         """
         if self._peter is None:
             return
-        peter_move = _our_action_to_peter_move_json(action_idx, is_duck_phase)
+
+        our_from_sq = action_idx >> 6
+        our_to_sq   = action_idx & 63
+        peter_to    = _our_sq_to_peter_sq(our_to_sq)
+
+        if is_duck_phase:
+            if self._duck_peter_sq is None:
+                # First-ever duck placement: from == to == target
+                peter_from = peter_to
+            else:
+                # Subsequent moves: from == current duck square
+                peter_from = self._duck_peter_sq
+            self._duck_peter_sq = peter_to          # update tracked position
+        else:
+            peter_from = _our_sq_to_peter_sq(our_from_sq)
+
+        peter_move = json.dumps({"from": peter_from, "to": peter_to})
         err = self._peter.apply_move(peter_move)
         if err is not None:
             log.warning("Peter shadow-engine rejected move %s: %s", peter_move, err)
@@ -154,11 +177,17 @@ class PeterLocalOpponent(OpponentStrategy):
 
         Peter's engine is in the correct state (already mirrored) so we
         just call run() and convert the top move from the PV.
+
+        Duck moves returned by Peter's engine use:
+          - from == to == target  on the first ever placement
+          - from == duck_current_sq, to == new_sq  thereafter
+        In both cases we only need `to` for our duck action index
+        (action_masker always encodes duck moves as 0*64 + target_sq).
+
         Falls back to a random legal action if the search returns nothing
         or if Peter's move is not in our legal-move mask.
         """
         if self._peter is None:
-            # Safety fallback: should not happen in normal usage
             valid = np.where(masks)[0]
             return int(np.random.choice(valid)) if len(valid) else 0
 
@@ -166,20 +195,28 @@ class PeterLocalOpponent(OpponentStrategy):
         pv: dict = json.loads(result)
 
         action: Optional[int] = None
+        is_duck_phase = (engine.phase == "move_duck")
 
         if pv.get("moves"):
-            best = pv["moves"][0]
-            action = _peter_move_to_our_action(best["from"], best["to"])
+            best      = pv["moves"][0]
+            peter_to  = best["to"]
+            our_to    = _peter_sq_to_our_sq(peter_to)
 
-        # Sanity-check: Peter's move must be in our legal mask
+            if is_duck_phase:
+                # Duck placement: action_masker encodes as 0 * 64 + our_to
+                action = our_to
+            else:
+                peter_from = best["from"]
+                our_from   = _peter_sq_to_our_sq(peter_from)
+                action     = our_from * 64 + our_to
+
+        # Sanity-check: Peter's chosen action must be in our legal mask
         if action is None or not masks[action]:
             valid = np.where(masks)[0]
             if len(valid) == 0:
-                return 0   # no legal moves at all
+                return 0
             if action is not None:
-                log.debug(
-                    "Peter's action %d not in mask; falling back to random", action
-                )
+                log.debug("Peter's action %d not in mask; falling back to random", action)
             action = int(np.random.choice(valid))
 
         return action
