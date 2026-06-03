@@ -9,7 +9,25 @@
       "Bash(Get-ChildItem -Path \"c:\\\\Users\\\\harel\\\\PycharmProjects\\\\duck_chess\\\\DuckChess_Game\\\\SBThree\" -Recurse -Force)",
       "Bash(Select-Object -ExpandProperty FullName)",
       "Bash(python -m pytest tests/test_reward_calculator.py -v --tb=short)",
-      "Bash(python -m pytest tests/ -v --tb=short -q)"
+      "Bash(python -m pytest tests/ -v --tb=short -q)",
+      "mcp__c1b17b20-5985-4cdd-94da-51819ceb5ffc__get_metadata",
+      "mcp__c1b17b20-5985-4cdd-94da-51819ceb5ffc__use_figma",
+      "Bash(python3 -c \"print\\('python ok'\\)\")",
+      "Bash(mkdir -p /c/Users/afiks/AppData/Local/Temp/duck_chess_ui && echo ok)",
+      "mcp__Claude_Preview__preview_start",
+      "Bash(ls \"/c/Users/afiks/AppData/Local/Temp/claude/\" | head -20)",
+      "Bash(curl -s http://localhost:7890/)",
+      "Bash(.venv/Scripts/python -c ' *)",
+      "Bash(.venv/Scripts/python -m DuckChess_Game.SBThree.train_strong --base-model \"models/duck_ppo/peter_local/peter_local_v20.zip\" --hours 0.03 --checkpoint-every 4000)",
+      "Bash(.venv/Scripts/python -m DuckChess_Game.SBThree.train_strong --base-model \"models/duck_ppo/peter_local/peter_local_v20.zip\" --hours 0.04 --checkpoint-every 4000)",
+      "Bash(grep -vE \"pygame|Hello from|UserWarning|warnings.warn|^\\\\s*$\")",
+      "Bash(cd \"C:\\\\Users\\\\afiks\\\\Documents\\\\Afik\\\\Afeka\\\\duck_chess-master\\\\duck_chess-master\" && rm -f models/duck_ppo/strong/*.zip && rm -rf tensorboard_logs/strong/strong_1 tensorboard_logs/strong/strong_2 && mkdir -p logs && echo \"cleaned smoke artifacts\")",
+      "Bash(.venv/Scripts/python -m DuckChess_Game.SBThree.train_strong --base-model \"models/duck_ppo/peter_local/peter_local_v20.zip\" --hours 11.5 --checkpoint-every 500000)",
+      "Bash(tee logs/strong_run.log)",
+      "Bash(git add *)",
+      "Bash(grep \"\\\\.zip$\")",
+      "Bash(git diff *)",
+      "Bash(xargs -0 -I{} sh -c 'test -f \"{}\" && find \"{}\" -size +95M')"
     ]
   }
 }

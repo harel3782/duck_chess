@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "duck-chess-ui",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "7890", "--directory", "C:/Users/afiks/AppData/Local/Temp/duck_chess_ui"],
+      "port": 7890
+    }
+  ]
+}
