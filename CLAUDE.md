@@ -8,24 +8,65 @@ Duck Chess is a Chess variant AI project — a fully playable Duck Chess game (c
 
 ## Running the Code
 
-**Launch the game UI:**
-```
+### Game UI
+```bash
 python DuckChess_Game/UI/main.py
 ```
 
-**Run RL training (Stage 11):**
+### RL Training
+
+**Stage 11 (league-based):**
+```bash
+python DuckChess_Game/SBThree/train.py train
 ```
-python DuckChess_Game/SBThree/train.py
+
+**Training against local Peter engine (with GUI, 4 envs):**
+```bash
+python DuckChess_Game/SBThree/train.py train-peter
+```
+
+**Headless Peter training (no GUI, background-safe, step-tracked):**
+```bash
+# Start fresh
+python DuckChess_Game/SBThree/train_peter_headless.py --steps 10_000_000
+
+# Resume from checkpoint
+python DuckChess_Game/SBThree/train_peter_headless.py --checkpoint models/duck_ppo/peter_headless/peter_v5.zip
+
+# Auto-resume from latest
+python DuckChess_Game/SBThree/train_peter_headless.py --auto-resume
+
+# View progress
+python DuckChess_Game/SBThree/train_peter_headless.py --show-progress
 ```
 
 **Run Stage 12 training:**
-```
+```bash
 python DuckChess_Game/SBThree/train_stage12.py
 ```
 
-**Monitor training with TensorBoard:**
+### Testing
+```bash
+# Run all tests
+pytest DuckChess_Game/Logic/test_logic.py -v
+
+# Run specific test class
+pytest DuckChess_Game/Logic/test_logic.py::TestGameInitialization -v
+
+# Run with coverage
+pytest DuckChess_Game/Logic/test_logic.py --cov=DuckChess_Game.Logic
 ```
+
+### Monitoring Training
+
+**TensorBoard:**
+```bash
 tensorboard --logdir tensorboard_logs/
+```
+
+**Headless training progress (real-time):**
+```bash
+tail -f logs/peter_training_progress.csv
 ```
 
 ## Architecture
@@ -56,13 +97,17 @@ RL training pipeline using **Stable Baselines3 + sb3-contrib MaskablePPO**.
 | File | Purpose |
 |------|---------|
 | `DuckChess_Game/Logic/logic.py` | Main game logic class — start here to understand game state |
+| `DuckChess_Game/Logic/test_logic.py` | Unit tests for game logic (19 test classes) |
 | `DuckChess_Game/Logic/rl_mixin.py` | Bridge between game engine and RL environments |
 | `DuckChess_Game/Logic/observation_encoder.py` | Board → 19-channel tensor encoding |
 | `DuckChess_Game/Logic/action_masker.py` | Legal move mask for 4096 action space |
 | `DuckChess_Game/UI/main.py` | Game entry point, model loading, game loop |
-| `DuckChess_Game/SBThree/train.py` | Stage 11 training script |
+| `DuckChess_Game/SBThree/train.py` | Multi-mode training script (stage 11, Peter, browser) |
+| `DuckChess_Game/SBThree/train_peter_headless.py` | Headless Peter training with step tracking (background-safe) |
+| `DuckChess_Game/SBThree/peter_local.py` | Local Peter engine opponent integration |
 | `models/duck_ppo/` | Saved model checkpoints |
 | `training_log.md` | Training history and stage-by-stage notes |
+| `logs/` | Training logs, CSV progress tracking, TensorBoard events |
 
 ## Duck Chess Rules
 

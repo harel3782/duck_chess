@@ -77,14 +77,15 @@ def _our_action_to_peter_move_json(action_idx: int, is_duck_phase: bool) -> str:
     For duck placements, Peter requires from == to == target_square.
     For regular moves, from and to differ.
     """
+    action_idx = int(action_idx)     # may arrive as numpy.int64 from the policy
     our_from_sq = action_idx >> 6    # // 64
     our_to_sq   = action_idx & 63    # % 64
-    peter_to = _our_sq_to_peter_sq(our_to_sq)
+    peter_to = int(_our_sq_to_peter_sq(our_to_sq))
 
     if is_duck_phase:
         # Duck: both from and to map to the target square in Peter's coords
         return json.dumps({"from": peter_to, "to": peter_to})
-    peter_from = _our_sq_to_peter_sq(our_from_sq)
+    peter_from = int(_our_sq_to_peter_sq(our_from_sq))
     return json.dumps({"from": peter_from, "to": peter_to})
 
 
@@ -149,9 +150,10 @@ class PeterLocalOpponent(OpponentStrategy):
         if self._peter is None:
             return
 
+        action_idx = int(action_idx)   # may arrive as numpy.int64 from the policy
         our_from_sq = action_idx >> 6
         our_to_sq   = action_idx & 63
-        peter_to    = _our_sq_to_peter_sq(our_to_sq)
+        peter_to    = int(_our_sq_to_peter_sq(our_to_sq))
 
         if is_duck_phase:
             if self._duck_peter_sq is None:
@@ -159,10 +161,10 @@ class PeterLocalOpponent(OpponentStrategy):
                 peter_from = peter_to
             else:
                 # Subsequent moves: from == current duck square
-                peter_from = self._duck_peter_sq
+                peter_from = int(self._duck_peter_sq)
             self._duck_peter_sq = peter_to          # update tracked position
         else:
-            peter_from = _our_sq_to_peter_sq(our_from_sq)
+            peter_from = int(_our_sq_to_peter_sq(our_from_sq))
 
         peter_move = json.dumps({"from": peter_from, "to": peter_to})
         err = self._peter.apply_move(peter_move)

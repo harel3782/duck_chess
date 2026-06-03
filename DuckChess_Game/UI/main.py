@@ -28,7 +28,9 @@ class DuckChess(GameLogicMixin, RenderingMixin, InputHandlerMixin, AssetManagerM
 		self.init_ai()
 
 		self.rl_model = None
-		model_path = "models/duck_ppo/stage10_league_v416.zip"
+		# Strongest model (12h Peter+self-play run). Beats Peter depth-2 24/0/0 and
+		# beats the previous best (peter_local_v20) 100% head-to-head. See training_log.md.
+		model_path = "models/duck_ppo/strong/strong_final.zip"
 		if os.path.exists(model_path):
 			print(f"[+] Loading RL Model for AI moves: {model_path}")
 			self.rl_model = MaskablePPO.load(model_path, device="cpu")
