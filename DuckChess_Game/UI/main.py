@@ -28,10 +28,14 @@ class DuckChess(GameLogicMixin, RenderingMixin, InputHandlerMixin, AssetManagerM
 		self.init_ai()
 
 		self.rl_model = None
-		# Strongest model (12h Peter+self-play run). Beats Peter depth-2 24/0/0 and
-		# beats the previous best (peter_local_v20) 100% head-to-head. See training_log.md.
-		model_path = "models/duck_ppo/strong/strong_final.zip"
-		if os.path.exists(model_path):
+		# NOTE: No model here is currently good vs a human. Every checkpoint either
+		# loses to a real engine (stage-10/12 league: 0/20 vs Peter depth-2) or only
+		# wins via a ~4-move king-rush exploit that any human defends (peter_local /
+		# strong: 0/N vs Peter depth-3). Until a model beats depth-3, leave this
+		# UNSET so the game falls back to the basic alpha-beta AI (ai.py), which is a
+		# steadier human opponent than the cheese policy. See training_log.md.
+		model_path = None
+		if model_path and os.path.exists(model_path):
 			print(f"[+] Loading RL Model for AI moves: {model_path}")
 			self.rl_model = MaskablePPO.load(model_path, device="cpu")
 

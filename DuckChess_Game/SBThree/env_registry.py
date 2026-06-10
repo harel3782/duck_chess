@@ -274,6 +274,42 @@ def make_stage12_config() -> EnvConfig:
 
 
 # ------------------------------------------------------------------ #
+# Stage 13 — Peter + Stage-12 league, sparse rewards                   #
+# ------------------------------------------------------------------ #
+
+def make_stage13_config() -> EnvConfig:
+    # LeagueOpponent: 50% stage-12 historical, 50% latest stage-13 training model.
+    # Peter envs are created separately (PeterLocalEnv) — this config is for the
+    # self-play league half of the heterogeneous SubprocVecEnv in train_stage13.py.
+    #
+    # Reward: LIGHT shaping on top of the terminal +1/-1/+0.1 backbone.
+    # Pure sparse against an evolving self-play league was giving the policy
+    # almost no learning signal (sparse outcome + roughly even matchups → noise
+    # dominates). Weights are intentionally small so they do not overpower the
+    # terminal reward — they exist only to bootstrap.
+    return EnvConfig(
+        stage_name="stage 13",
+        opponent=LeagueOpponent(
+            alpha_beta_prob=0.00,
+            random_prob=0.00,
+            historical_fraction=0.50,
+        ),
+        reward=ShapedReward(
+            material_weight=0.03,
+            development_bonus=0.05,
+            castling_bonus=0.15,
+            blocking_scale=0.01,
+            mobility_scale=0.003,
+            win=1.0, loss=-1.0, draw=0.1,
+        ),
+        mask=StandardMask(),
+        randomize_color=True,
+        replay_every=1000,
+        replay_chief_only=True,
+    )
+
+
+# ------------------------------------------------------------------ #
 # Registry — maps short names to factory callables                     #
 # ------------------------------------------------------------------ #
 
@@ -290,6 +326,7 @@ REGISTRY: dict = {
     "stage10": make_stage10_config,
     "stage11": make_stage11_config,
     "stage12": make_stage12_config,
+    "stage13": make_stage13_config,
     # Local Peter engine stages
     "peter_easy":   make_peter_easy_config,
     "peter_medium": make_peter_medium_config,
