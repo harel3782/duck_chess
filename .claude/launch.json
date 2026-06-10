@@ -1,0 +1,12 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "duck-chess-ui",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "uvicorn", "web_ui.server:app", "--host", "127.0.0.1", "--port", "7890"],
+      "cwd": "C:/Users/afiks/Documents/Afik/Afeka/duck_chess-master/duck_chess-master",
+      "port": 7890
+    }
+  ]
+}
