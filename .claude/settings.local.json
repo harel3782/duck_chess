@@ -9,7 +9,8 @@
       "Bash(Get-ChildItem -Path \"c:\\\\Users\\\\harel\\\\PycharmProjects\\\\duck_chess\\\\DuckChess_Game\\\\SBThree\" -Recurse -Force)",
       "Bash(Select-Object -ExpandProperty FullName)",
       "Bash(python -m pytest tests/test_reward_calculator.py -v --tb=short)",
-      "Bash(python -m pytest tests/ -v --tb=short -q)"
+      "Bash(python -m pytest tests/ -v --tb=short -q)",
+      "Bash(xargs -I{} du -h {})"
     ]
   }
 }

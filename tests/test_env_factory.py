@@ -12,10 +12,10 @@ from DuckChess_Game.SBThree.env_registry import REGISTRY
 
 class TestRegistry:
     def test_has_12_entries(self):
-        assert len(REGISTRY) == 12
+        assert len(REGISTRY) == 14
 
     def test_all_stage_keys_present(self):
-        expected = {f"stage{i}" for i in range(1, 13)}
+        expected = {f"stage{i}" for i in range(1, 15)}
         assert set(REGISTRY.keys()) == expected
 
     def test_each_entry_is_callable(self):
@@ -84,7 +84,7 @@ class TestEnvFactoryListStages:
         assert all(isinstance(s, str) for s in stages)
 
     def test_returns_12_stages(self):
-        assert len(EnvFactory.list_stages()) == 12
+        assert len(EnvFactory.list_stages()) == 14
 
     def test_is_sorted(self):
         stages = EnvFactory.list_stages()

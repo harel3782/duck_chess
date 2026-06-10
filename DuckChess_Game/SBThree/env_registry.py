@@ -21,6 +21,8 @@ from DuckChess_Game.SBThree.base.opponent_strategy import (
     SelfPlayOpponent,
 )
 from DuckChess_Game.SBThree.base.reward_calculator import ShapedReward, TerminalReward
+from DuckChess_Game.SBThree.duck_env_stage13_fast import make_stage13_config
+from DuckChess_Game.SBThree.duck_env_stage14_recovery import make_stage14_config
 
 
 # ------------------------------------------------------------------ #
@@ -285,4 +287,6 @@ REGISTRY: dict = {
     "stage10": make_stage10_config,
     "stage11": make_stage11_config,
     "stage12": make_stage12_config,
+    "stage13": make_stage13_config,
+    "stage14": make_stage14_config,
 }
