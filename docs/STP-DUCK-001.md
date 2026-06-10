@@ -1,38 +1,47 @@
 # Software Test Plan (STP) — Duck Chess Engine
 
-**Document ID:** STP-DUCK-001  
-**Version:** 1.0  
-**Date:** 2026-05-20  
+**Document ID:** STP-DUCK-001
+**Version:** 1.1
+**Date:** 2026-06-10
 **Project:** Duck Chess — Game Engine & Reinforcement Learning Pipeline
+**Linked STD:** STD-DUCK-001
 
 ---
 
 ## 1. Introduction
 
 ### 1.1 Purpose
-This document defines the test plan for the Duck Chess game engine and RL training pipeline. It specifies what is tested, how it is tested, and what constitutes acceptable quality before promotion to production checkpoints.
+This document defines the test plan for the Duck Chess game engine and RL training pipeline. It
+specifies *what* is tested, *how* it is tested, and what constitutes acceptable quality before a
+training checkpoint is promoted.
 
 ### 1.2 Scope
-The plan covers the pure Python game engine (`DuckChess_Game/Logic/`), the RL interface layer, and the atomic turn pipeline. The Pygame UI layer and SBThree training scripts are **out of scope**.
+The plan covers the pure-Python game engine (`DuckChess_Game/Logic/`), the RL interface layer
+(observation encoding and action masking), the atomic turn pipeline, and the Peter engine opponent
+integration. The Pygame UI rendering layer and the SBThree training *scripts* are **out of scope**
+(the RL *environment contract* is in scope).
 
 ### 1.3 Objectives
-- Confirm correct implementation of all Duck Chess rules (fowling, duck blocking, en passant, castling)
-- Verify correctness of the RL observation tensor (19 × 8 × 8) and action mask (4096-dimensional)
-- Confirm 2D board and bitboard representations remain in sync
-- Verify atomic turn execution: illegal moves produce zero state mutation
-- Establish a regression baseline for further training stages
+- Confirm correct implementation of all Duck Chess rules: **fowling** (no legal moves wins),
+  **win by king capture**, duck blocking, en passant, castling, and the 50-move draw.
+- Verify the RL observation tensor (19 × 8 × 8) and action mask (4096-dimensional).
+- Confirm the 2D board and bitboard representations stay in sync.
+- Verify atomic turn execution: an illegal move produces zero state mutation.
+- Verify the Peter opponent bindings and coordinate conversion.
+- Establish a regression baseline for further training stages.
 
 ### 1.4 References
-- `CLAUDE.md` — Project documentation
-- `DuckChess_Game/Logic/logic.py` — Game engine hub
-- `tests/conftest.py` — Test configuration
-- `pytest.ini` — Pytest settings
+- `README.md`, `CLAUDE.md` — project documentation
+- `DuckChess_Game/Logic/logic.py` — game-engine hub
+- `tests/conftest.py` and root `conftest.py` — test configuration (headless setup)
+- `pytest.ini` — pytest settings (`testpaths = tests`)
+- `STD-DUCK-001.md` — companion Software Test Design
 
 ### 1.5 Assumptions
-- All tests run with Python 3.12 in the `.venv` virtual environment
-- Tests execute in headless mode (`game_mode='rl_training'`)
-- No GPU is required; PyTorch CPU mode is sufficient
-- No network access required
+- Tests run with **Python 3.12** in the project `.venv`.
+- Tests execute in headless mode (`game_mode='rl_training'`; dummy SDL drivers).
+- No GPU is required; PyTorch CPU mode is sufficient.
+- No network access is required.
 
 ---
 
@@ -42,14 +51,16 @@ The plan covers the pure Python game engine (`DuckChess_Game/Logic/`), the RL in
 |----|--------|------|-------------|
 | TI-01 | BitboardManager | `Logic/bitboard_manager.py` | 64-bit board representation, occupancy tracking |
 | TI-02 | BitboardMoveGen | `Logic/bitboard_move_gen.py` | Fast bitwise move generation |
-| TI-03 | RulesChecker | `Logic/rules_checker.py` | Check detection (5 attack vectors) |
-| TI-04 | MoveGeneration | `Logic/move_generation.py` | Legal move generation, castling, en passant |
+| TI-03 | RulesChecker | `Logic/rules_checker.py` | Attack/check detection (all vectors), king proximity |
+| TI-04 | MoveGeneration | `Logic/move_generation.py` | Legal move generation, castling, en passant, duck blocking |
 | TI-05 | ActionMasker | `Logic/action_masker.py` | 4096-action encoding and masking |
 | TI-06 | ObservationEncoder | `Logic/observation_encoder.py` | 19×8×8 state tensor encoding |
 | TI-07 | EndgameChecker | `Logic/endgame_checker.py` | Fowling rule, 50-move rule, material score |
 | TI-08 | MovePipeline | `Logic/move_pipeline.py` | Atomic two-phase turn orchestration |
 | TI-09 | GameStateValidator | `Logic/game_state_validator.py` | Stateless board/phase diagnostic |
 | TI-10 | BaseDuckChessEnv | `SBThree/base/` | Gymnasium RL environment wrapper |
+| TI-11 | EnvFactory | `SBThree/env_factory.py` | Environment construction and wiring |
+| TI-12 | Peter integration | `SBThree/peter_local.py`, `Logic/peter_opponent.py` | Engine bindings, coordinate conversion, move sync |
 
 ---
 
@@ -58,7 +69,6 @@ The plan covers the pure Python game engine (`DuckChess_Game/Logic/`), the RL in
 | Feature | Priority |
 |---------|----------|
 | Bitboard bit operations (set, clear, get) | High |
-| Coordinate-to-square mapping | High |
 | 2D ↔ bitboard synchronization | High |
 | Legal move count at start (20 moves) | High |
 | Pawn double-push and blocking | High |
@@ -66,13 +76,15 @@ The plan covers the pure Python game engine (`DuckChess_Game/Logic/`), the RL in
 | Duck non-blocking of knights | High |
 | En passant legality and blocking | High |
 | Castling path validation | High |
-| Check detection (all 5 vectors) | High |
-| **Fowling rule (stalemate = win)** | **High** |
+| Check/attack detection (all vectors) | High |
+| **Fowling rule (no legal moves = win)** | **High** |
+| **Win by king capture** | **High** |
 | 50-move rule | Medium |
-| Action encoding/decoding roundtrip | High |
-| Observation shape and channels | High |
+| Action encoding/decoding roundtrip (4096) | High |
+| Observation shape, channels, dtype | High |
 | Atomic turn rejection (no state mutation) | High |
 | Duck placement validation | High |
+| Peter coordinate conversion & move sync | High |
 
 ---
 
@@ -80,31 +92,33 @@ The plan covers the pure Python game engine (`DuckChess_Game/Logic/`), the RL in
 
 | Feature | Reason |
 |---------|--------|
-| Pygame UI rendering | Requires display server |
-| MaskablePPO training convergence | Statistical outcome, not deterministic |
-| TensorBoard logging | Infrastructure concern |
-| Save file format | Stable; out of scope |
+| Pygame UI rendering | Requires a display server; visual, not deterministic |
+| MaskablePPO training convergence | Statistical outcome, not a unit-test concern |
+| TensorBoard / CSV logging | Infrastructure concern |
+| Save-file format | Stable; out of scope |
 
 ---
 
 ## 5. Test Strategy & Approach
 
-### 5.1 Unit Testing
-All pure-logic classes are tested in isolation using `pytest` with `conftest.py` fixtures. Each test is stateless and fresh.
+### 5.1 Unit testing
+Pure-logic classes are tested in isolation with `pytest` and `conftest.py` fixtures. Each test is
+stateless and starts from a fresh engine.
 
-### 5.2 Integration Testing
-Full end-to-end scenarios: piece move → duck placement → turn advance.
+### 5.2 Integration testing
+End-to-end scenarios: piece move → duck placement → turn advance, plus a full game against the
+Peter opponent.
 
-### 5.3 Regression Testing
-The test suite runs as a pre-merge gate on the `master` branch. All tests must pass before checkpoint promotion.
+### 5.3 Regression testing
+The suite is the pre-merge gate on `master`. All tests must pass before checkpoint promotion.
 
-### 5.4 Boundary & Edge-Case Testing
+### 5.4 Boundary & edge-case testing
 - Board corners: `(0,0)`, `(0,7)`, `(7,0)`, `(7,7)`
-- Sentinel values: `duck_pos = (-1, -1)`, `en_passant_target = None`
+- Sentinel values: `duck_pos = (-1,-1)`, `en_passant_target = None`
 - Out-of-bounds coordinates
 
-### 5.5 Property Testing (Roundtrip)
-All 4096 encode → decode pairs are verified as bijective.
+### 5.5 Property testing (roundtrip)
+All 4096 `encode → decode` action pairs are verified as bijective.
 
 ---
 
@@ -113,11 +127,12 @@ All 4096 encode → decode pairs are verified as bijective.
 | Criterion | Pass | Fail |
 |-----------|------|------|
 | Test suite execution | All tests pass | Any test fails |
-| Starting position moves | Exactly 20 per color | Any other count |
+| Starting-position moves | Exactly 20 per color | Any other count |
 | Action encoding roundtrip | All 4096 pairs bijective | Any mismatch |
 | Observation tensor | Shape (19,8,8), dtype float32 | Wrong shape/dtype |
-| Illegal move state mutation | Zero state change | Any state change |
-| Fowling winner | `winner == self.turn` (stalemate color) | Any other assignment |
+| Illegal-move mutation | Zero state change | Any state change |
+| Fowling winner | `winner == self.turn` (stuck color) | Any other assignment |
+| King-capture winner | Capturing color wins immediately | Wrong/no winner |
 | Board sync at start | `verify_sync()` returns True | Returns False |
 
 ---
@@ -126,7 +141,7 @@ All 4096 encode → decode pairs are verified as bijective.
 
 | Deliverable | Tool | Location |
 |-------------|------|----------|
-| Test results | `pytest -v` | CI / terminal |
+| Test results | `pytest` | CI / terminal |
 | Coverage report | `pytest --cov` | `htmlcov/` |
 | Test source | Python | `tests/` |
 | STP document | Markdown | `docs/STP-DUCK-001.md` |
@@ -139,23 +154,29 @@ All 4096 encode → decode pairs are verified as bijective.
 | Requirement | Version |
 |-------------|---------|
 | Python | 3.12 |
-| pytest | >=7.0 |
-| pytest-cov | >=4.0 |
-| numpy | Latest |
-| stable-baselines3 | Latest |
+| pytest | >= 7.0 |
+| pytest-cov | >= 4.0 |
+| numpy | 2.x |
+| stable-baselines3 / sb3-contrib | 2.8 |
+| gymnasium | 1.2 |
 | torch | CPU mode |
 | OS | Windows 11 / Linux |
 
-**Execution:** `python -m pytest tests/ -v`
+**Execution** (from the project root; `pytest.ini` sets `testpaths = tests`):
+
+```bash
+pytest                 # full suite
+pytest --cov=DuckChess_Game.Logic --cov-report=html
+```
 
 ---
 
 ## 9. Responsibilities
 
-| Role | Name | Responsibility |
-|------|------|-----------------|
-| Developer/Tester | harel3782 | Write tests, fix failures, approve checkpoints |
-| AI Pair Programmer | Claude Sonnet 4.6 | Test design, documentation |
+| Role | Responsibility |
+|------|----------------|
+| Developer / Tester | Write tests, fix failures, approve checkpoint promotions |
+| AI pair programmer (Claude Code) | Test design, documentation, review |
 
 ---
 
@@ -166,8 +187,9 @@ All 4096 encode → decode pairs are verified as bijective.
 | Unit tests: Logic module | 2026-05-20 | Complete |
 | Integration: full turn pipeline | 2026-05-20 | Complete |
 | RL env: observation + mask tests | 2026-05-20 | Complete |
-| Stage 12 training gate | Post-25 ckpts | In progress |
-| Coverage target: 80%+ | TBD | Pending |
+| Peter integration tests | 2026-06-10 | Complete |
+| Suite expansion to per-module coverage (277 tests) | 2026-06-10 | Complete |
+| Coverage target: 80%+ | TBD | In progress |
 
 ---
 
@@ -175,11 +197,12 @@ All 4096 encode → decode pairs are verified as bijective.
 
 | Risk | Likelihood | Impact | Mitigation |
 |------|-----------|--------|------------|
-| Bitboard desync silent failure | Medium | High | `verify_sync()` after every `place_duck()` |
-| Fowling rule misimplemented | Low | Critical | Dedicated test case asserting `winner == stalemate_color` |
-| Promotion blocking duck phase | Medium | Medium | Test auto-complete in `rl_training` mode |
-| ATOMIC_FAILURE partial state | Medium | High | Test suite verifies no mutation on rejection |
-| Stage 12 wrong checkpoint | Fixed | Low | Fixed in `train_stage12.py`: numeric sort |
+| Bitboard desync (silent) | Medium | High | `verify_sync()` after every `place_duck()`; dedicated tests |
+| Fowling rule misimplemented | Low | Critical | Dedicated test asserting `winner == stuck color` |
+| King-capture win missed | Low | Critical | Dedicated test asserting capturing color wins immediately |
+| Atomic-failure partial state | Medium | High | Suite verifies zero mutation on rejected moves |
+| Peter coordinate-system mismatch | Medium | High | Conversion tests (Peter a1=0 vs engine indexing) |
+| Wrong checkpoint promoted | Low | Low | Numeric sort in `train_stage12.py`; eval gate vs Peter |
 
 ---
 

@@ -10,20 +10,12 @@ from DuckChess_Game.SBThree.env_registry import REGISTRY
 # Registry completeness                                                #
 # ------------------------------------------------------------------ #
 
-_STAGE_KEYS = {f"stage{i}" for i in range(1, 13)}
+_STAGE_KEYS = {f"stage{i}" for i in range(1, 15)}
 _PETER_KEYS = {"peter_easy", "peter_medium", "peter_hard"}
 _ALL_KEYS   = _STAGE_KEYS | _PETER_KEYS
 
 
 class TestRegistry:
-<<<<<<< HEAD
-    def test_has_12_entries(self):
-        assert len(REGISTRY) == 14
-
-    def test_all_stage_keys_present(self):
-        expected = {f"stage{i}" for i in range(1, 15)}
-        assert set(REGISTRY.keys()) == expected
-=======
     def test_has_expected_entry_count(self):
         assert len(REGISTRY) == len(_ALL_KEYS)
 
@@ -32,7 +24,6 @@ class TestRegistry:
 
     def test_peter_keys_present(self):
         assert _PETER_KEYS.issubset(set(REGISTRY.keys()))
->>>>>>> 10a15785773623291fe2169f56fc804f548ffe9b
 
     def test_each_entry_is_callable(self):
         for name, factory in REGISTRY.items():
@@ -99,13 +90,8 @@ class TestEnvFactoryListStages:
         assert isinstance(stages, list)
         assert all(isinstance(s, str) for s in stages)
 
-<<<<<<< HEAD
-    def test_returns_12_stages(self):
-        assert len(EnvFactory.list_stages()) == 14
-=======
     def test_returns_expected_stage_count(self):
         assert len(EnvFactory.list_stages()) == len(_ALL_KEYS)
->>>>>>> 10a15785773623291fe2169f56fc804f548ffe9b
 
     def test_is_sorted(self):
         stages = EnvFactory.list_stages()

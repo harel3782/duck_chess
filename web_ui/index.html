@@ -1,0 +1,1018 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Duck Chess</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #121418;
+      --panel: #16191f;
+      --panel2: #1c2030;
+      --line: #252b36;
+      --gold: #daa520;
+      --text: #f5f5f5;
+      --muted: #8a8f9a;
+      --sq: clamp(38px, 8.4vw, 64px);
+    }
+
+    html, body { height: 100%; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      overflow: hidden;
+    }
+
+    /* ─── SCREEN SYSTEM ───────────────────────────────── */
+    .screen { display: none; height: 100vh; flex-direction: column; }
+    .screen.active { display: flex; }
+
+    /* ─── SHARED BUTTONS ──────────────────────────────── */
+    .btn {
+      display: flex; align-items: center; justify-content: center; gap: 7px;
+      padding: 9px 14px; border-radius: 9px; border: none;
+      font-size: 13px; font-weight: 700; cursor: pointer;
+      transition: all .15s; width: 100%; font-family: inherit;
+    }
+    .btn:disabled { opacity: .45; cursor: not-allowed; }
+    .btn-gold  { background: var(--gold); color: #111; }
+    .btn-gold:hover  { background: #c8940e; }
+    .btn-blue  { background: #162540; color: #6aa8e0; border: 1px solid #1e3558; }
+    .btn-blue:hover  { background: #1e3050; }
+    .btn-red   { background: #2c1414; color: #d87070; border: 1px solid #4a2020; }
+    .btn-red:hover   { background: #3c1818; }
+    .btn-ghost { background: transparent; color: #888; border: 1px solid var(--line); font-size: 12px; }
+    .btn-ghost:hover { background: #1a1e2a; color: #ccc; }
+
+    /* ════════════════════════════════════════════════════
+       AUTH SCREEN
+    ════════════════════════════════════════════════════ */
+    #screen-auth {
+      align-items: center; justify-content: center;
+      background:
+        radial-gradient(circle at 50% 0%, #1d2230 0%, var(--bg) 60%);
+      padding: 20px;
+    }
+    .auth-card {
+      width: 100%; max-width: 380px;
+      background: var(--panel); border: 1px solid var(--line);
+      border-radius: 18px; padding: 28px 26px;
+      box-shadow: 0 20px 60px rgba(0,0,0,.5);
+    }
+    .auth-logo {
+      text-align: center; font-size: 30px; font-weight: 800;
+      color: var(--gold); letter-spacing: .5px; margin-bottom: 4px;
+    }
+    .auth-logo em { color: var(--text); font-style: normal; }
+    .auth-logo img { width: 40px; height: 40px; vertical-align: -8px; margin-right: 6px; }
+    .auth-sub { text-align: center; color: var(--muted); font-size: 13px; margin-bottom: 22px; }
+
+    .auth-tabs { display: flex; background: #0e1018; border-radius: 10px; padding: 4px; margin-bottom: 20px; }
+    .auth-tab {
+      flex: 1; text-align: center; padding: 8px; border-radius: 7px;
+      font-size: 13px; font-weight: 700; color: var(--muted); cursor: pointer; transition: all .15s;
+    }
+    .auth-tab.active { background: var(--panel2); color: var(--gold); }
+
+    .field { margin-bottom: 14px; }
+    .field label { display: block; font-size: 11px; color: var(--muted); margin-bottom: 6px; font-weight: 600; }
+    .field input {
+      width: 100%; background: #0e1018; border: 1px solid var(--line);
+      border-radius: 9px; padding: 11px 13px; color: var(--text); font-size: 14px; font-family: inherit;
+    }
+    .field input:focus { outline: none; border-color: var(--gold); }
+    .auth-error { color: #e07070; font-size: 12px; min-height: 16px; margin-bottom: 6px; }
+    .auth-hint { text-align: center; font-size: 11px; color: #555; margin-top: 14px; }
+
+    /* ════════════════════════════════════════════════════
+       MENU / HOME SCREEN
+    ════════════════════════════════════════════════════ */
+    .topbar {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 22px; height: 56px; background: var(--panel);
+      border-bottom: 1px solid var(--line); flex-shrink: 0; gap: 12px;
+    }
+    .logo { font-size: 19px; font-weight: 800; color: var(--gold); letter-spacing: .5px; white-space: nowrap; display: flex; align-items: center; gap: 7px; }
+    .logo em { color: var(--text); font-style: normal; }
+    .logo img { width: 26px; height: 26px; }
+
+    .profile-chip {
+      display: flex; align-items: center; gap: 9px;
+      background: var(--panel2); border: 1px solid var(--line);
+      border-radius: 22px; padding: 5px 7px 5px 10px;
+    }
+    .profile-chip .pname { font-size: 13px; font-weight: 700; }
+    .profile-chip .pav {
+      width: 30px; height: 30px; border-radius: 50%;
+      background: var(--gold); color: #111; font-weight: 800;
+      display: flex; align-items: center; justify-content: center; font-size: 14px;
+    }
+    .logout-btn {
+      background: transparent; border: none; color: var(--muted);
+      cursor: pointer; font-size: 12px; padding: 4px 8px; border-radius: 6px; font-family: inherit;
+    }
+    .logout-btn:hover { background: #2a1818; color: #e07070; }
+
+    .menu-body { flex: 1; overflow-y: auto; padding: 26px 22px; }
+    .menu-inner { max-width: 880px; margin: 0 auto; }
+    .menu-title { font-size: 24px; font-weight: 800; margin-bottom: 4px; }
+    .menu-title .accent { color: var(--gold); }
+    .menu-desc { color: var(--muted); font-size: 14px; margin-bottom: 22px; }
+
+    .model-pick {
+      display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+      background: var(--panel); border: 1px solid var(--line);
+      border-radius: 12px; padding: 12px 16px; margin-bottom: 24px;
+    }
+    .model-pick label { font-size: 12px; color: var(--muted); font-weight: 700; }
+    .select-wrap { position: relative; flex: 1; min-width: 200px; }
+    .select-wrap::after {
+      content: '▾'; position: absolute; right: 12px; top: 50%; transform: translateY(-50%);
+      color: var(--gold); pointer-events: none; font-size: 12px;
+    }
+    select {
+      appearance: none; width: 100%;
+      background: #0e1018; color: var(--text);
+      border: 1px solid var(--line); border-radius: 9px;
+      padding: 9px 32px 9px 13px; font-size: 13px; font-weight: 600; cursor: pointer; font-family: inherit;
+    }
+    select:focus { outline: none; border-color: var(--gold); }
+
+    .menu-grid {
+      display: grid; gap: 14px;
+      grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+    }
+    .menu-card {
+      background: var(--panel); border: 1px solid var(--line);
+      border-radius: 14px; padding: 18px; cursor: pointer;
+      transition: all .15s; display: flex; gap: 14px; align-items: flex-start;
+    }
+    .menu-card:hover { border-color: var(--gold); transform: translateY(-2px); background: #1a1e26; }
+    .menu-card .mc-icon {
+      width: 46px; height: 46px; border-radius: 11px; flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center; font-size: 24px;
+      background: #0e1018; border: 1px solid var(--line);
+    }
+    .menu-card .mc-icon img { width: 30px; height: 30px; }
+    .menu-card .mc-title { font-size: 15px; font-weight: 800; margin-bottom: 3px; }
+    .menu-card .mc-sub { font-size: 12px; color: var(--muted); line-height: 1.5; }
+
+    .saved-section { margin-top: 30px; }
+    .saved-head { font-size: 12px; font-weight: 800; color: var(--gold); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 12px; }
+    .saved-empty {
+      background: var(--panel); border: 1px dashed var(--line);
+      border-radius: 12px; padding: 22px; text-align: center;
+      color: var(--muted); font-size: 13px;
+    }
+
+    /* ════════════════════════════════════════════════════
+       GAME SCREEN
+    ════════════════════════════════════════════════════ */
+    #screen-game { background: var(--bg); }
+    .game-nav {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 18px; height: 50px; background: var(--panel);
+      border-bottom: 1px solid var(--line); flex-shrink: 0; gap: 12px;
+    }
+    .game-nav .gn-center { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 12px; }
+    .game-nav .gn-model { color: var(--text); font-weight: 700; }
+    .game-nav .gn-actions { display: flex; gap: 8px; }
+
+    .main { display: flex; flex: 1; overflow: hidden; }
+
+    .sidebar {
+      width: 200px; background: var(--panel);
+      display: flex; flex-direction: column;
+      padding: 13px 11px; gap: 12px; overflow-y: auto; flex-shrink: 0;
+    }
+    .sidebar-left  { border-right: 1px solid var(--line); }
+    .sidebar-right { border-left: 1px solid var(--line); width: 210px; }
+
+    .sec { display: flex; flex-direction: column; gap: 6px; }
+    .sec-label {
+      font-size: 9.5px; font-weight: 800; color: var(--gold);
+      text-transform: uppercase; letter-spacing: 1.2px; margin-bottom: 2px;
+    }
+
+    .player-card {
+      background: var(--panel2); border-radius: 9px;
+      padding: 8px 10px; display: flex; align-items: center; gap: 9px;
+    }
+    .player-card.active   { border: 1.5px solid var(--gold); }
+    .player-card.inactive { border: 1.5px solid transparent; opacity: .55; }
+    .avatar {
+      width: 30px; height: 30px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 13px; font-weight: 800; flex-shrink: 0;
+    }
+    .av-white { background: #ede0c0; color: #1a1a1a; }
+    .av-black { background: #282828; color: #ccc; border: 1px solid #444; }
+    .av-ai    { background: #1a2a40; color: #6aa8e0; border: 1px solid #2a4060; font-size: 16px; }
+    .p-name { font-size: 12px; font-weight: 700; }
+    .p-label, .p-time { font-size: 10px; color: var(--muted); }
+    .p-time { font-family: monospace; }
+
+    /* Evaluation — smaller */
+    .eval-card { background: var(--panel2); border-radius: 8px; padding: 7px 9px; }
+    .eval-header { display: flex; justify-content: space-between; font-size: 9.5px; color: var(--muted); margin-bottom: 4px; }
+    .eval-score { color: var(--gold); font-weight: 800; font-size: 12px; }
+    .eval-track { height: 5px; border-radius: 3px; background: #0e1018; overflow: hidden; }
+    .eval-fill {
+      height: 100%; border-radius: 3px; width: 50%;
+      background: linear-gradient(90deg, #d8cba8, var(--gold)); transition: width .3s;
+    }
+
+    /* History — bigger */
+    .history-wrap { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+    .history-box {
+      background: #0e1018; border-radius: 8px;
+      padding: 8px 9px; font-family: 'Consolas', monospace; font-size: 12px;
+      flex: 1; overflow-y: auto; min-height: 150px;
+    }
+    .mv { display: flex; gap: 4px; padding: 3px 0; border-bottom: 1px solid #1a1e28; }
+    .mv-n { color: #555; min-width: 18px; }
+    .mv-w { color: #d8cba8; flex: 1; }
+    .mv-b { color: #888; flex: 1; }
+    .history-empty { color: #555; font-size: 11px; padding: 4px 0; }
+
+    /* Board */
+    .board-area { flex: 1; display: flex; align-items: center; justify-content: center; padding: 14px; min-width: 0; }
+    .board-wrap { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+
+    #board {
+      display: grid;
+      grid-template-columns: repeat(8, var(--sq));
+      grid-template-rows: repeat(8, var(--sq));
+      border: 4px solid #3a2410; border-radius: 2px;
+      box-shadow: 0 0 0 1px #1e100a, 0 12px 40px rgba(0,0,0,.75), inset 0 0 30px rgba(0,0,0,.2);
+    }
+    #board.locked { pointer-events: none; }
+    .sq {
+      width: var(--sq); height: var(--sq);
+      position: relative; cursor: pointer;
+      display: flex; align-items: center; justify-content: center; overflow: hidden;
+    }
+    .sq.light { background: #f0e0c0; }
+    .sq.dark  { background: #7a5038; }
+    .sq:hover { filter: brightness(1.1); }
+
+    .coord-file, .coord-rank {
+      position: absolute; font-size: calc(var(--sq) * .16); font-weight: 700; opacity: .6; pointer-events: none; line-height: 1;
+    }
+    .coord-file { bottom: 2px; right: 3px; }
+    .coord-rank { top: 2px; left: 3px; }
+    .sq.light .coord-file, .sq.light .coord-rank { color: #7a5038; }
+    .sq.dark  .coord-file, .sq.dark  .coord-rank { color: #f0e0c0; }
+
+    .piece-img {
+      width: calc(var(--sq) * .9); height: calc(var(--sq) * .9);
+      object-fit: contain; pointer-events: none;
+      filter: drop-shadow(0 2px 3px rgba(0,0,0,.55)); transition: transform .1s;
+    }
+    .sq.sel .piece-img { transform: scale(1.07); }
+
+    /* Duck — a bit smaller */
+    .duck-wrap { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; pointer-events: none; z-index: 2; }
+    .duck-glow {
+      position: absolute; inset: calc(var(--sq)*.13); border-radius: 50%;
+      background: radial-gradient(circle, rgba(218,165,32,.32) 0%, transparent 70%);
+      animation: dGlow 2.2s ease-in-out infinite;
+    }
+    @keyframes dGlow { 0%,100%{box-shadow:0 0 0 0 rgba(218,165,32,.5)} 50%{box-shadow:0 0 12px 4px rgba(218,165,32,0)} }
+    .duck-svg { position: relative; z-index: 1; width: calc(var(--sq) * .66); height: calc(var(--sq) * .66); filter: drop-shadow(0 2px 4px rgba(0,0,0,.6)); }
+
+    .sq.last-move::before { content:''; position:absolute; inset:0; background: rgba(235,220,60,.28); pointer-events:none; z-index:0; }
+    .sq.sel::before { content:''; position:absolute; inset:0; background: rgba(218,165,32,.3); pointer-events:none; z-index:0; }
+    .sq.vm::after { content:''; position:absolute; width:calc(var(--sq)*.34); height:calc(var(--sq)*.34); border-radius:50%; background: rgba(255,140,0,.65); pointer-events:none; z-index:3; }
+    .sq.vc::after { content:''; position:absolute; inset:2px; border:3.5px solid rgba(210,50,50,.8); border-radius:5px; pointer-events:none; z-index:3; }
+    /* duck placement targets */
+    .sq.duckable::after { content:''; position:absolute; width:calc(var(--sq)*.5); height:calc(var(--sq)*.5); border-radius:50%; background:rgba(218,165,32,.22); border:2px solid rgba(218,165,32,.7); pointer-events:none; z-index:3; }
+    .sq.duckable:hover::after { background:rgba(218,165,32,.45); }
+
+    .turn-bar { display: flex; align-items: center; gap: 10px; font-size: 12px; min-height: 22px; }
+    .turn-dot { width: 9px; height: 9px; border-radius: 50%; background: #e8d8a0; box-shadow: 0 0 7px var(--gold); animation: tdot 1.2s ease-in-out infinite; flex-shrink: 0; }
+    @keyframes tdot { 0%,100%{opacity:1} 50%{opacity:.3} }
+    .turn-text { font-weight: 700; color: #e8d8a0; }
+    .phase-pill { padding: 3px 10px; border-radius: 12px; font-size: 10.5px; font-weight: 700; background: #152038; color: #5a9cd8; border: 1px solid #1e3558; }
+
+    /* Captured — neutral background, clearer */
+    .cap-box {
+      background: #2b2f38; border: 1px solid #363c47;
+      border-radius: 9px; padding: 8px 10px;
+      display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    }
+    .cap-pieces { display: flex; align-items: center; gap: 1px; min-height: 24px; flex-wrap: wrap; }
+    .cap-pieces img { width: 22px; height: 22px; }
+    .cap-pieces .empty { color: #5a6070; font-size: 11px; }
+    .cap-diff { font-size: 12px; font-weight: 800; color: var(--gold); flex-shrink: 0; }
+
+    /* ════════════════════════════════════════════════════
+       MODALS (rules + game over)
+    ════════════════════════════════════════════════════ */
+    .modal-backdrop {
+      position: fixed; inset: 0; background: rgba(0,0,0,.7);
+      display: none; align-items: center; justify-content: center; z-index: 100; padding: 20px;
+      backdrop-filter: blur(3px);
+    }
+    .modal-backdrop.active { display: flex; }
+    .modal {
+      width: 100%; max-width: 540px; max-height: 86vh; overflow-y: auto;
+      background: var(--panel); border: 1px solid var(--line); border-radius: 16px;
+      box-shadow: 0 24px 70px rgba(0,0,0,.6);
+    }
+    .modal-head {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 18px 22px; border-bottom: 1px solid var(--line);
+      position: sticky; top: 0; background: var(--panel);
+    }
+    .modal-head h2 { font-size: 19px; color: var(--gold); display: flex; align-items: center; gap: 9px; }
+    .modal-head h2 img { width: 28px; height: 28px; }
+    .modal-close { background: transparent; border: none; color: var(--muted); font-size: 24px; cursor: pointer; line-height: 1; padding: 0 4px; }
+    .modal-close:hover { color: var(--text); }
+    .modal-body { padding: 18px 22px; }
+    .rule { display: flex; gap: 12px; margin-bottom: 15px; }
+    .rule-num {
+      width: 26px; height: 26px; border-radius: 7px; flex-shrink: 0;
+      background: #0e1018; border: 1px solid var(--line); color: var(--gold);
+      display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 12px;
+    }
+    .rule-text { font-size: 13.5px; line-height: 1.55; }
+    .rule-text b { color: #e8d8a0; }
+
+    /* Game-over card */
+    .over-card { width: 100%; max-width: 380px; background: var(--panel); border: 1px solid var(--line);
+      border-radius: 18px; padding: 30px 26px; text-align: center; box-shadow: 0 24px 70px rgba(0,0,0,.6); }
+    .over-icon { width: 62px; height: 62px; margin: 0 auto 10px; }
+    .over-title { font-size: 24px; font-weight: 800; margin-bottom: 6px; }
+    .over-title.win  { color: var(--gold); }
+    .over-title.lose { color: #d87070; }
+    .over-title.draw { color: #8aa0c0; }
+    .over-sub { color: var(--muted); font-size: 13px; margin-bottom: 20px; }
+    .over-actions { display: flex; gap: 10px; }
+
+    /* tiny toast */
+    .toast {
+      position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%);
+      background: #20242e; border: 1px solid var(--line); color: var(--text);
+      padding: 10px 16px; border-radius: 10px; font-size: 13px; z-index: 200;
+      opacity: 0; pointer-events: none; transition: opacity .2s; box-shadow: 0 8px 26px rgba(0,0,0,.5);
+    }
+    .toast.show { opacity: 1; }
+
+    /* ════════════════════════════════════════════════════
+       RESPONSIVE — phone
+    ════════════════════════════════════════════════════ */
+    @media (max-width: 860px) {
+      .main { flex-direction: column; overflow-y: auto; }
+      .board-area { order: -1; padding: 10px; }
+      .sidebar, .sidebar-right { width: 100%; border: none; border-top: 1px solid var(--line); }
+      .sidebar-left { border-top: none; }
+      .history-box { min-height: 110px; max-height: 160px; }
+      .game-nav .gn-center .gn-model { display: none; }
+      :root { --sq: clamp(34px, 11vw, 56px); }
+    }
+    @media (max-width: 480px) {
+      .menu-body { padding: 18px 14px; }
+      .topbar { padding: 0 14px; }
+      .profile-chip .pname { display: none; }
+      :root { --sq: min(11.2vw, 46px); }
+      .auth-card { padding: 22px 18px; }
+    }
+
+    ::-webkit-scrollbar { width: 5px; height: 5px; }
+    ::-webkit-scrollbar-thumb { background: #2e3442; border-radius: 3px; }
+  </style>
+</head>
+<body>
+
+<!-- ════════════ AUTH SCREEN ════════════ -->
+<div class="screen active" id="screen-auth">
+  <div class="auth-card">
+    <div class="auth-logo"><img src="duck.png" alt="">Duck<em>Chess</em></div>
+    <div class="auth-sub">Sign in to save and review your games</div>
+
+    <div class="auth-tabs">
+      <div class="auth-tab active" id="tab-login" onclick="switchAuth('login')">Login</div>
+      <div class="auth-tab" id="tab-register" onclick="switchAuth('register')">Register</div>
+    </div>
+
+    <div class="field">
+      <label>Username</label>
+      <input id="auth-user" type="text" autocomplete="username" placeholder="your name"/>
+    </div>
+    <div class="field">
+      <label>Password</label>
+      <input id="auth-pass" type="password" autocomplete="current-password" placeholder="••••••••"/>
+    </div>
+    <div class="field" id="field-confirm" style="display:none">
+      <label>Confirm password</label>
+      <input id="auth-confirm" type="password" autocomplete="new-password" placeholder="••••••••"/>
+    </div>
+
+    <div class="auth-error" id="auth-error"></div>
+    <button class="btn btn-gold" id="auth-submit" onclick="submitAuth()">Login</button>
+    <div class="auth-hint">Login is open for now — any name gets you in.</div>
+  </div>
+</div>
+
+<!-- ════════════ MENU SCREEN ════════════ -->
+<div class="screen" id="screen-menu">
+  <div class="topbar">
+    <div class="logo"><img src="duck.png" alt="">Duck<em>Chess</em></div>
+    <div class="profile-chip">
+      <span class="pname" id="menu-username">player</span>
+      <button class="logout-btn" onclick="logout()">Logout</button>
+      <div class="pav" id="menu-avatar">P</div>
+    </div>
+  </div>
+
+  <div class="menu-body">
+    <div class="menu-inner">
+      <div class="menu-title">Welcome, <span class="accent" id="menu-welcome">player</span></div>
+      <div class="menu-desc">Choose how you want to play.</div>
+
+      <div class="model-pick">
+        <label>Opponent model</label>
+        <div class="select-wrap">
+          <select id="menu-model"><option>Loading models…</option></select>
+        </div>
+      </div>
+
+      <div class="menu-grid">
+        <div class="menu-card" onclick="startGame('white')">
+          <div class="mc-icon">♔</div>
+          <div><div class="mc-title">Play as White</div>
+            <div class="mc-sub">You move first against the selected model.</div></div>
+        </div>
+        <div class="menu-card" onclick="startGame('black')">
+          <div class="mc-icon">♚</div>
+          <div><div class="mc-title">Play as Black</div>
+            <div class="mc-sub">Model plays White; you respond second.</div></div>
+        </div>
+        <div class="menu-card" onclick="startGame('human')">
+          <div class="mc-icon">👥</div>
+          <div><div class="mc-title">Play vs Human</div>
+            <div class="mc-sub">Online match against another player.</div></div>
+        </div>
+        <div class="menu-card" onclick="startGame('position')">
+          <div class="mc-icon">⚑</div>
+          <div><div class="mc-title">Play from Position</div>
+            <div class="mc-sub">Set up a custom position and play it out.</div></div>
+        </div>
+        <div class="menu-card" onclick="openHistory()">
+          <div class="mc-icon">🕑</div>
+          <div><div class="mc-title">Model Game History</div>
+            <div class="mc-sub">Browse and replay past games of a model.</div></div>
+        </div>
+        <div class="menu-card" onclick="openRules()">
+          <div class="mc-icon"><img src="duck.png" alt=""></div>
+          <div><div class="mc-title">Rules</div>
+            <div class="mc-sub">How Duck Chess is played.</div></div>
+        </div>
+      </div>
+
+      <div class="saved-section">
+        <div class="saved-head">My Saved Games</div>
+        <div class="saved-empty" id="saved-list">No games yet — finish a game and it will appear here.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════ GAME SCREEN ════════════ -->
+<div class="screen" id="screen-game">
+  <div class="game-nav">
+    <div class="logo" style="font-size:16px"><img src="duck.png" style="width:22px;height:22px" alt="">Duck<em>Chess</em></div>
+    <div class="gn-center">
+      <span>Opponent:</span><span class="gn-model" id="game-model">Duck PPO</span>
+    </div>
+    <div class="gn-actions">
+      <button class="btn-ghost" style="width:auto;padding:6px 14px" onclick="openRules()">Rules</button>
+      <button class="btn-ghost" style="width:auto;padding:6px 14px" onclick="goMenu()">← Menu</button>
+    </div>
+  </div>
+
+  <div class="main">
+    <!-- LEFT -->
+    <div class="sidebar sidebar-left">
+      <div class="sec">
+        <div class="sec-label">Players</div>
+        <div class="player-card inactive" id="pc-opp">
+          <div class="avatar av-ai" id="opp-av">🧠</div>
+          <div><div class="p-name" id="opp-name">Duck PPO</div>
+            <div class="p-label" id="opp-label">Model</div></div>
+        </div>
+        <div class="player-card active" id="pc-you">
+          <div class="avatar av-white" id="you-av">Y</div>
+          <div><div class="p-name" id="you-name">You — White</div>
+            <div class="p-label" id="you-label">Your turn</div></div>
+        </div>
+      </div>
+
+      <div class="sec">
+        <div class="sec-label">Evaluation</div>
+        <div class="eval-card">
+          <div class="eval-header"><span id="eval-label">Material</span><span class="eval-score" id="eval-score">0.0</span></div>
+          <div class="eval-track"><div class="eval-fill" id="eval-fill"></div></div>
+        </div>
+      </div>
+
+      <div class="sec history-wrap">
+        <div class="sec-label">Move History</div>
+        <div class="history-box" id="history-box">
+          <div class="history-empty">No moves yet.</div>
+        </div>
+        <!-- Undo below history -->
+        <button class="btn btn-blue" id="btn-undo" style="margin-top:8px" onclick="notYet('Undo')">⟵ &nbsp;Undo Move</button>
+      </div>
+    </div>
+
+    <!-- BOARD -->
+    <div class="board-area">
+      <div class="board-wrap">
+        <div id="board"></div>
+        <div class="turn-bar">
+          <div class="turn-dot" id="turn-dot"></div>
+          <span class="turn-text" id="turn-text">White to move</span>
+          <div class="phase-pill" id="phase-pill">♟ Move piece</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- RIGHT -->
+    <div class="sidebar sidebar-right">
+      <div class="sec">
+        <div class="sec-label">Captured by White</div>
+        <div class="cap-box">
+          <div class="cap-pieces" id="cap-white"><span class="empty">none</span></div>
+          <div class="cap-diff" id="cap-white-diff"></div>
+        </div>
+      </div>
+      <div class="sec">
+        <div class="sec-label">Captured by Black</div>
+        <div class="cap-box">
+          <div class="cap-pieces" id="cap-black"><span class="empty">none</span></div>
+          <div class="cap-diff" id="cap-black-diff"></div>
+        </div>
+      </div>
+
+      <div class="sec">
+        <div class="sec-label">Controls</div>
+        <button class="btn btn-red" id="btn-resign" onclick="resignGame()">⚑ &nbsp;Resign</button>
+        <button class="btn btn-gold" onclick="restartGame()">↺ &nbsp;New Game</button>
+      </div>
+
+      <div class="sec" style="margin-top:auto">
+        <button class="btn btn-ghost" onclick="notYet('Copy FEN')">📋 Copy FEN</button>
+        <button class="btn btn-ghost" onclick="notYet('Export PGN')">📤 Export PGN</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════ RULES MODAL ════════════ -->
+<div class="modal-backdrop" id="modal-rules" onclick="if(event.target===this)closeRules()">
+  <div class="modal">
+    <div class="modal-head">
+      <h2><img src="duck.png" alt="">Duck Chess — Rules</h2>
+      <button class="modal-close" onclick="closeRules()">×</button>
+    </div>
+    <div class="modal-body" id="rules-body"></div>
+  </div>
+</div>
+
+<!-- ════════════ GAME-OVER MODAL ════════════ -->
+<div class="modal-backdrop" id="modal-over">
+  <div class="over-card">
+    <img class="over-icon" src="duck.png" alt="">
+    <div class="over-title" id="over-title">Game over</div>
+    <div class="over-sub" id="over-sub"></div>
+    <div class="over-actions">
+      <button class="btn btn-ghost" onclick="closeOver();goMenu()">← Menu</button>
+      <button class="btn btn-gold" onclick="closeOver();restartGame()">↺ New Game</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+  /* ════════════ DUCK CHESS RULES (from assets/rules.txt) ════════════ */
+  const RULES = [
+    ["The goal", "Win by <b>physically capturing the opponent's King</b>."],
+    ["No checks", "There is <b>no \"check\" or \"checkmate\"</b>. You may move your King into an attacked square or ignore an attack on it."],
+    ["Two-step turn", "Every turn has two mandatory actions: first make a <b>normal chess move</b>, then <b>move the Duck</b>."],
+    ["Duck must move", "The Duck <b>must be relocated every turn</b>. It cannot stay on its square and must land on an <b>empty</b> square."],
+    ["Indestructible blocker", "The Duck is a solid obstacle — pieces <b>cannot capture it, land on it, or slide through it</b>."],
+    ["Knights leap", "Knights jump, so they are the <b>only piece that can bypass the Duck</b> (but still can't land on it)."],
+    ["Castling freedom", "With no \"check\", you may <b>castle even while attacked</b> or across an attacked square."],
+    ["Fowling (stalemate win)", "If a player has <b>no legal move</b> (everything blocked), they are <b>\"fowled\" and immediately win</b>."],
+  ];
+  document.getElementById('rules-body').innerHTML = RULES.map((r,i)=>`
+    <div class="rule">
+      <div class="rule-num">${i+1}</div>
+      <div class="rule-text"><b>${r[0]}.</b> ${r[1]}</div>
+    </div>`).join('');
+
+  function openRules(){ document.getElementById('modal-rules').classList.add('active'); }
+  function closeRules(){ document.getElementById('modal-rules').classList.remove('active'); }
+  function closeOver(){ document.getElementById('modal-over').classList.remove('active'); }
+  document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeRules(); });
+
+  /* ════════════ TOAST ════════════ */
+  let toastTimer=null;
+  function toast(msg){
+    const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show');
+    clearTimeout(toastTimer); toastTimer=setTimeout(()=>t.classList.remove('show'), 2200);
+  }
+  function notYet(name){ toast(`${name} isn't available yet.`); }
+
+  /* ════════════ SCREEN NAVIGATION ════════════ */
+  function showScreen(id){
+    document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+    document.getElementById(id).classList.add('active');
+  }
+  function goMenu(){ showScreen('screen-menu'); }
+
+  /* ════════════ AUTH — OPEN PASS-THROUGH (no real logic yet) ════════════ */
+  let authMode = 'login';
+  function switchAuth(mode){
+    authMode = mode;
+    document.getElementById('tab-login').classList.toggle('active', mode==='login');
+    document.getElementById('tab-register').classList.toggle('active', mode==='register');
+    document.getElementById('field-confirm').style.display = mode==='register' ? 'block' : 'none';
+    document.getElementById('auth-submit').textContent = mode==='register' ? 'Create account' : 'Login';
+    document.getElementById('auth-error').textContent = '';
+  }
+  function submitAuth(){
+    const u = document.getElementById('auth-user').value.trim() || 'Player';
+    enterApp(u);
+  }
+  function enterApp(username){
+    document.getElementById('menu-username').textContent = username;
+    document.getElementById('menu-welcome').textContent = username;
+    document.getElementById('menu-avatar').textContent = username[0].toUpperCase();
+    showScreen('screen-menu');
+  }
+  function logout(){
+    document.getElementById('auth-user').value = '';
+    document.getElementById('auth-pass').value = '';
+    const c = document.getElementById('auth-confirm'); if(c) c.value = '';
+    showScreen('screen-auth');
+  }
+
+  /* ════════════ API HELPER ════════════ */
+  async function api(path, body){
+    const r = await fetch(path, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body||{})});
+    if(!r.ok){
+      let msg = 'Request failed';
+      try { const j = await r.json(); msg = j.detail || msg; } catch(e){}
+      throw new Error(msg);
+    }
+    return r.json();
+  }
+
+  /* ════════════ PIECE IMAGES ════════════ */
+  const IMG = {
+    wK:'https://upload.wikimedia.org/wikipedia/commons/4/42/Chess_klt45.svg',
+    wQ:'https://upload.wikimedia.org/wikipedia/commons/1/15/Chess_qlt45.svg',
+    wR:'https://upload.wikimedia.org/wikipedia/commons/7/72/Chess_rlt45.svg',
+    wB:'https://upload.wikimedia.org/wikipedia/commons/b/b1/Chess_blt45.svg',
+    wN:'https://upload.wikimedia.org/wikipedia/commons/7/70/Chess_nlt45.svg',
+    wP:'https://upload.wikimedia.org/wikipedia/commons/4/45/Chess_plt45.svg',
+    bK:'https://upload.wikimedia.org/wikipedia/commons/f/f0/Chess_kdt45.svg',
+    bQ:'https://upload.wikimedia.org/wikipedia/commons/4/47/Chess_qdt45.svg',
+    bR:'https://upload.wikimedia.org/wikipedia/commons/f/ff/Chess_rdt45.svg',
+    bB:'https://upload.wikimedia.org/wikipedia/commons/9/98/Chess_bdt45.svg',
+    bN:'https://upload.wikimedia.org/wikipedia/commons/e/ef/Chess_ndt45.svg',
+    bP:'https://upload.wikimedia.org/wikipedia/commons/c/c7/Chess_pdt45.svg',
+  };
+  const FILES = ['a','b','c','d','e','f','g','h'];
+  const RANKS = ['8','7','6','5','4','3','2','1'];
+
+  /* ════════════ GAME STATE ════════════ */
+  let G = null;            // latest server state
+  let gameId = null;
+  let playerColor = 'w';
+  let flipped = false;
+  let busy = false;        // request in flight / model thinking
+  let selectedSq = null;   // {r,c}
+  let legalTargets = [];   // [[r,c],...]
+  let awaitingDuck = false;
+  let validDuck = [];      // [[r,c],...]
+  let curColor = 'white';  // for restart
+  let curModel = 'stage12';
+
+  const boardEl = document.getElementById('board');
+
+  /* ════════════ MODEL DROPDOWN ════════════ */
+  async function loadModels(){
+    try{
+      const r = await fetch('/api/models'); const j = await r.json();
+      const sel = document.getElementById('menu-model');
+      if(!j.models || !j.models.length){ sel.innerHTML='<option value="">(no models found)</option>'; return; }
+      sel.innerHTML = j.models.map((m,i)=>`<option value="${m.id}" ${i===0?'selected':''}>${m.label}</option>`).join('');
+    }catch(e){
+      document.getElementById('menu-model').innerHTML='<option value="">(server offline)</option>';
+    }
+  }
+
+  /* ════════════ START / RESTART ════════════ */
+  async function startGame(mode){
+    if(mode==='human'){ toast('Online human vs human — coming in Phase 3.'); return; }
+    if(mode==='position'){ toast('Play from Position — coming in Phase 3.'); return; }
+    curColor = mode;                                   // 'white' | 'black'
+    curModel = document.getElementById('menu-model').value || 'stage12';
+    await newGame();
+  }
+  function restartGame(){ newGame(); }
+
+  async function newGame(){
+    resetLocal();
+    showScreen('screen-game');
+    setThinking('Starting game…');
+    try{
+      const state = await api('/api/new-game', {model: curModel, color: curColor});
+      gameId = state.gameId;
+      playerColor = state.playerColor;
+      flipped = (playerColor === 'b');
+      // header / player cards
+      document.getElementById('game-model').textContent = state.modelLabel;
+      document.getElementById('opp-name').textContent = 'Duck PPO';
+      document.getElementById('opp-label').textContent =
+        state.modelLabel.replace('Duck PPO — ','') + ' · ' + (playerColor==='w'?'Black':'White');
+      const youWhite = (playerColor==='w');
+      document.getElementById('you-name').textContent = youWhite ? 'You — White' : 'You — Black';
+      document.getElementById('you-av').className = 'avatar ' + (youWhite ? 'av-white':'av-black');
+      applyState(state);
+    }catch(e){
+      setThinking('');
+      toast('Could not start game: ' + e.message);
+    }
+  }
+
+  function resetLocal(){
+    selectedSq=null; legalTargets=[]; awaitingDuck=false; validDuck=[]; busy=false;
+  }
+
+  /* ════════════ APPLY SERVER STATE ════════════ */
+  function applyState(state){
+    G = state;
+    busy = false;
+    selectedSq = null; legalTargets = [];
+    awaitingDuck = false; validDuck = [];
+    renderBoard();
+    renderHistory();
+    renderCaptured();
+    renderEval();
+    renderTurnBar();
+    renderPlayers();
+    if(state.gameOver){ showGameOver(state); }
+  }
+
+  function myTurn(){ return G && !G.gameOver && G.turn === playerColor; }
+
+  /* ════════════ BOARD RENDER ════════════ */
+  function renderBoard(){
+    boardEl.innerHTML='';
+    boardEl.classList.toggle('locked', busy);
+    const board = G ? G.board : [];
+    const duck  = G ? G.duck : null;
+    const hi = (G && G.highlight) ? G.highlight : [];
+    const rows = flipped ? [7,6,5,4,3,2,1,0] : [0,1,2,3,4,5,6,7];
+    const cols = flipped ? [7,6,5,4,3,2,1,0] : [0,1,2,3,4,5,6,7];
+
+    const selKey = selectedSq ? (selectedSq.r+','+selectedSq.c) : null;
+    const targetSet = new Set(legalTargets.map(m=>m[0]+','+m[1]));
+    const duckSet = new Set(validDuck.map(m=>m[0]+','+m[1]));
+    const hiSet = new Set(hi.map(m=>m[0]+','+m[1]));
+
+    for(const r of rows){
+      for(const c of cols){
+        const sq = document.createElement('div');
+        sq.className = 'sq ' + ((r+c)%2===0 ? 'light':'dark');
+        sq.dataset.r=r; sq.dataset.c=c;
+        const key=r+','+c;
+
+        if(hiSet.has(key)) sq.classList.add('last-move');
+        if(key===selKey) sq.classList.add('sel');
+
+        const isLeftEdge = c === (flipped ? 7 : 0);
+        const isBottomEdge = r === (flipped ? 0 : 7);
+        if(isLeftEdge){ const e=document.createElement('span'); e.className='coord-rank'; e.textContent=RANKS[r]; sq.appendChild(e); }
+        if(isBottomEdge){ const e=document.createElement('span'); e.className='coord-file'; e.textContent=FILES[c]; sq.appendChild(e); }
+
+        const p = board[r] ? board[r][c] : null;
+        if(p){ const img=document.createElement('img'); img.src=IMG[p]; img.className='piece-img'; img.draggable=false; sq.appendChild(img); }
+
+        // legal move markers
+        if(targetSet.has(key)){ sq.classList.add(p ? 'vc' : 'vm'); }
+        // duck targets
+        if(awaitingDuck && duckSet.has(key)){ sq.classList.add('duckable'); }
+
+        // duck
+        if(duck && duck[0]===r && duck[1]===c){
+          const wrap=document.createElement('div'); wrap.className='duck-wrap';
+          const glow=document.createElement('div'); glow.className='duck-glow'; wrap.appendChild(glow);
+          wrap.insertAdjacentHTML('beforeend', `<img class="duck-svg" src="duck.png" draggable="false"/>`);
+          sq.appendChild(wrap);
+        }
+
+        sq.addEventListener('click', ()=>onSquareClick(r,c));
+        boardEl.appendChild(sq);
+      }
+    }
+  }
+
+  /* ════════════ CLICK HANDLING ════════════ */
+  async function onSquareClick(r,c){
+    if(busy || !G || G.gameOver) return;
+
+    // Duck placement phase
+    if(awaitingDuck){
+      if(validDuck.some(m=>m[0]===r&&m[1]===c)){ await doPlaceDuck(r,c); }
+      return;
+    }
+
+    if(!myTurn()) return;
+
+    const code = G.board[r][c];
+    // clicking a legal target for the selected piece
+    if(selectedSq && legalTargets.some(m=>m[0]===r&&m[1]===c)){
+      await doMovePiece(selectedSq, {r,c});
+      return;
+    }
+    // selecting own piece
+    if(code && code[0]===playerColor){
+      await selectPiece(r,c);
+      return;
+    }
+    // otherwise clear
+    selectedSq=null; legalTargets=[]; renderBoard();
+  }
+
+  async function selectPiece(r,c){
+    try{
+      const j = await api('/api/legal-moves', {game_id:gameId, r, c});
+      selectedSq = {r,c};
+      legalTargets = j.moves || [];
+      renderBoard();
+    }catch(e){ toast(e.message); }
+  }
+
+  async function doMovePiece(from, to){
+    busy=true; renderBoard();
+    try{
+      const state = await api('/api/move-piece', {game_id:gameId, frm:[from.r,from.c], to:[to.r,to.c]});
+      G = state;
+      selectedSq=null; legalTargets=[];
+      if(state.gameOver){ applyState(state); return; }
+      // enter duck phase
+      busy=false;
+      awaitingDuck=true;
+      validDuck = state.validDuck || [];
+      renderBoard();
+      renderCaptured(); renderEval();
+      setDuckPrompt();
+    }catch(e){
+      busy=false; awaitingDuck=false; selectedSq=null; legalTargets=[];
+      renderBoard();
+      toast(e.message);
+    }
+  }
+
+  async function doPlaceDuck(r,c){
+    busy=true; awaitingDuck=false; validDuck=[]; renderBoard();
+    setThinking('Model is thinking…');
+    try{
+      const state = await api('/api/place-duck', {game_id:gameId, duck:[r,c]});
+      applyState(state);
+    }catch(e){
+      busy=false;
+      toast(e.message);
+      renderTurnBar();
+    }
+  }
+
+  /* ════════════ RESIGN ════════════ */
+  async function resignGame(){
+    if(busy || !G || G.gameOver) return;
+    if(!confirm('Resign this game?')) return;
+    try{
+      const state = await api('/api/resign', {game_id:gameId, r:0, c:0});
+      applyState(state);
+    }catch(e){ toast(e.message); }
+  }
+
+  /* ════════════ RENDER: HISTORY ════════════ */
+  function renderHistory(){
+    const box = document.getElementById('history-box');
+    const rows = (G && G.history) ? G.history : [];
+    if(!rows.length){ box.innerHTML='<div class="history-empty">No moves yet.</div>'; return; }
+    box.innerHTML = rows.map(m=>`
+      <div class="mv"><span class="mv-n">${m.n}.</span><span class="mv-w">${m.w||''}</span><span class="mv-b">${m.b||''}</span></div>
+    `).join('');
+    box.scrollTop = box.scrollHeight;
+  }
+
+  /* ════════════ RENDER: CAPTURED ════════════ */
+  function renderCaptured(){
+    const w = (G && G.capturedByWhite) ? G.capturedByWhite : [];
+    const b = (G && G.capturedByBlack) ? G.capturedByBlack : [];
+    const diff = G ? G.evalDiff : 0;
+    const cw = document.getElementById('cap-white');
+    const cb = document.getElementById('cap-black');
+    cw.innerHTML = w.length ? w.map(p=>`<img src="${IMG[p]}">`).join('') : '<span class="empty">none</span>';
+    cb.innerHTML = b.length ? b.map(p=>`<img src="${IMG[p]}">`).join('') : '<span class="empty">none</span>';
+    const wd=document.getElementById('cap-white-diff'), bd=document.getElementById('cap-black-diff');
+    wd.textContent = diff>0 ? ('+'+diff) : '';
+    bd.textContent = diff<0 ? ('+'+(-diff)) : '';
+  }
+
+  /* ════════════ RENDER: EVAL ════════════ */
+  function renderEval(){
+    const diff = G ? G.evalDiff : 0;
+    document.getElementById('eval-label').textContent = diff>=0 ? 'White advantage' : 'Black advantage';
+    document.getElementById('eval-score').textContent = (diff>0?'+':'') + diff;
+    const fill = Math.max(5, Math.min(95, 50 + diff*4));
+    document.getElementById('eval-fill').style.width = fill + '%';
+  }
+
+  /* ════════════ RENDER: TURN BAR ════════════ */
+  function setThinking(msg){
+    busy = true;
+    boardEl.classList.add('locked');
+    document.getElementById('turn-text').textContent = msg || 'Model is thinking…';
+    document.getElementById('phase-pill').textContent = '⏳ Working';
+    document.getElementById('turn-dot').style.background = '#6aa8e0';
+  }
+  function setDuckPrompt(){
+    document.getElementById('turn-text').textContent = 'Place the duck';
+    document.getElementById('phase-pill').textContent = '🦆 Move duck';
+    document.getElementById('turn-dot').style.background = 'var(--gold)';
+    renderPlayers();
+  }
+  function renderTurnBar(){
+    const dot = document.getElementById('turn-dot');
+    const tt = document.getElementById('turn-text');
+    const pp = document.getElementById('phase-pill');
+    if(!G){ return; }
+    if(G.gameOver){
+      tt.textContent = 'Game over';
+      pp.textContent = winnerLabel(G);
+      dot.style.background = '#555';
+      return;
+    }
+    dot.style.background = 'var(--gold)';
+    if(myTurn()){
+      tt.textContent = 'Your move';
+      pp.textContent = '♟ Move piece';
+    } else {
+      tt.textContent = (G.turn==='w'?'White':'Black') + ' to move';
+      pp.textContent = '♟ Move piece';
+    }
+  }
+
+  /* ════════════ RENDER: PLAYER CARDS ════════════ */
+  function renderPlayers(){
+    const youActive = G && !G.gameOver && (G.turn===playerColor) ;
+    const pcYou=document.getElementById('pc-you'), pcOpp=document.getElementById('pc-opp');
+    pcYou.className = 'player-card ' + (youActive ? 'active':'inactive');
+    pcOpp.className = 'player-card ' + (youActive ? 'inactive':'active');
+    document.getElementById('you-label').textContent = youActive ? (awaitingDuck?'Place the duck':'Your turn') : 'Waiting';
+    document.getElementById('opp-label').textContent = (G? (G.modelLabel.replace('Duck PPO — ','')) : 'Model') + ' · ' + (playerColor==='w'?'Black':'White');
+  }
+
+  /* ════════════ GAME OVER ════════════ */
+  function winnerLabel(state){
+    if(state.winner==='draw') return 'Draw';
+    return state.winner===playerColor ? 'You win' : 'Model wins';
+  }
+  function showGameOver(state){
+    const title=document.getElementById('over-title');
+    const sub=document.getElementById('over-sub');
+    if(state.winner==='draw'){
+      title.textContent='Draw'; title.className='over-title draw';
+      sub.textContent='The game ended in a draw (50-move rule).';
+    } else if(state.winner===playerColor){
+      title.textContent='You win! 🎉'; title.className='over-title win';
+      sub.textContent = state.message==='resign' ? 'Game ended.' : 'You captured the model\'s king (or fowled it).';
+    } else {
+      title.textContent='Model wins'; title.className='over-title lose';
+      sub.textContent = state.message==='resign' ? 'You resigned.' : 'The model captured your king (or fowled you).';
+    }
+    document.getElementById('modal-over').classList.add('active');
+    renderTurnBar();
+  }
+  function openHistory(){ toast('Model Game History — coming in Phase 3.'); }
+
+  /* ════════════ INIT ════════════ */
+  loadModels();
+  document.getElementById('auth-pass').addEventListener('keydown', e=>{ if(e.key==='Enter') submitAuth(); });
+  document.getElementById('auth-confirm').addEventListener('keydown', e=>{ if(e.key==='Enter') submitAuth(); });
+</script>
+</body>
+</html>
