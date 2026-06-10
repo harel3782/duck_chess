@@ -21,8 +21,16 @@ from DuckChess_Game.SBThree.base.opponent_strategy import (
     SelfPlayOpponent,
 )
 from DuckChess_Game.SBThree.base.reward_calculator import ShapedReward, TerminalReward
+<<<<<<< HEAD
 from DuckChess_Game.SBThree.duck_env_stage13_fast import make_stage13_config
 from DuckChess_Game.SBThree.duck_env_stage14_recovery import make_stage14_config
+=======
+from DuckChess_Game.SBThree.peter_local import (
+    make_peter_easy_config,
+    make_peter_medium_config,
+    make_peter_hard_config,
+)
+>>>>>>> 10a15785773623291fe2169f56fc804f548ffe9b
 
 
 # ------------------------------------------------------------------ #
@@ -287,6 +295,13 @@ REGISTRY: dict = {
     "stage10": make_stage10_config,
     "stage11": make_stage11_config,
     "stage12": make_stage12_config,
+<<<<<<< HEAD
     "stage13": make_stage13_config,
     "stage14": make_stage14_config,
+=======
+    # Local Peter engine stages
+    "peter_easy":   make_peter_easy_config,
+    "peter_medium": make_peter_medium_config,
+    "peter_hard":   make_peter_hard_config,
+>>>>>>> 10a15785773623291fe2169f56fc804f548ffe9b
 }

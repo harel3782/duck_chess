@@ -7,15 +7,23 @@ class MoveExecutor:
 		"""Moves a piece and handles special cases like Castling and EP."""
 		sr, sc = start
 		er, ec = end
+		# Null-move guard: start==end would clear the piece from the 2D board
+		# while leaving the bitboard intact, causing a guaranteed sync error.
+		if sr == er and sc == ec:
+			return None
 		piece = board[sr][sc]
 		captured = board[er][ec]
 
 		# 1. Handle En Passant Capture
 		if piece.type == PAWN and (er, ec) == en_passant_target:
-			captured = board[sr][ec]
-			board[sr][ec] = None
-			if bb_mgr: 
-				bb_mgr.remove_piece(captured.color, captured.type, sr, ec)
+			# Only an actual adjacent pawn is taken; a plain push onto the
+			# (empty) EP square must not be mistaken for a capture.
+			ep_captured = board[sr][ec]
+			if ep_captured is not None:
+				captured = ep_captured
+				board[sr][ec] = None
+				if bb_mgr:
+					bb_mgr.remove_piece(ep_captured.color, ep_captured.type, sr, ec)
 
 		# 2. Handle Castling (King moves 2 squares)
 		if piece.type == KING and abs(sc - ec) == 2:
