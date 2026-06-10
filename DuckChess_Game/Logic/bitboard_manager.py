@@ -113,3 +113,69 @@ class BitboardManager:
 					return False
 
 		return True
+
+	def generate_fen(self, turn, duck_pos):
+		"""Serializes the current bitboard position to a duck-chess FEN string.
+
+		Internal coords are (r, c) with r=0 -> rank 1 and c=0 -> file 'a',
+		so we emit ranks 8 (r=7) down to 1 (r=0), matching Peter's engine.
+		"""
+		fen = []
+		for r in range(7, -1, -1):
+			empty = 0
+			rank_str = ""
+			for c in range(8):
+				found = False
+				for color in ['w', 'b']:
+					for p_type, board in self.piece_boards[color].items():
+						if self.get_bit(board, self.coords_to_square(r, c)):
+							if empty > 0:
+								rank_str += str(empty)
+								empty = 0
+							# Piece constants are already FEN letters ('P','N','B','R','Q','K').
+							rank_str += p_type.upper() if color == 'w' else p_type.lower()
+							found = True
+							break
+					if found: break
+				if not found:
+					empty += 1
+			if empty > 0: rank_str += str(empty)
+			fen.append(rank_str)
+
+		fen_str = "/".join(fen)
+		duck_notation = chr(ord('a') + duck_pos[1]) + str(duck_pos[0] + 1)
+		return f"{fen_str} {turn} - - 0 1 [{duck_notation}]"
+
+	def print_current_state(self):
+		"""Debug dump of the board, printed rank 8 (top) down to rank 1."""
+		piece_symbols = {
+			'w': {PAWN: 'P', KNIGHT: 'N', BISHOP: 'B', ROOK: 'R', QUEEN: 'Q', KING: 'K'},
+			'b': {PAWN: 'p', KNIGHT: 'n', BISHOP: 'b', ROOK: 'r', QUEEN: 'q', KING: 'k'}
+		}
+
+		print("\n=== CURRENT BITBOARD STATE ===")
+		for r in range(7, -1, -1):
+			row_str = f"Row {r} | "
+			for c in range(8):
+				sq = self.coords_to_square(r, c)
+				char_to_print = '.'
+
+				if self.get_bit(self.duck_board, sq):
+					char_to_print = 'D'
+				else:
+					found = False
+					for color in ['w', 'b']:
+						for p_type, symbol in piece_symbols[color].items():
+							if self.get_bit(self.piece_boards[color][p_type], sq):
+								char_to_print = symbol
+								found = True
+								break
+						if found:
+							break
+
+				row_str += f"{char_to_print} "
+			print(row_str)
+
+		print("      -----------------")
+		print("Col:   0 1 2 3 4 5 6 7")
+		print("==============================\n")
