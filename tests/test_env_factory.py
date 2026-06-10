@@ -10,7 +10,7 @@ from DuckChess_Game.SBThree.env_registry import REGISTRY
 # Registry completeness                                                #
 # ------------------------------------------------------------------ #
 
-_STAGE_KEYS = {f"stage{i}" for i in range(1, 13)}
+_STAGE_KEYS = {f"stage{i}" for i in range(1, 14)}
 _PETER_KEYS = {"peter_easy", "peter_medium", "peter_hard"}
 _ALL_KEYS   = _STAGE_KEYS | _PETER_KEYS
 
