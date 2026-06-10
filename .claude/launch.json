@@ -4,7 +4,8 @@
     {
       "name": "duck-chess-ui",
       "runtimeExecutable": "python",
-      "runtimeArgs": ["-m", "http.server", "7890", "--directory", "C:/Users/afiks/AppData/Local/Temp/duck_chess_ui"],
+      "runtimeArgs": ["-m", "uvicorn", "web_ui.server:app", "--host", "127.0.0.1", "--port", "7890"],
+      "cwd": "C:/Users/afiks/Documents/Afik/Afeka/duck_chess-master/duck_chess-master",
       "port": 7890
     }
   ]

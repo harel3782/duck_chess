@@ -1,217 +1,117 @@
-# Implementation Summary — Tests, Headless Training, Documentation
+# Implementation Summary
 
-## Overview
-Completed three major improvements to the Duck Chess project:
-1. **26 passing unit tests** for game logic validation
-2. **Headless training script** for background learning from Peter with step tracking
-3. **Comprehensive documentation** for testing and operational guidance
+A snapshot of what is built in this repository and where it lives. For the full project tour see
+[README.md](README.md); for stage-by-stage RL results see [training_log.md](training_log.md).
 
 ---
 
-## 1. Unit Tests ✓
+## 1. Game engine — complete
 
-**File**: `DuckChess_Game/Logic/test_logic.py`
+Pure-Python engine under [`DuckChess_Game/Logic/`](DuckChess_Game/Logic), built with a mixin
+composition pattern around [`logic.py`](DuckChess_Game/Logic/logic.py).
 
-**Coverage**: 26 tests across 9 test classes
-- ✓ Game initialization (3 tests)
-- ✓ Game state (4 tests)
-- ✓ Observation encoding (3 tests)
-- ✓ Action masking (3 tests)
-- ✓ Game rules (3 tests)
-- ✓ Game flow (4 tests)
-- ✓ RL interface (2 tests)
-- ✓ Endgame conditions (2 tests)
-- ✓ Integration (2 tests)
+- Full Duck Chess rules: piece movement, castling, en passant, promotion, and **duck blocking**.
+- **Inverted win conditions** vs standard chess:
+  - Win by **capturing the king** ([`turn_manager.py`](DuckChess_Game/Logic/turn_manager.py)) — no
+    check/checkmate.
+  - **Fowling** — a player with no legal moves *wins*
+    ([`endgame_checker.py`](DuckChess_Game/Logic/endgame_checker.py)).
+  - Only draw is the **50-move rule** (100 half-moves).
+- **Dual board representation:** a 2D array for clarity plus 64-bit bitboards for fast move
+  generation, kept in sync and diagnosable via
+  [`game_state_validator.py`](DuckChess_Game/Logic/game_state_validator.py).
+- **Atomic two-phase turns** ([`move_pipeline.py`](DuckChess_Game/Logic/move_pipeline.py)): move a
+  piece, then move the duck; an illegal move produces zero state mutation.
 
-**Run tests:**
+---
+
+## 2. Pygame UI — complete
+
+Pygame application under [`DuckChess_Game/UI/`](DuckChess_Game/UI), entry point
+[`main.py`](DuckChess_Game/UI/main.py), composed from rendering / input / asset mixins.
+
+- Game states: `menu`, `rules`, `editor`, `game`, each with split input and rendering modules.
+- Move highlighting, animation, sound, promotion UI, and a game-over screen.
+- **AI opponent status:** `model_path = None` — the UI intentionally loads no RL model right now,
+  because every checkpoint either loses to the real Peter engine or only wins via a narrow
+  king-rush exploit. The game is fully playable; wiring a model in is a one-line change.
+
+A separate experimental browser build lives in [`web_ui/`](web_ui) (`index.html` + assets).
+
+---
+
+## 3. Reinforcement-learning pipeline — complete, training ongoing
+
+Training pipeline under [`DuckChess_Game/SBThree/`](DuckChess_Game/SBThree), using
+Stable-Baselines3 + sb3-contrib **MaskablePPO** over a Gymnasium environment.
+
+- **Observation:** 19×8×8 tensor (12 piece planes + duck + en passant + castling + turn).
+- **Actions:** 4096-discrete (64×64), with strict legal-action masking
+  ([`action_masker.py`](DuckChess_Game/Logic/action_masker.py)).
+- **Curriculum:** a 13-stage progression from random → greedy → dense mechanics → self-play →
+  league → alpha-beta punisher, plus engine grounding against the real **Peter** engine.
+- **Opponents:** league mix of alpha-beta AI and historical checkpoints, plus the local Peter
+  engine ([`peter_local.py`](DuckChess_Game/SBThree/peter_local.py)).
+- **Headless training:**
+  [`train_peter_headless.py`](DuckChess_Game/SBThree/train_peter_headless.py) runs background-safe
+  with step tracking, CSV progress, and checkpoint resume (see
+  [HEADLESS_TRAINING.md](HEADLESS_TRAINING.md)).
+- **Corrective runs** to break the king-rush exploit:
+  [`train_strong.py`](DuckChess_Game/SBThree/train_strong.py),
+  [`train_real.py`](DuckChess_Game/SBThree/train_real.py),
+  [`train_antiexploit.py`](DuckChess_Game/SBThree/train_antiexploit.py).
+- **Ground-truth evaluation:**
+  [`eval_vs_peter.py`](DuckChess_Game/SBThree/eval_vs_peter.py) reports real W/L/D vs the engine —
+  the metric that revealed self-play overstated strength.
+
+Checkpoints live in [`models/duck_ppo/`](models/duck_ppo), organized by stage
+(`stage 1` … `stage 12`, `peter_local`, `real`, `strong`, `antiexploit`).
+
+---
+
+## 4. Testing — complete
+
+| Suite | Tests | Notes |
+|-------|-------|-------|
+| [`tests/`](tests) | **277** | Canonical, per-module suite; run by default via `pytest.ini` |
+| [`DuckChess_Game/Logic/test_logic.py`](DuckChess_Game/Logic/test_logic.py) | 26 | Legacy smoke test, run explicitly |
+
+Current canonical run: **275 passed, 2 failed** — the two failures are a duplicate-key count
+mismatch in `tests/test_env_factory.py`, not an engine defect (see [TESTING.md](TESTING.md)).
+
+Headless via the root [`conftest.py`](conftest.py) (dummy SDL drivers). Formal test artifacts —
+the Software Test Plan and Software Test Design — are in [`docs/`](docs). Details in
+[TESTING.md](TESTING.md).
+
+---
+
+## 5. Documentation — complete
+
+| File | Purpose |
+|------|---------|
+| [README.md](README.md) | Project overview and quick start |
+| [CLAUDE.md](CLAUDE.md) | Architecture and commands for AI assistants |
+| [TESTING.md](TESTING.md) | Running and extending the test suite |
+| [HEADLESS_TRAINING.md](HEADLESS_TRAINING.md) | Long, unattended training runs |
+| [training_log.md](training_log.md) | Stage-by-stage training history |
+| [docs/STP-DUCK-001.md](docs/STP-DUCK-001.md) | Formal Software Test Plan |
+| [docs/STD-DUCK-001.md](docs/STD-DUCK-001.md) | Formal Software Test Design |
+
+---
+
+## Current status
+
+| Area | Status |
+|------|--------|
+| Game engine | ✅ Complete, 277-test coverage |
+| Pygame UI | ✅ Complete (no RL model wired in by design) |
+| RL pipeline & tooling | ✅ Complete |
+| Model strength vs Peter depth-3 | ⏳ Open — corrective runs in progress (see training log) |
+
+### Quick commands
 ```bash
-pytest DuckChess_Game/Logic/test_logic.py -v
+python DuckChess_Game/UI/main.py                                  # play
+pytest                                                            # test (277)
+python DuckChess_Game/SBThree/train_peter_headless.py --steps 10_000_000   # train
+python DuckChess_Game/SBThree/eval_vs_peter.py                    # evaluate vs engine
 ```
-
-**Requirements installed:**
-- pytest
-- pytest-cov
-
-**Status**: All 26 tests passing ✓
-
----
-
-## 2. Headless Training Script ✓
-
-**File**: `DuckChess_Game/SBThree/train_peter_headless.py`
-
-**Features:**
-- ✓ No GUI required (pygame-free, runs screen-off)
-- ✓ Real-time progress tracking to CSV
-- ✓ Step count visibility at any time
-- ✓ Checkpoint resumption support
-- ✓ Auto-resume from latest checkpoint
-- ✓ TensorBoard integration
-- ✓ Clean CLI with help text
-- ✓ Background-safe (can run with nohup, pythonw, screen, etc.)
-
-**Usage:**
-```bash
-# Start fresh training
-python -m DuckChess_Game.SBThree.train_peter_headless --steps 10_000_000
-
-# Check progress
-python -m DuckChess_Game.SBThree.train_peter_headless --show-progress
-
-# Resume training
-python -m DuckChess_Game.SBThree.train_peter_headless --auto-resume
-```
-
-**Features:**
-- 4 parallel environments (depths 1, 2, 3, 3)
-- Configurable depths, steps, checkpoint frequency
-- CSV logging with: timestamp, total_steps, elapsed_seconds, steps_per_second, mean_reward, mean_length, checkpoint_saved
-- Models saved to: `models/duck_ppo/peter_headless/`
-
-**Status**: Fully functional, tested ✓
-
----
-
-## 3. Documentation ✓
-
-### Updated Files:
-
-**CLAUDE.md** — Added sections:
-- Headless Peter training command examples
-- Testing command examples
-- Real-time progress monitoring
-
-**New Files:**
-
-**TESTING.md** — Comprehensive testing guide
-- How to run tests
-- Coverage breakdown
-- Installing test dependencies
-- Continuous integration guidance
-- Training validation procedures
-- Performance benchmarks
-- Troubleshooting
-
-**HEADLESS_TRAINING.md** — Operational manual for background training
-- Quick start guide
-- Background execution (Linux, Mac, Windows, Docker)
-- Configuration options (depths, steps, checkpoints)
-- Understanding the progress log
-- TensorBoard monitoring
-- Performance expectations
-- Troubleshooting
-- Tips for long runs
-
-**conftest.py** — Pytest configuration
-- Headless pygame setup
-- Auto-runs before tests
-
----
-
-## Quick Start Examples
-
-### Run Tests
-```bash
-# All tests
-pytest DuckChess_Game/Logic/test_logic.py -v
-
-# With coverage
-pytest DuckChess_Game/Logic/test_logic.py --cov=DuckChess_Game.Logic
-```
-
-### Start Headless Training
-```bash
-# Fresh 10M step run
-python -m DuckChess_Game.SBThree.train_peter_headless --steps 10_000_000
-
-# Background (nohup on Linux/Mac)
-nohup python -m DuckChess_Game.SBThree.train_peter_headless \
-  --steps 20_000_000 \
-  --checkpoint-every 500_000 \
-  > training.log 2>&1 &
-
-# Background (pythonw on Windows)
-pythonw DuckChess_Game/SBThree/train_peter_headless.py --steps 20_000_000
-
-# Check progress anytime
-python -m DuckChess_Game.SBThree.train_peter_headless --show-progress
-tail -f logs/peter_training_progress.csv
-```
-
-### Monitor Training
-```bash
-# TensorBoard
-tensorboard --logdir logs/tensorboard_logs
-
-# CSV progress
-tail -f logs/peter_training_progress.csv
-```
-
----
-
-## Performance Expectations
-
-On i7 + RTX 3080:
-- 4 envs, depths (1,2,3,3): ~650 steps/sec → 10M steps in 4.3 hours
-- 8 envs, depths (1,2,3,3): ~950 steps/sec → 10M steps in 2.9 hours
-
----
-
-## File Structure
-
-```
-DuckChess_Game/
-├── Logic/
-│   ├── logic.py
-│   └── test_logic.py          [NEW - 26 tests]
-├── SBThree/
-│   ├── train.py
-│   ├── train_peter_headless.py [NEW - headless training]
-│   └── peter_local.py
-
-Root files:
-├── CLAUDE.md                  [UPDATED]
-├── TESTING.md                 [NEW]
-├── HEADLESS_TRAINING.md       [NEW]
-├── IMPLEMENTATION_SUMMARY.md  [NEW - this file]
-└── conftest.py                [NEW - pytest config]
-```
-
----
-
-## Key Features
-
-### Tests
-✓ Isolated from GUI dependencies  
-✓ Headless pygame support via conftest.py  
-✓ Fast execution (~1 second)  
-✓ Covers core game logic, RL interface, observation/action encoding  
-
-### Headless Training
-✓ Runs with screen off / terminal closed  
-✓ Auto-resumes from checkpoints  
-✓ CSV progress tracking for step visibility  
-✓ Works on servers, Docker, local machines  
-✓ Supports long multi-hour training runs  
-✓ TensorBoard integration for detailed metrics  
-
-### Documentation
-✓ Comprehensive TESTING.md guide  
-✓ Detailed HEADLESS_TRAINING.md operational manual  
-✓ Updated CLAUDE.md with all commands  
-✓ Examples for all platforms (Linux, Mac, Windows, Docker)  
-
----
-
-## Status: Ready for Use
-
-All three deliverables are complete and tested:
-- ✅ 26 passing tests
-- ✅ Headless training script working
-- ✅ Documentation complete
-
-You can now:
-1. Run tests: `pytest DuckChess_Game/Logic/test_logic.py -v`
-2. Start training: `python -m DuckChess_Game.SBThree.train_peter_headless --steps 10_000_000`
-3. Check progress: `python -m DuckChess_Game.SBThree.train_peter_headless --show-progress`
-4. Monitor: `tail -f logs/peter_training_progress.csv` or `tensorboard --logdir logs/tensorboard_logs`
