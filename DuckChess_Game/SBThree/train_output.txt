@@ -1,0 +1,4 @@
+Traceback (most recent call last):
+  File "C:\Users\afiks\Documents\Afik\Afeka\duck_chess-master\duck_chess-master\DuckChess_Game\SBThree\train_real.py", line 51, in <module>
+    from DuckChess_Game.SBThree.base.env_base import EnvConfig
+ModuleNotFoundError: No module named 'DuckChess_Game'

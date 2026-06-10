@@ -121,6 +121,17 @@ class PeterLocalOpponent(OpponentStrategy):
         self._engine_mod = None      # cached module reference
         self._duck_peter_sq: Optional[int] = None  # Peter sq of duck, None = not yet placed
 
+        # Diagnostics — track silent failure modes that previously hid behind DEBUG logs.
+        self.total_calls: int = 0
+        self.engine_panic_count: int = 0    # Peter run() raised
+        self.empty_pv_count: int = 0        # Peter returned no moves
+        self.mask_fallback_count: int = 0   # Peter's move was masked out → random
+        self.apply_reject_count: int = 0    # shadow engine refused mirror
+
+        # Last principal-variation result from Peter (for replay annotation).
+        # Populated on every get_action() call; None when Peter couldn't search.
+        self.last_pv: Optional[dict] = None
+
     # ---- lifecycle ------------------------------------------------- #
 
     def reset(self) -> None:
@@ -167,9 +178,19 @@ class PeterLocalOpponent(OpponentStrategy):
             peter_from = int(_our_sq_to_peter_sq(our_from_sq))
 
         peter_move = json.dumps({"from": peter_from, "to": peter_to})
-        err = self._peter.apply_move(peter_move)
+        try:
+            err = self._peter.apply_move(peter_move)
+        except (KeyboardInterrupt, SystemExit):
+            raise
+        except BaseException as exc:  # noqa: BLE001 — includes pyo3 PanicException
+            self.apply_reject_count += 1
+            log.warning("Peter apply_move panicked on %s (%r) [apply_reject_count=%d]",
+                        peter_move, exc, self.apply_reject_count)
+            return
         if err is not None:
-            log.warning("Peter shadow-engine rejected move %s: %s", peter_move, err)
+            self.apply_reject_count += 1
+            log.warning("Peter shadow-engine rejected move %s: %s [apply_reject_count=%d]",
+                        peter_move, err, self.apply_reject_count)
 
     # ---- OpponentStrategy interface -------------------------------- #
 
@@ -189,12 +210,30 @@ class PeterLocalOpponent(OpponentStrategy):
         Falls back to a random legal action if the search returns nothing
         or if Peter's move is not in our legal-move mask.
         """
+        self.total_calls += 1
+        self.last_pv = None  # cleared each call; populated on success
+
         if self._peter is None:
             valid = np.where(masks)[0]
             return int(np.random.choice(valid)) if len(valid) else 0
 
-        result = self._peter.run(self.depth)
-        pv: dict = json.loads(result)
+        # Peter's Rust engine can PANIC on rare search positions
+        # (src/search.rs: "This should be extremely rare ..."). pyo3 surfaces this
+        # as a PanicException, which inherits from BaseException (NOT Exception),
+        # so it must be caught explicitly or it kills the whole SubprocVecEnv
+        # worker and crashes training. Fall back to a random legal move instead.
+        try:
+            result = self._peter.run(self.depth)
+            pv: dict = json.loads(result)
+        except (KeyboardInterrupt, SystemExit):
+            raise
+        except BaseException as exc:  # noqa: BLE001 — includes pyo3 PanicException
+            self.engine_panic_count += 1
+            log.warning("Peter engine failed/panicked (%r); random fallback "
+                        "[panic_count=%d / calls=%d]",
+                        exc, self.engine_panic_count, self.total_calls)
+            valid = np.where(masks)[0]
+            return int(np.random.choice(valid)) if len(valid) else 0
 
         action: Optional[int] = None
         is_duck_phase = (engine.phase == "move_duck")
@@ -212,13 +251,36 @@ class PeterLocalOpponent(OpponentStrategy):
                 our_from   = _peter_sq_to_our_sq(peter_from)
                 action     = our_from * 64 + our_to
 
-        # Sanity-check: Peter's chosen action must be in our legal mask
+            # Cache the PV for replay annotation. Stored as the dict Peter
+            # returned (top-of-PV is "moves"[0]; eval and alternatives, if any,
+            # are preserved verbatim for downstream viewers).
+            self.last_pv = pv
+        else:
+            self.empty_pv_count += 1
+            log.warning("Peter returned empty PV; random fallback "
+                        "[empty_pv_count=%d / calls=%d]",
+                        self.empty_pv_count, self.total_calls)
+
+        # Sanity-check: Peter's chosen action must be in our legal mask.
+        # If it is not, we silently play random — which makes Peter look
+        # like a 2-year-old. Promoted from DEBUG to WARNING (throttled at
+        # 1 / 10 / 100 / ... so logs don't flood) so it is visible.
         if action is None or not masks[action]:
             valid = np.where(masks)[0]
             if len(valid) == 0:
                 return 0
             if action is not None:
-                log.debug("Peter's action %d not in mask; falling back to random", action)
+                self.mask_fallback_count += 1
+                n = self.mask_fallback_count
+                # Throttle: warn on 1, 10, 100, 1k, 10k, ... fallbacks.
+                if n == 1 or (n % (10 ** max(1, len(str(n)) - 1)) == 0):
+                    rate = self.mask_fallback_count / max(1, self.total_calls)
+                    log.warning(
+                        "Peter's action %d not in mask; random fallback "
+                        "[mask_fallback=%d / calls=%d → rate=%.2f%%]",
+                        action, self.mask_fallback_count, self.total_calls,
+                        100.0 * rate,
+                    )
             action = int(np.random.choice(valid))
 
         return action
@@ -227,6 +289,18 @@ class PeterLocalOpponent(OpponentStrategy):
 
     def set_model(self, *args, **kwargs) -> None:
         """No-op: the local Peter engine is not a learned model."""
+
+    # ---- diagnostics ----------------------------------------------- #
+
+    def get_stats(self) -> dict:
+        """Return cumulative failure-mode counters for this opponent."""
+        return {
+            "total_calls":         self.total_calls,
+            "engine_panic_count":  self.engine_panic_count,
+            "empty_pv_count":      self.empty_pv_count,
+            "mask_fallback_count": self.mask_fallback_count,
+            "apply_reject_count":  self.apply_reject_count,
+        }
 
 
 # ------------------------------------------------------------------ #

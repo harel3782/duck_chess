@@ -93,6 +93,14 @@ class BaseDuckChessEnv(gym.Env):
         self.opponent_color: str = 'b'
         self.episode_counter: int = 0
         self.current_episode_actions: List[int] = []
+        # Parallel to current_episode_actions: PV dict for opponent half-moves
+        # (only populated when the opponent exposes `last_pv`, e.g. PeterLocalOpponent),
+        # None for the agent's half-moves. Lets replays show what Peter THOUGHT was
+        # best alongside what got played.
+        self.current_episode_opponent_pv: List[Optional[dict]] = []
+        # Optional metadata baked into the replay pickle so v1 vs v16 can be
+        # distinguished after the fact. Set via set_replay_metadata().
+        self._replay_metadata: dict = {}
 
     # ---- Gymnasium interface ---------------------------------------- #
 
@@ -100,6 +108,7 @@ class BaseDuckChessEnv(gym.Env):
         super().reset(seed=seed)
         self.engine.reset_game_state()
         self.current_episode_actions = []
+        self.current_episode_opponent_pv = []
         self.episode_counter += 1
 
         if self._config.randomize_color:
@@ -122,6 +131,7 @@ class BaseDuckChessEnv(gym.Env):
         pre = self._reward.capture_pre_state(self.engine, action, self.learning_color)
         self._apply_action(action)
         self.current_episode_actions.append(int(action))
+        self.current_episode_opponent_pv.append(None)  # agent move, no opponent PV
         post = self._reward.capture_post_state(self.engine, self.learning_color)
 
         terminated = getattr(self.engine, 'game_over', False)
@@ -184,8 +194,12 @@ class BaseDuckChessEnv(gym.Env):
                 self.engine.winner = 'draw'
                 break
             opp_action = self._opponent.get_action(self.engine, opp_masks)
+            # Capture opponent's PV BEFORE applying (mirror_action does not touch it,
+            # but get_action on the NEXT call will reset it). Only present on Peter.
+            opp_pv = getattr(self._opponent, 'last_pv', None)
             self._apply_action(opp_action)
             self.current_episode_actions.append(int(opp_action))
+            self.current_episode_opponent_pv.append(opp_pv)
 
     def _maybe_save_replay(self, reason: str = "periodic") -> None:
         if self._config.replay_every <= 0:
@@ -194,6 +208,15 @@ class BaseDuckChessEnv(gym.Env):
             return
         if self.episode_counter % self._config.replay_every == 0:
             self._save_replay(reason)
+
+    def set_replay_metadata(self, **kwargs) -> None:
+        """
+        Attach arbitrary metadata to subsequent replay pickles.
+
+        Recommended keys: model_path (str), model_version (str), train_step (int),
+        opponent_name (str), depth (int). Anything pickleable is fine.
+        """
+        self._replay_metadata.update(kwargs)
 
     def _save_replay(self, reason: str = "periodic") -> None:
         save_dir = os.path.join(self._config.replay_dir, self._config.stage_name)
@@ -205,14 +228,30 @@ class BaseDuckChessEnv(gym.Env):
             save_dir,
             f"{safe_reason}_ep{self.episode_counter}_{uid}_pid{pid}_{int(time.time())}.pkl",
         )
+        # Best-effort: pull cumulative opponent diagnostics if the opponent exposes them.
+        opp_stats = None
+        get_stats = getattr(self._opponent, 'get_stats', None)
+        if callable(get_stats):
+            try:
+                opp_stats = get_stats()
+            except Exception:
+                opp_stats = None
+        payload = {
+            'format_version':       2,
+            'action_history':       self.current_episode_actions,
+            # Parallel to action_history: PV dict on opponent half-moves (Peter only),
+            # None on agent half-moves. Lets viewers show "Peter wanted X, played Y".
+            'opponent_pv_history':  self.current_episode_opponent_pv,
+            'learning_color':       self.learning_color,
+            'stage_name':           self._config.stage_name,
+            'episode_counter':      self.episode_counter,
+            'winner':               getattr(self.engine, 'winner', None),
+            'opponent_stats':       opp_stats,
+            'metadata':             dict(self._replay_metadata),
+            'saved_at':             int(time.time()),
+        }
         try:
             with open(fname, 'wb') as f:
-                pickle.dump(
-                    {
-                        'action_history': self.current_episode_actions,
-                        'learning_color': self.learning_color,
-                    },
-                    f,
-                )
+                pickle.dump(payload, f)
         except Exception:
             pass
