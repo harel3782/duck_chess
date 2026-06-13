@@ -568,6 +568,13 @@
         <div class="history-box" id="history-box">
           <div class="history-empty">No moves yet.</div>
         </div>
+        <!-- Navigation arrows for move history -->
+        <div style="display:flex; gap:4px; margin-top:8px">
+          <button class="btn btn-ghost" style="flex:0.5; padding:6px 6px; font-size:12px" onclick="navigateHistory(999)" title="Go to start">⏮</button>
+          <button class="btn btn-ghost" style="flex:1; padding:6px 8px; font-size:12px" onclick="navigateHistory(-1)" title="Previous move (← key)">⬅ Prev</button>
+          <button class="btn btn-ghost" style="flex:1; padding:6px 8px; font-size:12px" onclick="navigateHistory(1)" title="Next move (→ key)">Next ➡</button>
+          <button class="btn btn-ghost" style="flex:0.5; padding:6px 6px; font-size:12px" onclick="navigateHistory(-999)" title="Go to current">⏭</button>
+        </div>
         <!-- Undo below history -->
         <button class="btn btn-blue" id="btn-undo" style="margin-top:8px" onclick="undoLastMove()">⟵ &nbsp;Undo Move</button>
       </div>
@@ -828,6 +835,11 @@
       document.getElementById('you-name').textContent = youWhite ? curUsername + ' — White' : curUsername + ' — Black';
       document.getElementById('you-av').className = 'avatar ' + (youWhite ? 'av-white':'av-black');
       applyState(state);
+      // Capture initial game state (before any moves)
+      moveHistorySnapshots = [{
+        board: JSON.parse(JSON.stringify(state.board)),
+        duck: state.duck ? [...state.duck] : null
+      }];
       startGameTimer();  // Start the game timer
     }catch(e){
       setThinking('');
@@ -858,9 +870,6 @@
     // Reset history navigation when receiving fresh state
     isNavigatingHistory = false;
     historyNavigationIndex = -1;
-    // Capture board snapshot for undo/navigation
-    if(!moveHistorySnapshots.length){ moveHistorySnapshots.push(JSON.parse(JSON.stringify(state.board))); }
-    moveHistorySnapshots.push(JSON.parse(JSON.stringify(state.board)));
     renderBoard();
     renderHistory();
     renderCaptured();
@@ -1005,7 +1014,55 @@
     setThinking('Model is thinking…');
     try{
       const state = await api('/api/place-duck', {game_id:gameId, duck:[r,c]});
-      applyState(state);
+
+      // Apply player's duck immediately, capture snapshot (don't wait for delays)
+      G.duck = [r, c];
+      moveHistorySnapshots.push({
+        board: JSON.parse(JSON.stringify(G.board)),
+        duck: G.duck ? [...G.duck] : null
+      });
+
+      // Show PLAYER'S duck placement
+      renderBoard();
+      renderTurnBar();
+
+      // Delay for visual animation (doesn't affect snapshot)
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
+      // Apply model's state, capture snapshot immediately (don't wait for delays)
+      const playerDuck = [r, c];
+      const modelDuck = state.duck;
+
+      G = state;
+      selectedSq = null;
+      legalTargets = [];
+      awaitingDuck = false;
+      validDuck = [];
+      G.duck = modelDuck;
+
+      // Capture snapshot immediately after model's turn is applied
+      moveHistorySnapshots.push({
+        board: JSON.parse(JSON.stringify(G.board)),
+        duck: modelDuck ? [...modelDuck] : null
+      });
+
+      // Show model's piece move (with player's duck still visible) + delays for animation
+      G.duck = playerDuck;
+      renderBoard();
+      renderCaptured();
+      renderEval();
+
+      // Delay before model's duck
+      await new Promise(resolve => setTimeout(resolve, 800));
+
+      // Show model's duck placement
+      G.duck = modelDuck;
+      renderBoard();
+      renderHistory();
+      renderTurnBar();
+      renderPlayers();
+      setThinking('');
+
     }catch(e){
       busy=false;
       awaitingDuck=true;  // re-enable duck placement
@@ -1450,15 +1507,46 @@
 
   /* ════════════ HISTORY NAVIGATION (arrow keys for viewing past positions) ════════════ */
   function navigateHistory(direction){
-    // direction: -1 for LEFT (go back), +1 for RIGHT (go forward)
+    // direction: -1 for PREV (earlier move), +1 for NEXT (later move)
+    // Large values (999, -999) mean go to start or current position
     // This is a LOCAL ONLY feature that shows past board positions without modifying game state
     if(!G || !moveHistorySnapshots.length) return;
-    if(busy) return;  // don't allow navigation while moves are processing
+    if(busy || isReplaying) return;  // don't allow navigation while moves are processing or replaying
 
-    const maxIndex = moveHistorySnapshots.length - 1;
-    const newIndex = historyNavigationIndex + direction;
+    const maxIdx = moveHistorySnapshots.length - 1;
+    let newIndex;
 
-    if(newIndex >= -1 && newIndex <= maxIndex){
+    if(direction >= 999) {
+      // Go to start of game
+      newIndex = 0;
+    } else if(direction <= -999) {
+      // Go to current position
+      newIndex = -1;
+    } else if(direction === 1) {
+      // NEXT move (go forward in time)
+      if(historyNavigationIndex === -1) {
+        // Already at current, can't go forward
+        return;
+      } else if(historyNavigationIndex < maxIdx) {
+        newIndex = historyNavigationIndex + 1;
+      } else {
+        // At last recorded move, go to current
+        newIndex = -1;
+      }
+    } else if(direction === -1) {
+      // PREV move (go backward in time)
+      if(historyNavigationIndex === -1) {
+        // At current, go to one move back (maxIdx - 1)
+        newIndex = maxIdx - 1;
+      } else if(historyNavigationIndex > 0) {
+        newIndex = historyNavigationIndex - 1;
+      } else {
+        // Already at start (index 0 = initial state), can't go back
+        return;
+      }
+    }
+
+    if(newIndex >= -1 && newIndex <= maxIdx){
       historyNavigationIndex = newIndex;
       isNavigatingHistory = newIndex !== -1;  // true when viewing past, false at current
       applyHistorySnapshot();
@@ -1470,11 +1558,14 @@
     const snapshotIdx = historyNavigationIndex === -1 ? moveHistorySnapshots.length - 1 : historyNavigationIndex;
     if(snapshotIdx < 0 || snapshotIdx >= moveHistorySnapshots.length) return;
 
+    // Get snapshot (which now contains both board and duck)
+    const snapshot = moveHistorySnapshots[snapshotIdx];
+
     // Create a display-only state from the snapshot
-    const snapshotBoard = JSON.parse(JSON.stringify(moveHistorySnapshots[snapshotIdx]));
     const displayState = {
       ...G,
-      board: snapshotBoard
+      board: JSON.parse(JSON.stringify(snapshot.board)),
+      duck: snapshot.duck ? [...snapshot.duck] : null
     };
     G = displayState;
     selectedSq = null;
@@ -1534,7 +1625,9 @@
         isNavigatingHistory = false;
         historyNavigationIndex = -1;
         if(G && moveHistorySnapshots.length > 0){
-          G.board = JSON.parse(JSON.stringify(moveHistorySnapshots[moveHistorySnapshots.length - 1]));
+          const lastSnapshot = moveHistorySnapshots[moveHistorySnapshots.length - 1];
+          G.board = JSON.parse(JSON.stringify(lastSnapshot.board));
+          G.duck = lastSnapshot.duck ? [...lastSnapshot.duck] : null;
           renderBoard();
           renderHistory();
         }
@@ -1544,8 +1637,8 @@
   document.addEventListener('keydown', e=>{
     if(!G || G.gameOver) return;
     // Arrow key navigation through move history
-    if(e.key === 'ArrowLeft'){ e.preventDefault(); navigateHistory(-1); }
-    if(e.key === 'ArrowRight'){ e.preventDefault(); navigateHistory(1); }
+    if(e.key === 'ArrowLeft'){ e.preventDefault(); navigateHistory(-1); }  // Previous move
+    if(e.key === 'ArrowRight'){ e.preventDefault(); navigateHistory(1); }  // Next move
   });
 
   /* ════════════ INIT ════════════ */
