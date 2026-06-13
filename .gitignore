@@ -38,3 +38,9 @@ debug-cli.*.log
 
 #	Qodana / Scanning tools
 .qodana/
+
+# Node & web dependencies
+node_modules/
+duck_chess_web/
+package-lock.json
+*.lock

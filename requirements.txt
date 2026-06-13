@@ -1,0 +1,30 @@
+# Duck Chess Web UI - Requirements
+# Install with: pip install -r requirements.txt
+
+# Core Web Framework
+fastapi==0.136.3
+uvicorn[standard]==0.49.0
+pydantic==2.13.4
+python-multipart==0.0.6
+
+# Game Logic & AI
+stable-baselines3==2.8.0
+sb3-contrib==2.8.0
+gymnasium==1.2.0
+
+# Scientific Computing
+numpy==2.4.0
+torch==2.11.0  # CPU version; for GPU use: torch with appropriate CUDA index
+
+# Game Engine (Optional - for running Pygame UI)
+pygame==2.6.0
+
+# Testing & Development (Optional)
+pytest==7.4.3
+pytest-cov==4.1.0
+
+# Note: Python 3.12+ recommended
+# Virtual environment setup:
+#   python -m venv .venv
+#   source .venv/bin/activate  (Linux/Mac) or .venv\Scripts\activate (Windows)
+#   pip install -r requirements.txt

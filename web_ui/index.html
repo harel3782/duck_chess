@@ -4,6 +4,7 @@
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Duck Chess</title>
+  <link rel="icon" href="duck.png" type="image/png"/>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -353,6 +354,12 @@
     .over-sub { color: var(--muted); font-size: 13px; margin-bottom: 20px; }
     .over-actions { display: flex; gap: 10px; }
 
+    /* Saved games cards */
+    .saved-game-card {
+      background: var(--panel2); border: 1px solid var(--line);
+      border-radius: 8px; padding: 10px; margin-bottom: 8px;
+    }
+
     /* tiny toast */
     .toast {
       position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%);
@@ -361,6 +368,52 @@
       opacity: 0; pointer-events: none; transition: opacity .2s; box-shadow: 0 8px 26px rgba(0,0,0,.5);
     }
     .toast.show { opacity: 1; }
+
+    /* Thinking animation */
+    @keyframes thinking-dots {
+      0%, 100% { content: '.' }
+      33% { content: '..' }
+      66% { content: '...' }
+    }
+    .thinking-dots::after {
+      content: '.';
+      animation: thinking-dots 1.5s steps(3, end) infinite;
+      display: inline-block;
+      min-width: 14px;
+    }
+
+    /* Pulsing opponent panel during AI thinking */
+    @keyframes pulse {
+      0%, 100% { border-color: var(--line); }
+      50% { border-color: #6aa8e0; }
+    }
+    .player-card.thinking {
+      animation: pulse 1.5s ease-in-out infinite;
+    }
+
+    /* Splash screen */
+    @keyframes fade-out {
+      0% { opacity: 1 }
+      90% { opacity: 1 }
+      100% { opacity: 0 }
+    }
+    #splash {
+      position: fixed; inset: 0; background: #121418; z-index: 1000;
+      display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 12px;
+      animation: fade-out 2s ease-in-out forwards;
+      pointer-events: none;
+    }
+    #splash img { width: 60px; height: 60px; }
+    #splash-text { font-size: 28px; font-weight: 800; color: var(--gold); letter-spacing: 1px; }
+
+    /* Mobile responsive */
+    @media (max-width: 860px) {
+      .main { flex-direction: column; }
+      .sidebar-left, .sidebar-right { width: 100%; }
+      .sidebar-left { order: 2; border-top: 1px solid var(--line); border-right: none; border-left: none; }
+      .sidebar-right { order: 3; border-top: 1px solid var(--line); }
+      .board-area { order: 1; }
+    }
 
     /* ════════════════════════════════════════════════════
        RESPONSIVE — phone
@@ -387,6 +440,12 @@
   </style>
 </head>
 <body>
+
+<!-- ════════════ SPLASH SCREEN ════════════ -->
+<div id="splash">
+  <img src="duck.png" alt="Duck Chess">
+  <div id="splash-text">Duck Chess</div>
+</div>
 
 <!-- ════════════ AUTH SCREEN ════════════ -->
 <div class="screen active" id="screen-auth">
@@ -424,6 +483,7 @@
     <div class="logo"><img src="duck.png" alt="">Duck<em>Chess</em></div>
     <div class="profile-chip">
       <span class="pname" id="menu-username">player</span>
+      <button class="logout-btn" onclick="openRules()" title="Rules">?</button>
       <button class="logout-btn" onclick="logout()">Logout</button>
       <div class="pav" id="menu-avatar">P</div>
     </div>
@@ -454,23 +514,8 @@
         </div>
         <div class="menu-card" onclick="startGame('human')">
           <div class="mc-icon">👥</div>
-          <div><div class="mc-title">Play vs Human</div>
-            <div class="mc-sub">Online match against another player.</div></div>
-        </div>
-        <div class="menu-card" onclick="startGame('position')">
-          <div class="mc-icon">⚑</div>
-          <div><div class="mc-title">Play from Position</div>
-            <div class="mc-sub">Set up a custom position and play it out.</div></div>
-        </div>
-        <div class="menu-card" onclick="openHistory()">
-          <div class="mc-icon">🕑</div>
-          <div><div class="mc-title">Model Game History</div>
-            <div class="mc-sub">Browse and replay past games of a model.</div></div>
-        </div>
-        <div class="menu-card" onclick="openRules()">
-          <div class="mc-icon"><img src="duck.png" alt=""></div>
-          <div><div class="mc-title">Rules</div>
-            <div class="mc-sub">How Duck Chess is played.</div></div>
+          <div><div class="mc-title">2 Players</div>
+            <div class="mc-sub">Local match against another player.</div></div>
         </div>
       </div>
 
@@ -490,6 +535,7 @@
       <span>Opponent:</span><span class="gn-model" id="game-model">Duck PPO</span>
     </div>
     <div class="gn-actions">
+      <button class="btn-ghost" style="width:auto;padding:6px 14px" onclick="toggleFlip()">↕ Flip</button>
       <button class="btn-ghost" style="width:auto;padding:6px 14px" onclick="openRules()">Rules</button>
       <button class="btn-ghost" style="width:auto;padding:6px 14px" onclick="goMenu()">← Menu</button>
     </div>
@@ -503,12 +549,14 @@
         <div class="player-card inactive" id="pc-opp">
           <div class="avatar av-ai" id="opp-av">🧠</div>
           <div><div class="p-name" id="opp-name">Duck PPO</div>
-            <div class="p-label" id="opp-label">Model</div></div>
+            <div class="p-label" id="opp-label">Model</div>
+            <div class="p-time" id="opp-time">00:00</div></div>
         </div>
         <div class="player-card active" id="pc-you">
           <div class="avatar av-white" id="you-av">Y</div>
           <div><div class="p-name" id="you-name">You — White</div>
-            <div class="p-label" id="you-label">Your turn</div></div>
+            <div class="p-label" id="you-label">Your turn</div>
+            <div class="p-time" id="you-time">00:00</div></div>
         </div>
       </div>
 
@@ -566,8 +614,6 @@
       </div>
 
       <div class="sec" style="margin-top:auto">
-        <button class="btn btn-ghost" onclick="notYet('Copy FEN')">📋 Copy FEN</button>
-        <button class="btn btn-ghost" onclick="notYet('Export PGN')">📤 Export PGN</button>
       </div>
     </div>
   </div>
@@ -591,8 +637,9 @@
     <div class="over-title" id="over-title">Game over</div>
     <div class="over-sub" id="over-sub"></div>
     <div class="over-actions">
+      <button class="btn btn-ghost" onclick="saveGameFromModal()">💾 Save</button>
       <button class="btn btn-ghost" onclick="closeOver();goMenu()">← Menu</button>
-      <button class="btn btn-gold" onclick="closeOver();restartGame()">↺ New Game</button>
+      <button class="btn btn-gold" onclick="closeOver();restartGame()">↺ Play Again</button>
     </div>
   </div>
 </div>
@@ -635,7 +682,12 @@
     document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
     document.getElementById(id).classList.add('active');
   }
-  function goMenu(){ showScreen('screen-menu'); }
+  function goMenu(){
+    isReplaying = false;  // exit replay mode if active
+    stopGameTimer();  // stop game timer
+    showScreen('screen-menu');
+    loadSavedGames();  // refresh saved games list
+  }
 
   /* ════════════ AUTH — OPEN PASS-THROUGH (no real logic yet) ════════════ */
   let authMode = 'login';
@@ -652,6 +704,7 @@
     enterApp(u);
   }
   function enterApp(username){
+    curUsername = username;  // store globally
     document.getElementById('menu-username').textContent = username;
     document.getElementById('menu-welcome').textContent = username;
     document.getElementById('menu-avatar').textContent = username[0].toUpperCase();
@@ -705,6 +758,13 @@
   let validDuck = [];      // [[r,c],...]
   let curColor = 'white';  // for restart
   let curModel = 'stage12';
+  let curUsername = 'Player';  // current logged-in username
+  let is2Player = false;   // flag for 2-player local mode
+
+  // Game timers
+  let playerTime = 0;  // seconds elapsed for current player
+  let opponentTime = 0;
+  let timerInterval = null;
 
   const boardEl = document.getElementById('board');
 
@@ -722,8 +782,17 @@
 
   /* ════════════ START / RESTART ════════════ */
   async function startGame(mode){
-    if(mode==='human'){ toast('Online human vs human — coming in Phase 3.'); return; }
     if(mode==='position'){ toast('Play from Position — coming in Phase 3.'); return; }
+    if(mode==='human'){
+      // 2-player local mode - both players can move
+      is2Player = true;
+      curColor = 'white';  // first player is white
+      curModel = null;     // no model in 2-player
+      await newGame();
+      return;
+    }
+    // vs-model modes
+    is2Player = false;
     curColor = mode;                                   // 'white' | 'black'
     curModel = document.getElementById('menu-model').value || 'stage12';
     await newGame();
@@ -735,19 +804,31 @@
     showScreen('screen-game');
     setThinking('Starting game…');
     try{
-      const state = await api('/api/new-game', {model: curModel, color: curColor});
+      const reqBody = {color: curColor, model: is2Player ? null : curModel};
+      const state = await api('/api/new-game', reqBody);
       gameId = state.gameId;
       playerColor = state.playerColor;
       flipped = (playerColor === 'b');
+      applyBoardFlip();  // apply flip to DOM
+
       // header / player cards
-      document.getElementById('game-model').textContent = state.modelLabel;
-      document.getElementById('opp-name').textContent = 'Duck PPO';
-      document.getElementById('opp-label').textContent =
-        state.modelLabel.replace('Duck PPO — ','') + ' · ' + (playerColor==='w'?'Black':'White');
+      if(is2Player){
+        // 2-player: show usernames for both
+        document.getElementById('game-model').textContent = '2 Players';
+        document.getElementById('opp-name').textContent = curUsername === 'Player' ? 'Player 2' : curUsername;
+        document.getElementById('opp-label').textContent = (playerColor==='w'?'Black':'White');
+      } else {
+        // vs-model
+        document.getElementById('game-model').textContent = state.modelLabel;
+        document.getElementById('opp-name').textContent = 'Duck PPO';
+        document.getElementById('opp-label').textContent =
+          state.modelLabel.replace('Duck PPO — ','') + ' · ' + (playerColor==='w'?'Black':'White');
+      }
       const youWhite = (playerColor==='w');
-      document.getElementById('you-name').textContent = youWhite ? 'You — White' : 'You — Black';
+      document.getElementById('you-name').textContent = youWhite ? curUsername + ' — White' : curUsername + ' — Black';
       document.getElementById('you-av').className = 'avatar ' + (youWhite ? 'av-white':'av-black');
       applyState(state);
+      startGameTimer();  // Start the game timer
     }catch(e){
       setThinking('');
       toast('Could not start game: ' + e.message);
@@ -756,6 +837,16 @@
 
   function resetLocal(){
     selectedSq=null; legalTargets=[]; awaitingDuck=false; validDuck=[]; busy=false;
+  }
+
+  function applyBoardFlip(){
+    boardEl.classList.toggle('flipped', flipped);
+  }
+
+  function toggleFlip(){
+    flipped = !flipped;
+    applyBoardFlip();
+    renderBoard();  // re-render with new orientation
   }
 
   /* ════════════ APPLY SERVER STATE ════════════ */
@@ -773,12 +864,18 @@
     if(state.gameOver){ showGameOver(state); }
   }
 
-  function myTurn(){ return G && !G.gameOver && G.turn === playerColor; }
+  function myTurn(){
+    if(!G || G.gameOver) return false;
+    // In 2-player mode, both players can move
+    if(is2Player) return true;
+    // In vs-model, only the player's color can move
+    return G.turn === playerColor;
+  }
 
   /* ════════════ BOARD RENDER ════════════ */
   function renderBoard(){
     boardEl.innerHTML='';
-    boardEl.classList.toggle('locked', busy);
+    boardEl.classList.toggle('locked', busy || isReplaying);
     const board = G ? G.board : [];
     const duck  = G ? G.duck : null;
     const hi = (G && G.highlight) ? G.highlight : [];
@@ -845,8 +942,9 @@
       await doMovePiece(selectedSq, {r,c});
       return;
     }
-    // selecting own piece
-    if(code && code[0]===playerColor){
+    // selecting own piece (in 2-player, select whoever's turn it is; vs-model, select only your color)
+    const selectableColor = is2Player ? G.turn : playerColor;
+    if(code && code[0]===selectableColor){
       await selectPiece(r,c);
       return;
     }
@@ -878,9 +976,21 @@
       renderCaptured(); renderEval();
       setDuckPrompt();
     }catch(e){
-      busy=false; awaitingDuck=false; selectedSq=null; legalTargets=[];
+      busy=false; awaitingDuck=false;
+      // Show error feedback: red flash + status message
+      flashSquare(to.r, to.c);
+      setThinking('❌ ' + e.message, 2000);
+      // Keep selection active so user can try again
       renderBoard();
-      toast(e.message);
+    }
+  }
+
+  function flashSquare(r,c){
+    // Visual feedback: red flash on invalid square
+    const sq = boardEl.querySelector(`[data-r="${r}"][data-c="${c}"]`);
+    if(sq){
+      sq.style.background = 'rgba(220, 50, 50, 0.6)';
+      setTimeout(()=>{ sq.style.background = ''; renderBoard(); }, 400);
     }
   }
 
@@ -892,7 +1002,12 @@
       applyState(state);
     }catch(e){
       busy=false;
-      toast(e.message);
+      awaitingDuck=true;  // re-enable duck placement
+      // Show error feedback: red flash + status message
+      flashSquare(r, c);
+      setThinking('❌ ' + e.message, 2000);
+      validDuck = G ? (G.validDuck || []) : [];  // restore valid duck squares
+      renderBoard();
       renderTurnBar();
     }
   }
@@ -912,7 +1027,25 @@
     const box = document.getElementById('history-box');
     const rows = (G && G.history) ? G.history : [];
     if(!rows.length){ box.innerHTML='<div class="history-empty">No moves yet.</div>'; return; }
-    box.innerHTML = rows.map(m=>`
+
+    // Build move pairs (white-black) from halfmoves
+    const movePairs = [];
+    for(let i = 0; i < rows.length; i++){
+      const hm = rows[i];
+      const moveText = hm.text || '';
+
+      if(hm.color === 'w'){
+        movePairs.push({n: Math.floor(i/2) + 1, w: moveText, b: ''});
+      } else {
+        if(movePairs.length > 0){
+          movePairs[movePairs.length - 1].b = moveText;
+        } else {
+          movePairs.push({n: 1, w: '…', b: moveText});
+        }
+      }
+    }
+
+    box.innerHTML = movePairs.map(m=>`
       <div class="mv"><span class="mv-n">${m.n}.</span><span class="mv-w">${m.w||''}</span><span class="mv-b">${m.b||''}</span></div>
     `).join('');
     box.scrollTop = box.scrollHeight;
@@ -942,12 +1075,48 @@
   }
 
   /* ════════════ RENDER: TURN BAR ════════════ */
-  function setThinking(msg){
-    busy = true;
-    boardEl.classList.add('locked');
-    document.getElementById('turn-text').textContent = msg || 'Model is thinking…';
-    document.getElementById('phase-pill').textContent = '⏳ Working';
-    document.getElementById('turn-dot').style.background = '#6aa8e0';
+  let thinkingTimer = null;
+
+  function setThinking(msg, clearAfterMs){
+    if(thinkingTimer) clearTimeout(thinkingTimer);
+
+    if(!msg){
+      // Clear thinking state
+      busy = false;
+      boardEl.classList.remove('locked');
+      document.getElementById('turn-text').textContent = '';
+      document.getElementById('phase-pill').textContent = '';
+      document.getElementById('turn-dot').style.background = '';
+      // Remove pulse animation from opponent
+      const oppCard = document.getElementById('pc-opp');
+      if(oppCard) oppCard.classList.remove('thinking');
+      return;
+    }
+
+    // Set message (error or thinking state)
+    const isError = msg.startsWith('❌');
+    const turnText = document.getElementById('turn-text');
+
+    if(!isError){
+      // Thinking state: add pulsing dots animation
+      busy = true;
+      boardEl.classList.add('locked');
+      turnText.innerHTML = msg + '<span class="thinking-dots"></span>';
+      document.getElementById('phase-pill').textContent = '⏳ Working';
+      document.getElementById('turn-dot').style.background = '#6aa8e0';
+
+      // Pulse opponent's name card
+      const oppCard = document.getElementById('pc-opp');
+      if(oppCard) oppCard.classList.add('thinking');
+    } else {
+      // Error message
+      turnText.textContent = msg;
+    }
+
+    // Auto-clear after timeout (for error messages)
+    if(clearAfterMs){
+      thinkingTimer = setTimeout(()=>setThinking(''), clearAfterMs);
+    }
   }
   function setDuckPrompt(){
     document.getElementById('turn-text').textContent = 'Place the duck';
@@ -992,24 +1161,304 @@
     return state.winner===playerColor ? 'You win' : 'Model wins';
   }
   function showGameOver(state){
+    stopGameTimer();  // Stop timer when game ends
+
     const title=document.getElementById('over-title');
     const sub=document.getElementById('over-sub');
+    let resultText = '';
+    let reason = '';
+
     if(state.winner==='draw'){
       title.textContent='Draw'; title.className='over-title draw';
-      sub.textContent='The game ended in a draw (50-move rule).';
+      reason='The game ended in a draw (50-move rule).';
     } else if(state.winner===playerColor){
-      title.textContent='You win! 🎉'; title.className='over-title win';
-      sub.textContent = state.message==='resign' ? 'Game ended.' : 'You captured the model\'s king (or fowled it).';
+      title.textContent='You Win! 🎉'; title.className='over-title win';
+      reason = state.message==='resign' ? 'Opponent resigned.' : 'You captured the king!';
+    } else if(state.winner && state.winner !== playerColor){
+      title.textContent='You Lost'; title.className='over-title lose';
+      reason = state.message==='resign' ? 'You resigned.' : 'Your king was captured.';
     } else {
-      title.textContent='Model wins'; title.className='over-title lose';
-      sub.textContent = state.message==='resign' ? 'You resigned.' : 'The model captured your king (or fowled you).';
+      title.textContent='Game Over'; title.className='over-title draw';
+      reason = 'The game has ended.';
     }
+
+    // Add material count and times
+    const materialDiff = state.evalDiff || 0;
+    const materialText = materialDiff > 0 ? `You were ahead by ${Math.abs(materialDiff)} material.` :
+                         materialDiff < 0 ? `You were behind by ${Math.abs(materialDiff)} material.` :
+                         'Material was equal.';
+
+    const timeText = `Time: ${formatTime(playerTime)} vs ${formatTime(opponentTime)}`;
+
+    sub.textContent = reason + ' ' + materialText + '\n' + timeText;
     document.getElementById('modal-over').classList.add('active');
     renderTurnBar();
   }
   function openHistory(){ toast('Model Game History — coming in Phase 3.'); }
 
+  /* ════════════ SAVE & LOAD ════════════ */
+  let pendingSaveData = null;  // for retry logic
+
+  async function saveGameFromModal(){
+    const label = prompt('Name this game:', '');
+    if(label === null) return;  // cancelled
+
+    const saveBtn = document.querySelector('.over-actions button:first-child');
+    if(!saveBtn) return;
+
+    pendingSaveData = {game_id: gameId, username: curUsername, label: label || '(Unnamed)'};
+
+    // Show saving state
+    const originalText = saveBtn.textContent;
+    saveBtn.disabled = true;
+    saveBtn.textContent = '⏳ Saving...';
+    setThinking('Saving game…');
+
+    try{
+      await api('/api/save-game', pendingSaveData);
+      // Success: show checkmark
+      saveBtn.innerHTML = '✅ Saved!';
+      saveBtn.disabled = true;
+      toast('Game saved! You can load it from the menu later.');
+      setThinking('');
+      setTimeout(() => {
+        closeOver();
+        goMenu();
+      }, 1000);
+    }catch(e){
+      setThinking('');
+      // Failure: offer retry or download fallback
+      saveBtn.disabled = false;
+      saveBtn.textContent = '❌ Save failed';
+      showSaveErrorOptions(saveBtn, originalText);
+    }
+  }
+
+  function showSaveErrorOptions(saveBtn, originalText){
+    // Replace button with retry option
+    const container = saveBtn.parentElement;
+    saveBtn.remove();
+
+    const retryBtn = document.createElement('button');
+    retryBtn.className = 'btn btn-ghost';
+    retryBtn.style.fontSize = '12px';
+    retryBtn.textContent = '↻ Retry Save';
+    retryBtn.onclick = () => {
+      container.innerHTML = '';
+      const newSaveBtn = document.createElement('button');
+      newSaveBtn.className = 'btn btn-ghost';
+      newSaveBtn.textContent = originalText;
+      container.appendChild(newSaveBtn);
+      newSaveBtn.onclick = saveGameFromModal;
+      saveGameFromModal();
+    };
+
+    container.appendChild(retryBtn);
+  }
+
+  async function loadSavedGames(){
+    try{
+      const r = await fetch(`/api/saved-games?username=${encodeURIComponent(curUsername)}`).then(res => res.json());
+      const list = document.getElementById('saved-list');
+      if(!r.games || !r.games.length){
+        list.innerHTML = `
+          <div style="text-align:center; padding: 20px; color: var(--muted);">
+            <img src="duck.png" style="width: 48px; height: 48px; margin-bottom: 12px; opacity: 0.5;">
+            <div style="font-size: 13px;">No saved games yet<br/>Finish a game to save it here</div>
+          </div>
+        `;
+        return;
+      }
+      list.innerHTML = r.games.map(g => `
+        <div class="saved-game-card">
+          <div><strong>${g.label}</strong></div>
+          <div style="font-size:11px; color: var(--muted); margin: 4px 0;">${g.timestamp} — ${g.result}</div>
+          <div style="font-size:10px; color: #888;">${g.model_label || '2 Players'}</div>
+          <button class="btn btn-ghost" style="width:100%; margin-top:6px; font-size:11px" onclick="loadAndReplayGame('${g.filename}')">↻ Load & Review</button>
+        </div>
+      `).join('');
+    }catch(e){
+      console.log('Failed to load saved games:', e);
+    }
+  }
+
+  async function loadAndReplayGame(filename){
+    setThinking('Loading game…');
+    try{
+      const gameData = await fetch(`/api/load-game/${filename}`).then(r => r.json());
+      startReplay(gameData);
+    }catch(e){
+      toast('Failed to load game: ' + e.message);
+    }
+    setThinking('');
+  }
+
+  function startReplay(gameData){
+    // Initialize replay mode with full game state + snapshots
+    G = {
+      board: gameData.board,
+      duck: gameData.duck,
+      turn: 'w',
+      phase: 'move_piece',
+      gameOver: gameData.game_over,
+      winner: gameData.winner,
+      history: gameData.history || [],
+      playerColor: gameData.player_color,
+      modelColor: gameData.model_color,
+      boardSnapshots: gameData.board_snapshots || [],
+    };
+    replayIndex = 0;
+    isReplaying = true;
+    playerColor = gameData.player_color;
+    flipped = (playerColor === 'b');
+    applyBoardFlip();
+
+    // Show game screen with replay controls
+    showScreen('screen-game');
+    document.getElementById('game-model').textContent = gameData.model_label || '2 Players';
+    document.getElementById('opp-name').textContent = gameData.model_label ? 'Duck PPO' : 'Player 2';
+    document.getElementById('opp-label').textContent = (playerColor==='w'?'Black':'White');
+    document.getElementById('you-name').textContent = curUsername + ' — ' + (playerColor==='w'?'White':'Black');
+    document.getElementById('you-av').className = 'avatar ' + (playerColor==='w'?'av-white':'av-black');
+
+    // Show initial board state
+    applyReplaySnapshot(0);
+    renderReplayControls();
+  }
+
+  let replayIndex = 0;
+  let isReplaying = false;
+
+  function renderReplayControls(){
+    // Find or create replay control bar
+    let ctrlBar = document.getElementById('replay-controls');
+    if(!ctrlBar){
+      ctrlBar = document.createElement('div');
+      ctrlBar.id = 'replay-controls';
+      ctrlBar.style.cssText = 'position:absolute; bottom:10px; left:50%; transform:translateX(-50%); background:#16191f; border:1px solid #252b36; border-radius:10px; padding:8px 12px; display:flex; gap:6px; z-index:50;';
+      document.body.appendChild(ctrlBar);
+    }
+    ctrlBar.innerHTML = `
+      <button class="btn btn-ghost" style="width:auto; padding:4px 10px; font-size:11px" onclick="replayPrev()">⏮ Prev</button>
+      <button class="btn btn-ghost" style="width:auto; padding:4px 10px; font-size:11px" onclick="replayPlayPause()" id="replay-play-btn">▶ Play</button>
+      <button class="btn btn-ghost" style="width:auto; padding:4px 10px; font-size:11px" onclick="replayNext()">Next ⏭</button>
+      <button class="btn btn-ghost" style="width:auto; padding:4px 10px; font-size:11px" onclick="exitReplay()">Exit ✕</button>
+      <span style="color: var(--muted); font-size:11px; margin-left:6px;">Move: <span id="replay-move-num">1</span></span>
+    `;
+    updateReplayUI();
+  }
+
+  let replayPlaying = false;
+  let replayTimer = null;
+
+  function updateReplayUI(){
+    const snapshotCount = (G && G.boardSnapshots) ? G.boardSnapshots.length : 0;
+    document.getElementById('replay-move-num').textContent = `${replayIndex + 1}/${snapshotCount}`;
+  }
+
+  function replayPrev(){
+    if(replayIndex > 0) replayIndex--;
+    updateReplayState();
+  }
+
+  function replayNext(){
+    if(G.boardSnapshots && replayIndex < G.boardSnapshots.length - 1) replayIndex++;
+    updateReplayState();
+  }
+
+  function replayPlayPause(){
+    replayPlaying = !replayPlaying;
+    const btn = document.getElementById('replay-play-btn');
+    btn.textContent = replayPlaying ? '⏸ Pause' : '▶ Play';
+    if(replayPlaying) stepReplay();
+  }
+
+  function stepReplay(){
+    if(!replayPlaying || !isReplaying) return;
+    if(G.boardSnapshots && replayIndex < G.boardSnapshots.length - 1){
+      replayIndex++;
+      updateReplayState();
+      replayTimer = setTimeout(stepReplay, 1500);
+    } else {
+      replayPlaying = false;
+      document.getElementById('replay-play-btn').textContent = '▶ Play';
+    }
+  }
+
+  function updateReplayState(){
+    applyReplaySnapshot(replayIndex);
+  }
+
+  function applyReplaySnapshot(snapshotIdx){
+    if(!G || !G.boardSnapshots || snapshotIdx >= G.boardSnapshots.length) return;
+    // Update board from snapshot
+    G.board = JSON.parse(JSON.stringify(G.boardSnapshots[snapshotIdx]));
+    renderBoard();
+    renderHistory();
+    updateReplayUI();
+  }
+
+  function exitReplay(){
+    isReplaying = false;
+    replayPlaying = false;
+    if(replayTimer) clearTimeout(replayTimer);
+    const ctrlBar = document.getElementById('replay-controls');
+    if(ctrlBar) ctrlBar.remove();
+    goMenu();
+  }
+
+  /* ════════════ TIMERS ════════════ */
+  function formatTime(seconds){
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  }
+
+  function startGameTimer(){
+    playerTime = 0;
+    opponentTime = 0;
+    updateTimerDisplay();
+    if(timerInterval) clearInterval(timerInterval);
+    timerInterval = setInterval(()=>{
+      if(!G || G.gameOver || isReplaying) return;
+      if(G.turn === playerColor){
+        playerTime++;
+      } else {
+        opponentTime++;
+      }
+      updateTimerDisplay();
+    }, 1000);
+  }
+
+  function updateTimerDisplay(){
+    document.getElementById('you-time').textContent = formatTime(playerTime);
+    document.getElementById('opp-time').textContent = formatTime(opponentTime);
+  }
+
+  function stopGameTimer(){
+    if(timerInterval){
+      clearInterval(timerInterval);
+      timerInterval = null;
+    }
+  }
+
+  /* ════════════ KEYBOARD SHORTCUTS ════════════ */
+  document.addEventListener('keydown', e=>{
+    if(!G || G.gameOver || isReplaying) return;
+    if(e.key.toLowerCase() === 'f'){ toggleFlip(); }  // F for flip
+    if(e.key.toLowerCase() === 'r'){ resignGame(); }  // R for resign
+  });
+  document.addEventListener('keydown', e=>{
+    if(e.key === 'Escape'){
+      closeRules();
+      closeOver();
+    }
+  });
+
   /* ════════════ INIT ════════════ */
+  // Hide splash after 1.5s (fade animation takes 2s total)
+  setTimeout(()=>{ document.getElementById('splash').style.display = 'none'; }, 1500);
+
   loadModels();
   document.getElementById('auth-pass').addEventListener('keydown', e=>{ if(e.key==='Enter') submitAuth(); });
   document.getElementById('auth-confirm').addEventListener('keydown', e=>{ if(e.key==='Enter') submitAuth(); });
