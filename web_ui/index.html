@@ -569,7 +569,7 @@
           <div class="history-empty">No moves yet.</div>
         </div>
         <!-- Undo below history -->
-        <button class="btn btn-blue" id="btn-undo" style="margin-top:8px" onclick="notYet('Undo')">⟵ &nbsp;Undo Move</button>
+        <button class="btn btn-blue" id="btn-undo" style="margin-top:8px" onclick="undoLastMove()">⟵ &nbsp;Undo Move</button>
       </div>
     </div>
 
@@ -761,6 +761,11 @@
   let opponentTime = 0;
   let timerInterval = null;
 
+  // History navigation (for undo/arrow key navigation)
+  let moveHistorySnapshots = [];  // board states: [initial, after_move_1, after_move_2, ...]
+  let historyNavigationIndex = -1;  // -1 = current position, 0+ = past position
+  let isNavigatingHistory = false;  // true while viewing past positions
+
   const boardEl = document.getElementById('board');
 
   /* ════════════ MODEL DROPDOWN ════════════ */
@@ -850,6 +855,12 @@
     busy = false;
     selectedSq = null; legalTargets = [];
     awaitingDuck = false; validDuck = [];
+    // Reset history navigation when receiving fresh state
+    isNavigatingHistory = false;
+    historyNavigationIndex = -1;
+    // Capture board snapshot for undo/navigation
+    if(!moveHistorySnapshots.length){ moveHistorySnapshots.push(JSON.parse(JSON.stringify(state.board))); }
+    moveHistorySnapshots.push(JSON.parse(JSON.stringify(state.board)));
     renderBoard();
     renderHistory();
     renderCaptured();
@@ -1437,6 +1448,77 @@
     }
   }
 
+  /* ════════════ HISTORY NAVIGATION (arrow keys for viewing past positions) ════════════ */
+  function navigateHistory(direction){
+    // direction: -1 for LEFT (go back), +1 for RIGHT (go forward)
+    // This is a LOCAL ONLY feature that shows past board positions without modifying game state
+    if(!G || !moveHistorySnapshots.length) return;
+    if(busy) return;  // don't allow navigation while moves are processing
+
+    const maxIndex = moveHistorySnapshots.length - 1;
+    const newIndex = historyNavigationIndex + direction;
+
+    if(newIndex >= -1 && newIndex <= maxIndex){
+      historyNavigationIndex = newIndex;
+      isNavigatingHistory = newIndex !== -1;  // true when viewing past, false at current
+      applyHistorySnapshot();
+    }
+  }
+
+  function applyHistorySnapshot(){
+    if(!moveHistorySnapshots.length) return;
+    const snapshotIdx = historyNavigationIndex === -1 ? moveHistorySnapshots.length - 1 : historyNavigationIndex;
+    if(snapshotIdx < 0 || snapshotIdx >= moveHistorySnapshots.length) return;
+
+    // Create a display-only state from the snapshot
+    const snapshotBoard = JSON.parse(JSON.stringify(moveHistorySnapshots[snapshotIdx]));
+    const displayState = {
+      ...G,
+      board: snapshotBoard
+    };
+    G = displayState;
+    selectedSq = null;
+    legalTargets = [];
+    awaitingDuck = false;
+    validDuck = [];
+
+    renderBoard();
+    renderCaptured();
+    renderEval();
+
+    // Show navigation indicator
+    if(isNavigatingHistory){
+      toast(`Viewing move ${snapshotIdx} of ${moveHistorySnapshots.length - 1} (press ESC to return)`);
+    }
+  }
+
+  async function undoLastMove(){
+    if(!G || G.gameOver || busy || awaitingDuck) return;
+    if(!(G.history && G.history.length > 0)) return;
+
+    // Can only undo on the player's turn (in vs-model) or always in 2-player
+    if(!is2Player && !myTurn()) return;
+
+    busy = true;
+    setThinking('Undoing move…');
+    try{
+      const state = await api('/api/undo-move', {game_id: gameId});
+      // Reset history navigation
+      isNavigatingHistory = false;
+      historyNavigationIndex = -1;
+      moveHistorySnapshots = [];  // reset snapshots
+      // Clear selections and re-render with new state
+      selectedSq = null;
+      legalTargets = [];
+      applyState(state);
+      toast('Move undone.');
+    }catch(e){
+      busy = false;
+      setThinking('');
+      toast('Cannot undo: ' + e.message);
+    }
+  }
+
   /* ════════════ KEYBOARD SHORTCUTS ════════════ */
   document.addEventListener('keydown', e=>{
     if(!G || G.gameOver || isReplaying) return;
@@ -1447,7 +1529,23 @@
     if(e.key === 'Escape'){
       closeRules();
       closeOver();
+      // Also exit history navigation
+      if(isNavigatingHistory){
+        isNavigatingHistory = false;
+        historyNavigationIndex = -1;
+        if(G && moveHistorySnapshots.length > 0){
+          G.board = JSON.parse(JSON.stringify(moveHistorySnapshots[moveHistorySnapshots.length - 1]));
+          renderBoard();
+          renderHistory();
+        }
+      }
     }
+  });
+  document.addEventListener('keydown', e=>{
+    if(!G || G.gameOver) return;
+    // Arrow key navigation through move history
+    if(e.key === 'ArrowLeft'){ e.preventDefault(); navigateHistory(-1); }
+    if(e.key === 'ArrowRight'){ e.preventDefault(); navigateHistory(1); }
   });
 
   /* ════════════ INIT ════════════ */
