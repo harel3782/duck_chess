@@ -1,5 +1,6 @@
 import pygame
 import sys
+import os
 import asyncio
 from DuckChess_Game.UI.settings import *
 from DuckChess_Game.Logic.logic import GameLogicMixin
@@ -28,16 +29,29 @@ class DuckChess(GameLogicMixin, RenderingMixin, InputHandlerMixin, AssetManagerM
 		self.init_ai()
 
 		self.rl_model = None
-		# NOTE: No model here is currently good vs a human. Every checkpoint either
-		# loses to a real engine (stage-10/12 league: 0/20 vs Peter depth-2) or only
-		# wins via a ~4-move king-rush exploit that any human defends (peter_local /
-		# strong: 0/N vs Peter depth-3). Until a model beats depth-3, leave this
-		# UNSET so the game falls back to the basic alpha-beta AI (ai.py), which is a
-		# steadier human opponent than the cheese policy. See training_log.md.
-		model_path = None
+		self.rl_searcher = None       # DuckMCTS wrapper (set below if USE_MCTS)
+		self._pending_duck_action = None
+		# The in-game AI uses the v2 model (trained from scratch vs an opponent pool
+		# with random starts + sparse reward — train_peter_v2.py), driven by
+		# AlphaZero-style PUCT MCTS (mcts.py) over the distilled value head
+		# (v2_value.zip). That combination beats Peter depth-2 100% WITHOUT the old
+		# king-rush exploit (raw policy alone is ~90%). It still loses to Peter
+		# depth-3; cracking d3 needs Expert Iteration (PLAN_V2.md Step 7b).
+		# To use the raw policy instead of MCTS, set USE_MCTS = False; to fall back
+		# to the basic alpha-beta AI (ai.py), set model_path = None.
+		model_path = "models/duck_ppo/v2/v2_value.zip"
+		USE_MCTS = True
 		if model_path and os.path.exists(model_path):
 			print(f"[+] Loading RL Model for AI moves: {model_path}")
 			self.rl_model = MaskablePPO.load(model_path, device="cpu")
+			if USE_MCTS:
+				try:
+					from DuckChess_Game.SBThree.mcts import DuckMCTS
+					self.rl_searcher = DuckMCTS(self.rl_model, sims=200, c_puct=1.5)
+					print("[+] MCTS search enabled for AI moves (sims=200)")
+				except Exception as exc:
+					print(f"[!] MCTS unavailable ({exc!r}); using raw policy")
+					self.rl_searcher = None
 
 		# Layout configuration
 		self.sq_size = 0

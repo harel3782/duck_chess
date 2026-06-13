@@ -69,8 +69,8 @@ def anti_cheese_reward():
         mobility_scale=0.004,     # reward having options (discourages corner-shuffle)
         blocking_scale=0.015,     # reward using the duck to block (it wastes the duck)
         step_penalty=0.0,         # OFF: step penalty rewards fast games = the rush
-        king_push_bonus=0.0,      # OFF: rewards the king-hunt
-        win=1.0, loss=-1.0, draw=0.1,   # surviving/drawing beats suiciding
+        king_push_bonus=0.01,     # small push toward aggression (was 0.0 — model draws too much)
+        win=1.0, loss=-1.0, draw=-0.3,  # draws now cost — model learned to survive, must learn to win
     )
 
 
@@ -131,18 +131,26 @@ class RealCallback(BaseCallback):
         self.last_latest = time.time()
         self.version = 0
 
+    @staticmethod
+    def _atomic_save(model, path: str) -> None:
+        """Save to a .tmp file then rename — avoids Windows file-lock crash
+        when an eval process reads `real_latest.zip` at the same time."""
+        tmp = path + ".tmp"
+        model.save(tmp)
+        os.replace(tmp, path)   # atomic on NTFS
+
     def _on_step(self) -> bool:
         now = time.time()
         if self.num_timesteps - self.version * self.ckpt_every >= self.ckpt_every:
             self.version += 1
-            self.model.save(os.path.join(self.save_dir, f"real_v{self.version}.zip"))
-            self.model.save(os.path.join(self.save_dir, "real_latest.zip"))
+            self._atomic_save(self.model, os.path.join(self.save_dir, f"real_v{self.version}.zip"))
+            self._atomic_save(self.model, os.path.join(self.save_dir, "real_latest.zip"))
             self.last_latest = now
             fps = self.num_timesteps / max(1e-9, now - self.start)
             print(f"[real] step={self.num_timesteps:,} v{self.version} | "
                   f"{(now-self.start)/3600:.2f}h | {fps:.0f} steps/s", flush=True)
         elif now - self.last_latest > 600:
-            self.model.save(os.path.join(self.save_dir, "real_latest.zip"))
+            self._atomic_save(self.model, os.path.join(self.save_dir, "real_latest.zip"))
             self.last_latest = now
         if now >= self.deadline:
             print(f"[real] time budget reached ({(now-self.start)/3600:.2f}h, "
@@ -163,20 +171,23 @@ def main():
     p.add_argument("--lr", type=float, default=1e-4)
     p.add_argument("--ent-coef", type=float, default=0.01)
     p.add_argument("--ckpt-every", type=int, default=50_000)
+    p.add_argument("--resume", type=str, default=None,
+                   help="Resume from this checkpoint instead of BASE (e.g. models/duck_ppo/real/real_v4.zip)")
     args = p.parse_args()
 
     os.makedirs(SAVE_DIR, exist_ok=True)
 
-    print("=== BASELINE (strong_final) ===", flush=True)
+    start_model = args.resume if args.resume else BASE
+    print(f"=== BASELINE ({os.path.basename(start_model)}) ===", flush=True)
     for dep in (2, 3):
-        wr, sc, ln, wld = eval_vs(BASE, dep, games=8)
+        wr, sc, ln, wld = eval_vs(start_model, dep, games=8)
         print(f"  vs d{dep}: win={wr:.0%} score={sc:.3f} avg_len={ln:.0f}hm W/L/D={wld}", flush=True)
 
     print(f"\n=== TRAINING {args.hours}h vs Peter depth-{args.depth} "
           f"({args.n_envs} envs), DENSE anti-cheese reward ===", flush=True)
     vec = SubprocVecEnv([make_env(i, args.depth) for i in range(args.n_envs)])
     model = MaskablePPO.load(
-        BASE, env=vec,
+        start_model, env=vec,
         tensorboard_log="./tensorboard_logs/real/",
         custom_objects={"learning_rate": args.lr, "ent_coef": args.ent_coef, "target_kl": 0.06},
     )

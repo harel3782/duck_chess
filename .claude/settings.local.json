@@ -27,7 +27,30 @@
       "Bash(git add *)",
       "Bash(grep \"\\\\.zip$\")",
       "Bash(git diff *)",
-      "Bash(xargs -0 -I{} sh -c 'test -f \"{}\" && find \"{}\" -size +95M')"
+      "Bash(xargs -0 -I{} sh -c 'test -f \"{}\" && find \"{}\" -size +95M')",
+      "Bash(git grep *)",
+      "Bash(./.venv/Scripts/python.exe -m py_compile DuckChess_Game/UI/main.py DuckChess_Game/SBThree/env_registry.py DuckChess_Game/SBThree/train_stage13.py web_ui/server.py)",
+      "Bash(./.venv/Scripts/python.exe -c \"from DuckChess_Game.SBThree.env_registry import REGISTRY; print\\('registry keys:', sorted\\(REGISTRY.keys\\(\\)\\)\\)\")",
+      "Bash(sed -n '12,42p' tests/test_env_factory.py)",
+      "Bash(sed -n '95,115p' tests/test_env_factory.py)",
+      "Bash(./.venv/Scripts/python.exe -m pytest tests/test_env_factory.py -q)",
+      "Bash(./.venv/Scripts/python.exe -m pytest tests/ -q)",
+      "Bash(git commit --no-edit -m 'Merge branch '\\\\''afik_chages'\\\\'' into master' -m 'Brings the functional web UI plus afik_chages work \\(Stage 13, strong model, *)",
+      "Bash(git push *)",
+      "Bash(git checkout *)",
+      "Bash(git stash *)",
+      "Bash(git branch *)",
+      "Bash(git remote *)",
+      "Bash(git fetch *)",
+      "Bash(git merge *)",
+      "Bash(dir \"C:\\\\Users\\\\afiks\\\\Documents\\\\Afik\\\\Afeka\\\\duck_chess-master\\\\duck_chess-master\")",
+      "WebSearch",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "WebFetch(domain:github.com)",
+      "PowerShell(Get-Process python -ErrorAction SilentlyContinue)",
+      "PowerShell(Get-Content logs\\\\v2_launcher.log -ErrorAction SilentlyContinue; Get-Process -Id 11984 -ErrorAction SilentlyContinue | Select-Object Id, CPU; Get-Content models\\\\duck_ppo\\\\real -ErrorAction SilentlyContinue; \\(Get-Item models\\\\duck_ppo\\\\real\\\\real_latest.zip\\).LastWriteTime)",
+      "Bash(PYTHONPATH=. .venv/Scripts/python.exe -c ' *)",
+      "Bash(.venv/Scripts/python.exe -m py_compile DuckChess_Game/UI/main.py DuckChess_Game/Logic/turn_manager.py DuckChess_Game/SBThree/mcts.py DuckChess_Game/SBThree/search.py DuckChess_Game/SBThree/eval_search.py)"
     ]
   }
 }

@@ -62,7 +62,7 @@ def evaluate_with_replays(
             stage_name=f"real_eval_d{depth}",
             replay_every=1,  # Save every game
         )
-        env = PeterLocalEnv(config, env_index=1)
+        env = PeterLocalEnv(config, env_index=0)  # must be 0 — replay_chief_only skips env_index!=0
 
         wins = losses = draws = 0
         t0 = time.time()
@@ -158,8 +158,8 @@ def main():
     args = p.parse_args()
 
     games_per_depth = {
-        2: args.depth2_games or args.games,
-        3: args.depth3_games or args.games,
+        2: args.depth2_games if args.depth2_games is not None else args.games,
+        3: args.depth3_games if args.depth3_games is not None else args.games,
     }
 
     evaluate_with_replays(

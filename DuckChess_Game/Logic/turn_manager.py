@@ -169,7 +169,30 @@ class TurnManagerMixin:
 		"""AI logic using either the RL model or basic AI."""
 		if self.view_index != len(self.history) - 1 or getattr(self, 'game_over', False) or not getattr(self, 'waiting_for_ai', False): return
 		if pygame.time.get_ticks() - getattr(self, 'ai_wait_start', 0) < AI_MOVE_DELAY: return
-		
+
+		# IF WE HAVE AN MCTS SEARCHER (strongest: policy priors + distilled value)
+		if getattr(self, 'rl_searcher', None) is not None:
+			if self.phase == 'move_piece':
+				from DuckChess_Game.SBThree.mcts import headless_snapshot
+				piece_a, duck_a = self.rl_searcher.choose_turn(headless_snapshot(self))
+				self._pending_duck_action = duck_a
+				if piece_a is None:
+					self.game_over, self.winner = True, ('b' if self.turn == 'w' else 'w')
+					self.waiting_for_ai = False
+					return
+				start, end = self._decode_move(piece_a)
+				self.execute_move(start, end, animated=True)
+			else:  # move_duck — play the duck MCTS chose alongside the piece move
+				duck_a = getattr(self, '_pending_duck_action', None)
+				if duck_a is not None:
+					_, end = self._decode_move(duck_a)
+					self.place_duck(end, animated=True)
+				else:
+					target = self.ai.get_duck_move(self.board, getattr(self, 'duck_pos', (-1, -1)), getattr(self, 'prev_duck_pos', (-1, -1)))
+					if target: self.place_duck(target, animated=True)
+			self.ai_wait_start = pygame.time.get_ticks()
+			return
+
 		# IF WE HAVE AN RL MODEL LOADED
 		if hasattr(self, 'rl_model') and self.rl_model is not None:
 			obs = self._get_obs()
