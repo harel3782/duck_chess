@@ -378,7 +378,6 @@ def list_models():
 
 @app.post("/api/new-game")
 def new_game(req: NewGameReq):
-    print(f"DEBUG: new_game called with model={req.model!r} (type: {type(req.model).__name__})")
     player_color = "w" if req.color == "white" else "b"
 
     # Handle 2-player local game (no model)
@@ -414,19 +413,14 @@ def legal_moves(req: SelectReq):
     e = sess.engine
     with sess.lock:
         is_2player = sess.model_id is None
-        print(f"DEBUG legal_moves: is_2player={is_2player}, model_id={sess.model_id!r}, e.turn={e.turn}, req r={req.r} c={req.c}")
         if e.game_over or e.phase != "move_piece":
-            print(f"  -> game_over or wrong phase, returning empty")
             return {"moves": []}
         # In 2-player, allow any pieces; in vs-model, only player's pieces
         if not is_2player and e.turn != sess.player_color:
-            print(f"  -> vs-model and not your turn, returning empty")
             return {"moves": []}
         p = e.board[req.r][req.c]
         required_color = e.turn if is_2player else sess.player_color
-        print(f"  -> piece={p}, required_color={required_color}, piece.color={p.color if p else None}")
         if p is None or p.color != required_color:
-            print(f"  -> no piece or wrong color, returning empty")
             return {"moves": []}
         moves = [[r, c] for (r, c) in e.get_piece_legal_moves(req.r, req.c)]
     return {"moves": moves}
