@@ -508,5 +508,75 @@ def test_ai_session_has_model_id():
     assert session.model_id == "stage11"
 
 
+# ─────────────────────────────────────────────────────────────────────────
+# TEST: UNDO MOVE
+# ─────────────────────────────────────────────────────────────────────────
+
+def test_undo_move_invalid_game():
+    """Test undo on non-existent game returns 404."""
+    response = client.post("/api/undo-move", json={"game_id": "invalid"})
+    assert response.status_code == 404
+
+
+def test_undo_move_no_moves():
+    """Test undo with no moves to undo."""
+    resp = client.post("/api/new-game", json={"color": "white", "model": None})
+    game_id = resp.json()["gameId"]
+
+    response = client.post("/api/undo-move", json={"game_id": game_id})
+    assert response.status_code == 400
+    assert "No moves to undo" in response.json()["detail"]
+
+
+def test_undo_move_game_over():
+    """Test undo when game is over."""
+    resp = client.post("/api/new-game", json={"color": "white", "model": None})
+    game_id = resp.json()["gameId"]
+
+    # Mark game as over
+    SESSIONS[game_id].engine.game_over = True
+
+    response = client.post("/api/undo-move", json={"game_id": game_id})
+    assert response.status_code == 400
+    assert "game is over" in response.json()["detail"].lower()
+
+
+def test_undo_move_not_your_turn_vs_ai():
+    """Test undo fails when not player's turn in vs-AI mode."""
+    resp = client.post("/api/new-game", json={"color": "black", "model": "stage11"})
+    game_id = resp.json()["gameId"]
+    state = resp.json()
+
+    session = SESSIONS[game_id]
+    # If it's white's turn and we're black, undo should fail
+    if session.engine.turn != "b":
+        response = client.post("/api/undo-move", json={"game_id": game_id})
+        assert response.status_code == 400
+
+
+def test_undo_move_duck_phase():
+    """Test undo fails during duck placement phase."""
+    resp = client.post("/api/new-game", json={"color": "white", "model": None})
+    game_id = resp.json()["gameId"]
+
+    session = SESSIONS[game_id]
+    e = session.engine
+    # Make a complete move (piece + duck) to get a full turn in history
+    e.execute_move((6, 4), (5, 4), animated=False)  # e4
+    session.halfmoves.append({"color": "w", "text": "e4"})
+    e.place_duck((3, 3), animated=False)  # duck to d5
+    session.halfmoves.append({"color": "w", "text": "e4 🦆d5"})
+
+    # Now make another piece move (entering duck phase)
+    e.execute_move((1, 4), (2, 4), animated=False)  # e7-e5 (black)
+    session.halfmoves.append({"color": "b", "text": "e5"})
+    # Now in duck phase - try to undo
+    assert e.phase == "move_duck"
+
+    response = client.post("/api/undo-move", json={"game_id": game_id})
+    assert response.status_code == 400
+    assert "piece phase" in response.json()["detail"].lower()
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
