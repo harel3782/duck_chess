@@ -27,7 +27,17 @@
       "Bash(git add *)",
       "Bash(grep \"\\\\.zip$\")",
       "Bash(git diff *)",
-      "Bash(xargs -0 -I{} sh -c 'test -f \"{}\" && find \"{}\" -size +95M')"
+      "Bash(xargs -0 -I{} sh -c 'test -f \"{}\" && find \"{}\" -size +95M')",
+      "Bash(pip install *)",
+      "Bash(git checkout *)",
+      "Bash(find . -maxdepth 3 -type d -not -path '*/\\\\.*' -not -path '*/node_modules' -not -path '*/__pycache__' -not -path '*/.venv')",
+      "Bash(python -m uvicorn web_ui.server:app --host 127.0.0.1 --port 7890)",
+      "Bash(curl -s http://127.0.0.1:7890/api/models)",
+      "Bash(python -m json.tool)",
+      "Bash(pkill -f \"uvicorn web_ui\")",
+      "Bash(python -c \"from web_ui.server import app; print\\('✓ Server syntax OK'\\)\")",
+      "Bash(cat)",
+      "Read(//tmp/**)"
     ]
   }
 }
