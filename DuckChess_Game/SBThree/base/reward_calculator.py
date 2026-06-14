@@ -97,6 +97,11 @@ class ShapedReward(RewardCalculator):
 	  development_bonus — reward for moving minor pieces off home rank
 	  defense_weight    — reward for reducing check threats on own king
 	  blocking_scale    — reward for reducing opponent's duck-phase mobility
+	  duck_placement_bonus — reward for a DUCK placement that removes opponent
+	                         legal moves (incl. enemy-king escape squares).
+	                         Fires only on the duck step; capped by
+	                         duck_placement_cap so it never dominates win/loss.
+	  duck_placement_cap   — max opponent moves counted toward the duck bonus
 	  mobility_scale    — reward proportional to own mobility after duck placement
 	  step_penalty      — constant per-step cost (encourages shorter games)
 	  endgame_threshold — material advantage above which endgame logic activates
@@ -112,6 +117,8 @@ class ShapedReward(RewardCalculator):
 		development_bonus: float = 0.0,
 		defense_weight: float = 0.0,
 		blocking_scale: float = 0.0,
+		duck_placement_bonus: float = 0.0,
+		duck_placement_cap: int = 5,
 		mobility_scale: float = 0.0,
 		step_penalty: float = 0.0,
 		endgame_threshold: float = float('inf'),
@@ -126,6 +133,8 @@ class ShapedReward(RewardCalculator):
 		self.development_bonus = development_bonus
 		self.defense_weight = defense_weight
 		self.blocking_scale = blocking_scale
+		self.duck_placement_bonus = duck_placement_bonus
+		self.duck_placement_cap = duck_placement_cap
 		self.mobility_scale = mobility_scale
 		self.step_penalty = step_penalty
 		self.endgame_threshold = endgame_threshold
@@ -228,6 +237,10 @@ class ShapedReward(RewardCalculator):
 			post['opp_king'] = self._find_king(engine, opp_color)
 			if self.development_bonus:
 				post['development'] = self._development_score(engine, learning_color)
+			# Opponent mobility AFTER the duck — paired with pre['opp_mob']
+			# (captured in the move_duck pre-state) to score the duck placement.
+			if self.duck_placement_bonus:
+				post['opp_mob'] = self._calculate_mobility(engine, opp_color)
 
 		# Piece was just moved (phase transitioned to move_duck)
 		elif phase == 'move_duck':
@@ -294,6 +307,15 @@ class ShapedReward(RewardCalculator):
 
 			if self.mobility_scale:
 				reward += post.get('mobility_learning', 0) * self.mobility_scale
+
+			# Duck-placement bonus: reward removing opponent legal moves (incl.
+			# enemy-king escape squares — king moves are part of mobility). Only
+			# reachable here, i.e. the step where the duck was just placed.
+			if self.duck_placement_bonus:
+				removed = pre.get('opp_mob', 0) - post.get('opp_mob', 0)
+				if removed > 0:
+					removed = min(removed, self.duck_placement_cap)
+					reward += removed * self.duck_placement_bonus
 
 			if self.king_push_bonus and self.endgame_threshold < float('inf'):
 				my_adv = post.get('material', 0) * sign
