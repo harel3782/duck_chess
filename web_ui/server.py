@@ -192,18 +192,7 @@ def material_diff(engine):
 
 
 def history_rows(halfmoves):
-    rows, cur = [], None
-    for hm in halfmoves:
-        if hm["color"] == "w":
-            cur = {"n": len(rows) + 1, "w": hm["text"], "b": ""}
-            rows.append(cur)
-        else:
-            if cur is None:
-                rows.append({"n": len(rows) + 1, "w": "…", "b": hm["text"]})
-            else:
-                cur["b"] = hm["text"]
-                cur = None
-    return rows
+    return halfmoves
 
 
 def valid_duck_squares(engine):
