@@ -53,6 +53,9 @@ class EnvConfig:
     replay_dir: str = "saved_replays"
     replay_every: int = 1000   # episodes between saves; 0 = never
     replay_chief_only: bool = True  # only env_index==0 saves replays
+    # Soft move limit: end the episode as a DRAW after this many half-moves
+    # (agent + opponent). 0 = no limit, so existing stages are unaffected.
+    max_episode_plies: int = 0
 
 
 # ------------------------------------------------------------------ #
@@ -92,6 +95,7 @@ class BaseDuckChessEnv(gym.Env):
         self.learning_color: str = 'w'
         self.opponent_color: str = 'b'
         self.episode_counter: int = 0
+        self._ply_count: int = 0   # half-moves this episode (for max_episode_plies)
         self.current_episode_actions: List[int] = []
         # Parallel to current_episode_actions: PV dict for opponent half-moves
         # (only populated when the opponent exposes `last_pv`, e.g. PeterLocalOpponent),
@@ -110,6 +114,7 @@ class BaseDuckChessEnv(gym.Env):
         self.current_episode_actions = []
         self.current_episode_opponent_pv = []
         self.episode_counter += 1
+        self._ply_count = 0
 
         if self._config.randomize_color:
             self.learning_color = np.random.choice(['w', 'b'])
@@ -130,6 +135,7 @@ class BaseDuckChessEnv(gym.Env):
 
         pre = self._reward.capture_pre_state(self.engine, action, self.learning_color)
         self._apply_action(action)
+        self._ply_count += 1
         self.current_episode_actions.append(int(action))
         self.current_episode_opponent_pv.append(None)  # agent move, no opponent PV
         post = self._reward.capture_post_state(self.engine, self.learning_color)
@@ -141,6 +147,13 @@ class BaseDuckChessEnv(gym.Env):
         if not terminated and self.engine.phase == 'move_piece':
             self._play_opponent_turn()
             terminated = getattr(self.engine, 'game_over', False)
+
+        # Soft move limit: end as a DRAW so aimless endgame shuffling is cut off.
+        limit = self._config.max_episode_plies
+        if not terminated and limit and self._ply_count >= limit:
+            self.engine.game_over = True
+            self.engine.winner = 'draw'
+            terminated = True
 
         reward = self._reward.calculate(
             pre, post, self.engine, self.learning_color, terminated
@@ -198,6 +211,7 @@ class BaseDuckChessEnv(gym.Env):
             # but get_action on the NEXT call will reset it). Only present on Peter.
             opp_pv = getattr(self._opponent, 'last_pv', None)
             self._apply_action(opp_action)
+            self._ply_count += 1
             self.current_episode_actions.append(int(opp_action))
             self.current_episode_opponent_pv.append(opp_pv)
 
