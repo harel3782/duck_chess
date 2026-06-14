@@ -20,10 +20,13 @@ Notes
 """
 from __future__ import annotations
 
+import json
 import sys
 import threading
 import uuid
+from datetime import datetime
 from pathlib import Path
+from typing import Optional
 
 import numpy as np
 from fastapi import FastAPI, HTTPException
@@ -149,18 +152,8 @@ def material_diff(engine):
 
 
 def history_rows(halfmoves):
-    rows, cur = [], None
-    for hm in halfmoves:
-        if hm["color"] == "w":
-            cur = {"n": len(rows) + 1, "w": hm["text"], "b": ""}
-            rows.append(cur)
-        else:
-            if cur is None:
-                rows.append({"n": len(rows) + 1, "w": "…", "b": hm["text"]})
-            else:
-                cur["b"] = hm["text"]
-                cur = None
-    return rows
+    # Return halfmoves as-is; frontend does the pairing
+    return halfmoves
 
 
 def valid_duck_squares(engine):
@@ -171,6 +164,94 @@ def valid_duck_squares(engine):
         _, d = engine._decode_move(int(a))
         out.append([d[0], d[1]])
     return out
+
+
+def _enhance_history_with_notation(engine, halfmoves):
+    """Add human-readable notation to move history."""
+    piece_symbols = {
+        'P': '♟', 'N': '♞', 'B': '♝', 'R': '♜', 'Q': '♛', 'K': '♚',
+    }
+
+    enhanced = []
+    for hm in halfmoves:
+        notation = hm["text"]  # default: use raw text
+
+        # Try to add piece symbols for piece moves
+        if len(notation) >= 4:
+            from_file = notation[0]
+            to_file = notation[2]
+            # Check if it's a capture (indicated by 'x' or followed by emoji)
+            is_capture = 'x' in notation or len(notation) > 4
+
+            # Try to get the piece at the from square (from board state)
+            try:
+                from_idx = ord(from_file) - ord('a')
+                from_rank = 8 - int(notation[1])
+                # We don't have board state here, so just format nicely
+                notation = f"{from_file}{notation[1]} → {to_file}{notation[3]}"
+                if is_capture:
+                    notation = notation.replace(" → ", " × ")
+            except:
+                pass
+
+        enhanced.append({
+            **hm,
+            "notation": notation,
+        })
+    return enhanced
+
+
+def _generate_board_snapshots(sess):
+    """
+    Replay the session's game from the start and capture board state after each move.
+    Returns list of board grids: [initial_state, after_move_1, after_move_2, ...]
+    """
+    # Create a fresh engine at the starting position
+    test_engine = _HeadlessEngine()
+    snapshots = [board_to_grid(test_engine)]  # snapshot 0: initial empty board
+
+    # Replay each move pair (piece + duck) from the halfmoves history
+    move_index = 0
+    while move_index < len(sess.halfmoves):
+        hm = sess.halfmoves[move_index]
+
+        # Extract piece move coordinates (format: "a1b2 ...")
+        move_str = hm["text"]
+        if len(move_str) < 4:
+            move_index += 1
+            continue
+
+        try:
+            # Parse algebraic notation: "e2e4" style or with duck emoji
+            frm_file = ord(move_str[0]) - ord('a')
+            frm_rank = 8 - int(move_str[1])
+            to_file = ord(move_str[2]) - ord('a')
+            to_rank = 8 - int(move_str[3])
+
+            # Execute piece move
+            test_engine.execute_move((frm_rank, frm_file), (to_rank, to_file), animated=False)
+            snapshots.append(board_to_grid(test_engine))  # board after piece move
+
+            # Find duck position in the move text (marked by duck emoji 🦆 or @)
+            if "🦆" in move_str or "@" in move_str:
+                # Duck move is present; extract coordinates
+                duck_coords = None
+                for i, c in enumerate(move_str):
+                    if c in "abcdefgh" and i + 1 < len(move_str) and move_str[i + 1] in "12345678":
+                        duck_file = ord(c) - ord('a')
+                        duck_rank = 8 - int(move_str[i + 1])
+                        duck_coords = (duck_rank, duck_file)
+                        break
+
+                if duck_coords:
+                    test_engine.place_duck(duck_coords, animated=False)
+                    snapshots.append(board_to_grid(test_engine))  # board after duck move
+        except (ValueError, IndexError):
+            pass  # Skip malformed moves
+
+        move_index += 1
+
+    return snapshots
 
 
 def serialize(sess, *, highlight=None, ai_move=None, player_move=None, message=None):
@@ -204,6 +285,9 @@ def serialize(sess, *, highlight=None, ai_move=None, player_move=None, message=N
 # ---------------------------------------------------------------------------
 def play_model_turn(sess):
     """Let the model play its full turn (piece + duck). Returns last aiMove dict."""
+    # For 2-player games, there's no model
+    if sess.model_id is None:
+        return None
     e = sess.engine
     model, _ = get_model(sess.model_id)
     last = None
@@ -253,8 +337,8 @@ app = FastAPI(title="Duck Chess Web")
 
 
 class NewGameReq(BaseModel):
-    model: str = "stage12"
-    color: str = "white"          # 'white' | 'black'
+    model: Optional[str] = "stage12"  # None for 2-player local games
+    color: str = "white"              # 'white' | 'black'
 
 
 class SelectReq(BaseModel):
@@ -274,6 +358,16 @@ class PlaceDuckReq(BaseModel):
     duck: list                    # [row, col]
 
 
+class SaveGameReq(BaseModel):
+    game_id: str
+    username: str
+    label: str                     # user-provided name for the game
+
+
+class UndoMoveReq(BaseModel):
+    game_id: str
+
+
 def _get_session(game_id: str) -> Session:
     sess = SESSIONS.get(game_id)
     if sess is None:
@@ -289,6 +383,18 @@ def list_models():
 @app.post("/api/new-game")
 def new_game(req: NewGameReq):
     player_color = "w" if req.color == "white" else "b"
+
+    # Handle 2-player local game (no model)
+    if req.model is None:
+        engine = _HeadlessEngine()
+        sess = Session(engine, player_color, None, "2 Players")
+        gid = uuid.uuid4().hex[:12]
+        SESSIONS[gid] = sess
+        state = serialize(sess)
+        state["gameId"] = gid
+        return state
+
+    # vs-model game
     _, choice = get_model(req.model)          # validates / preloads the model
     engine = _HeadlessEngine()
     sess = Session(engine, player_color, choice["id"], choice["label"])
@@ -310,10 +416,15 @@ def legal_moves(req: SelectReq):
     sess = _get_session(req.game_id)
     e = sess.engine
     with sess.lock:
-        if e.game_over or e.turn != sess.player_color or e.phase != "move_piece":
+        is_2player = sess.model_id is None
+        if e.game_over or e.phase != "move_piece":
+            return {"moves": []}
+        # In 2-player, allow any pieces; in vs-model, only player's pieces
+        if not is_2player and e.turn != sess.player_color:
             return {"moves": []}
         p = e.board[req.r][req.c]
-        if p is None or p.color != sess.player_color:
+        required_color = e.turn if is_2player else sess.player_color
+        if p is None or p.color != required_color:
             return {"moves": []}
         moves = [[r, c] for (r, c) in e.get_piece_legal_moves(req.r, req.c)]
     return {"moves": moves}
@@ -326,22 +437,29 @@ def move_piece(req: MovePieceReq):
     with sess.lock:
         if e.game_over:
             raise HTTPException(400, "Game is over.")
-        if e.turn != sess.player_color or e.phase != "move_piece":
+        # For 2-player games, allow moves from both colors
+        is_2player = sess.model_id is None
+        if not is_2player and e.turn != sess.player_color:
+            raise HTTPException(400, "Not your turn.")
+        if e.phase != "move_piece":
             raise HTTPException(400, "Not your move-piece phase.")
         frm = (int(req.frm[0]), int(req.frm[1]))
         to = (int(req.to[0]), int(req.to[1]))
         p = e.board[frm[0]][frm[1]]
-        if p is None or p.color != sess.player_color:
+        # In 2-player, allow piece of whose turn it is; in vs-model, only player's color
+        required_color = e.turn if is_2player else sess.player_color
+        if p is None or p.color != required_color:
             raise HTTPException(400, "No piece of yours on the start square.")
         legal = e.get_piece_legal_moves(frm[0], frm[1])
         if to not in legal:
             raise HTTPException(400, "Illegal move for that piece.")
 
+        moving_player = e.turn  # Save whose turn it is before we execute
         e.execute_move(frm, to, animated=False)
         sess.pending = (frm, to)
 
         if getattr(e, "game_over", False):     # king captured -> instant win
-            sess.halfmoves.append({"color": sess.player_color, "text": f"{sq(frm)}{sq(to)}#"})
+            sess.halfmoves.append({"color": moving_player, "text": f"{sq(frm)}{sq(to)}#"})
             sess.pending = None
             state = serialize(sess, player_move={"from": list(frm), "to": list(to), "duck": None},
                               highlight=[list(frm), list(to)])
@@ -361,24 +479,29 @@ def place_duck(req: PlaceDuckReq):
     with sess.lock:
         if e.game_over:
             raise HTTPException(400, "Game is over.")
-        if e.turn != sess.player_color or e.phase != "move_duck":
+        # For 2-player games, allow moves from both colors
+        is_2player = sess.model_id is None
+        if not is_2player and e.turn != sess.player_color:
+            raise HTTPException(400, "Not your turn.")
+        if e.phase != "move_duck":
             raise HTTPException(400, "Not your move-duck phase.")
         duck = (int(req.duck[0]), int(req.duck[1]))
         valid = {tuple(x) for x in valid_duck_squares(e)}
         if duck not in valid:
             raise HTTPException(400, "Illegal duck square.")
 
+        moving_player = e.turn  # Save whose turn it is before we execute
         e.place_duck(duck, animated=False)
 
         frm, to = sess.pending if sess.pending else ((0, 0), (0, 0))
         sess.pending = None
         sess.halfmoves.append(
-            {"color": sess.player_color, "text": f"{sq(frm)}{sq(to)} {DUCK}{sq(duck)}"}
+            {"color": moving_player, "text": f"{sq(frm)}{sq(to)} {DUCK}{sq(duck)}"}
         )
         player_move = {"from": list(frm), "to": list(to), "duck": list(duck)}
 
         ai_move = None
-        if not getattr(e, "game_over", False):
+        if not getattr(e, "game_over", False) and sess.model_id is not None:
             ai_move = play_model_turn(sess)
 
         hi = []
@@ -399,6 +522,181 @@ def resign(req: SelectReq):
         e.winner = sess.model_color
         state = serialize(sess, message="resign")
     return state
+
+
+@app.post("/api/undo-move")
+def undo_move(req: UndoMoveReq):
+    """Undo the last move (one full turn = piece + duck). Only in 2-player or when it's player's turn."""
+    sess = _get_session(req.game_id)
+    e = sess.engine
+    with sess.lock:
+        if e.game_over:
+            raise HTTPException(400, "Cannot undo: game is over.")
+        # Can only undo on the player's turn (not while opponent is thinking)
+        if sess.model_id is not None and e.turn != sess.player_color:
+            raise HTTPException(400, "Cannot undo on opponent's turn.")
+        # Need at least 2 halfmoves to undo one full turn
+        if len(sess.halfmoves) < 2:
+            raise HTTPException(400, "No moves to undo.")
+        # Not possible to undo during duck placement phase (must wait for piece phase)
+        if e.phase != "move_piece":
+            raise HTTPException(400, "Can only undo at the start of a turn (piece phase).")
+
+        # Roll back: remove last 2 halfmoves and reset engine
+        sess.halfmoves = sess.halfmoves[:-2]
+
+        # Recreate engine from initial state and replay moves
+        new_engine = _HeadlessEngine()
+        for hm in sess.halfmoves:
+            move_str = hm["text"]
+            if len(move_str) < 4:
+                continue
+            try:
+                frm_file = ord(move_str[0]) - ord('a')
+                frm_rank = 8 - int(move_str[1])
+                to_file = ord(move_str[2]) - ord('a')
+                to_rank = 8 - int(move_str[3])
+                new_engine.execute_move((frm_rank, frm_file), (to_rank, to_file), animated=False)
+
+                # Find and place duck if present
+                if "🦆" in move_str or "@" in move_str or move_str.count(" ") > 0:
+                    for i in range(len(move_str)):
+                        if i < len(move_str) - 1 and move_str[i] in "abcdefgh" and move_str[i + 1] in "12345678":
+                            if i < 5:  # skip if it's the piece move part
+                                continue
+                            duck_file = ord(move_str[i]) - ord('a')
+                            duck_rank = 8 - int(move_str[i + 1])
+                            new_engine.place_duck((duck_rank, duck_file), animated=False)
+                            break
+            except (ValueError, IndexError):
+                pass
+
+        sess.engine = new_engine
+        state = serialize(sess)
+    return state
+
+
+# ---------------------------------------------------------------------------
+# Save & Load Games
+# ---------------------------------------------------------------------------
+
+@app.post("/api/save-game")
+def save_game(req: SaveGameReq):
+    """Save a game to disk as JSON. Returns filename."""
+    sess = _get_session(req.game_id)
+
+    # Create save directory if needed
+    save_dir = ROOT / "saved_replays"
+    save_dir.mkdir(exist_ok=True)
+
+    timestamp = datetime.now().isoformat().replace(":", "-").split(".")[0]
+    filename = f"{req.username}_{timestamp}.json"
+    filepath = save_dir / filename
+
+    # Serialize full game state
+    e = sess.engine
+    with sess.lock:
+        # Generate board snapshots: one for each move in history
+        snapshots = _generate_board_snapshots(sess)
+        # Enhance history with notation
+        history_with_notation = _enhance_history_with_notation(e, sess.halfmoves)
+
+        game_data = {
+            "label": req.label,
+            "username": req.username,
+            "timestamp": timestamp,
+            "model_label": sess.model_label,
+            "player_color": sess.player_color,
+            "model_color": sess.model_color,
+            "board": board_to_grid(e),
+            "duck": list(e.duck_pos) if tuple(e.duck_pos) != (-1, -1) else None,
+            "history": history_with_notation,
+            "board_snapshots": snapshots,
+            "game_over": getattr(e, "game_over", False),
+            "winner": getattr(e, "winner", None),
+        }
+
+    with open(filepath, "w") as f:
+        json.dump(game_data, f, indent=2)
+
+    return {"filename": filename, "message": "Game saved successfully"}
+
+
+@app.get("/api/saved-games")
+def list_saved_games(username: str):
+    """List saved games for a user."""
+    save_dir = ROOT / "saved_replays"
+    if not save_dir.exists():
+        return {"games": []}
+
+    games = []
+    for f in sorted(save_dir.glob(f"{username}_*.json"), reverse=True):
+        try:
+            with open(f) as fp:
+                data = json.load(fp)
+            games.append({
+                "filename": f.name,
+                "label": data.get("label", "Unnamed"),
+                "timestamp": data.get("timestamp", ""),
+                "model_label": data.get("model_label", ""),
+                "result": "Won" if (data.get("winner") == data.get("player_color")) else
+                          "Lost" if data.get("game_over") else "In Progress",
+            })
+        except (json.JSONDecodeError, KeyError):
+            pass  # Skip corrupt files
+
+    return {"games": games}
+
+
+@app.get("/api/load-game/{filename}")
+def load_game(filename: str):
+    """Load a saved game. Reconstructs board snapshots if missing."""
+    save_dir = ROOT / "saved_replays"
+    filepath = save_dir / filename
+
+    if not filepath.exists():
+        raise HTTPException(404, "Game file not found")
+
+    try:
+        with open(filepath) as f:
+            game_data = json.load(f)
+
+        # Reconstruct snapshots if missing (for games saved before this feature)
+        if "board_snapshots" not in game_data or not game_data["board_snapshots"]:
+            test_engine = _HeadlessEngine()
+            snapshots = [board_to_grid(test_engine)]
+
+            # Replay moves from history
+            for hm in game_data.get("history", []):
+                move_str = hm.get("text", "")
+                if len(move_str) < 4:
+                    continue
+
+                try:
+                    frm_file = ord(move_str[0]) - ord('a')
+                    frm_rank = 8 - int(move_str[1])
+                    to_file = ord(move_str[2]) - ord('a')
+                    to_rank = 8 - int(move_str[3])
+
+                    test_engine.execute_move((frm_rank, frm_file), (to_rank, to_file), animated=False)
+                    snapshots.append(board_to_grid(test_engine))
+
+                    if "🦆" in move_str or "@" in move_str:
+                        for i, c in enumerate(move_str):
+                            if c in "abcdefgh" and i + 1 < len(move_str) and move_str[i + 1] in "12345678":
+                                duck_file = ord(c) - ord('a')
+                                duck_rank = 8 - int(move_str[i + 1])
+                                test_engine.place_duck((duck_rank, duck_file), animated=False)
+                                snapshots.append(board_to_grid(test_engine))
+                                break
+                except (ValueError, IndexError):
+                    pass
+
+            game_data["board_snapshots"] = snapshots
+
+        return game_data
+    except json.JSONDecodeError:
+        raise HTTPException(400, "Corrupt game file")
 
 
 # Static files LAST so /api/* routes win.  html=True -> "/" serves index.html.
