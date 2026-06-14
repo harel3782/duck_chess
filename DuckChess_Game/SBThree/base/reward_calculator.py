@@ -142,6 +142,7 @@ class ShapedReward(RewardCalculator):
 		self.win = win
 		self.loss = loss
 		self.draw = draw
+		self.last_duck_bonus = 0.0   # diagnostic: duck bonus from the most recent step
 
 	# ---- helpers -------------------------------------------------- #
 
@@ -252,6 +253,7 @@ class ShapedReward(RewardCalculator):
 
 	def calculate(self, pre, post, engine, learning_color: str, terminated: bool) -> float:
 		reward = 0.0
+		self.last_duck_bonus = 0.0
 		opp_color = 'b' if learning_color == 'w' else 'w'
 		sign = 1 if learning_color == 'w' else -1
 
@@ -315,7 +317,8 @@ class ShapedReward(RewardCalculator):
 				removed = pre.get('opp_mob', 0) - post.get('opp_mob', 0)
 				if removed > 0:
 					removed = min(removed, self.duck_placement_cap)
-					reward += removed * self.duck_placement_bonus
+					self.last_duck_bonus = removed * self.duck_placement_bonus
+					reward += self.last_duck_bonus
 
 			if self.king_push_bonus and self.endgame_threshold < float('inf'):
 				my_adv = post.get('material', 0) * sign
