@@ -23,6 +23,7 @@ from DuckChess_Game.SBThree.base.opponent_strategy import (
 from DuckChess_Game.SBThree.base.reward_calculator import ShapedReward, TerminalReward
 from DuckChess_Game.SBThree.duck_env_stage13_fast import make_stage13_config
 from DuckChess_Game.SBThree.duck_env_stage14_recovery import make_stage14_config
+from DuckChess_Game.SBThree.duck_env_antiexploit_v2 import make_antiexploit_v2_config
 from DuckChess_Game.SBThree.peter_local import (
     make_peter_easy_config,
     make_peter_medium_config,
@@ -330,6 +331,8 @@ REGISTRY: dict = {
     "stage12": make_stage12_config,
     "stage13": make_stage13_config,
     "stage14": make_stage14_config,
+    # Anti-exploit corrective run (opponent pool + opening/duck/endgame fixes)
+    "antiexploit_v2": make_antiexploit_v2_config,
     # Local Peter engine stages
     "peter_easy":   make_peter_easy_config,
     "peter_medium": make_peter_medium_config,
