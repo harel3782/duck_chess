@@ -317,6 +317,10 @@ class PlaceDuckReq(BaseModel):
     duck: list                    # [row, col]
 
 
+class UndoMoveReq(BaseModel):
+    game_id: str
+
+
 def _get_session(game_id: str) -> Session:
     sess = SESSIONS.get(game_id)
     if sess is None:
@@ -442,6 +446,49 @@ def resign(req: SelectReq):
         e.game_over = True
         e.winner = sess.model_color
         state = serialize(sess, message="resign")
+    return state
+
+
+@app.post("/api/undo-move")
+def undo_move(req: UndoMoveReq):
+    """Undo the last move (one full turn = piece + duck). Only in 2-player or when it's player's turn."""
+    sess = _get_session(req.game_id)
+    e = sess.engine
+    with sess.lock:
+        if e.game_over:
+            raise HTTPException(400, "Cannot undo: game is over.")
+        if sess.model_id is not None and e.turn != sess.player_color:
+            raise HTTPException(400, "Cannot undo on opponent's turn.")
+        if len(sess.halfmoves) < 2:
+            raise HTTPException(400, "No moves to undo.")
+        if e.phase != "move_piece":
+            raise HTTPException(400, "Can only undo at the start of a turn (piece phase).")
+
+        sess.halfmoves = sess.halfmoves[:-2]
+        new_engine = _HeadlessEngine()
+        for hm in sess.halfmoves:
+            move_str = hm["text"]
+            if len(move_str) < 4:
+                continue
+            try:
+                frm_file = ord(move_str[0]) - ord('a')
+                frm_rank = 8 - int(move_str[1])
+                to_file = ord(move_str[2]) - ord('a')
+                to_rank = 8 - int(move_str[3])
+                new_engine.execute_move((frm_rank, frm_file), (to_rank, to_file), animated=False)
+                if "🦆" in move_str or "@" in move_str or move_str.count(" ") > 0:
+                    for i in range(len(move_str)):
+                        if i < len(move_str) - 1 and move_str[i] in "abcdefgh" and move_str[i + 1] in "12345678":
+                            if i < 5:
+                                continue
+                            duck_file = ord(move_str[i]) - ord('a')
+                            duck_rank = 8 - int(move_str[i + 1])
+                            new_engine.place_duck((duck_rank, duck_file), animated=False)
+                            break
+            except (ValueError, IndexError):
+                pass
+        sess.engine = new_engine
+        state = serialize(sess)
     return state
 
 
