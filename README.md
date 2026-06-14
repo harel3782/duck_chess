@@ -7,9 +7,6 @@ agent trained with MaskablePPO — built as a Computer Science final project.
 > also move a neutral **duck**. The duck can't be captured, blocks whatever square it stands on,
 > and never leaves the board. It turns a deterministic game into a constant tactical puzzle.
 
-![Main menu](menu.png)
-![In-game](game_play.png)
-
 ---
 
 ## Table of Contents
