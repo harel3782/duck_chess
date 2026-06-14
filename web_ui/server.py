@@ -20,6 +20,7 @@ Notes
 """
 from __future__ import annotations
 
+import re
 import sys
 import threading
 import uuid
@@ -54,20 +55,61 @@ def sq(rc) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Model registry  (display label -> .zip path).  Only existing files are kept.
+# Model discovery (auto-scan models/duck_ppo for all .zip files)
 # ---------------------------------------------------------------------------
-_CANDIDATE_MODELS = [
-    ("stage12",     "Duck PPO — Stage 12 (final)",   MODELS_DIR / "stage 12" / "stage12_final_v52.zip"),
-    ("stage11",     "Duck PPO — Stage 11",           MODELS_DIR / "stage 11" / "stage11_sparse_v8.zip"),
-    ("stage10",     "Duck PPO — Stage 10 (league)",  MODELS_DIR / "stage 10" / "stage10_league_latest.zip"),
-    ("stage10v416", "Duck PPO — Stage 10 v416",      MODELS_DIR / "stage 10" / "stage10_league_v416.zip"),
-    ("stage9",      "Duck PPO — Stage 9",            MODELS_DIR / "stage 9"  / "stage9_selfplay_latest.zip"),
+GROUP_ORDER = [
+    "v2",
+    "stage 14", "stage 13", "stage 12", "stage 11", "stage 10",
+    "stage 9",  "stage 8",  "stage 7",  "stage 6",  "stage 5",
+    "stage 4",  "stage 3",  "stage 2",  "stage 1",
+    "strong", "real", "peter_local", "antiexploit",
 ]
-MODEL_CHOICES = [
-    {"id": mid, "label": label, "path": path}
-    for mid, label, path in _CANDIDATE_MODELS
-    if path.exists()
-]
+
+
+def _file_sort_key(stem: str):
+    """'final'/'latest' first, then descending version number, then alpha."""
+    if stem.endswith("_final") or stem.endswith("_latest") or stem in ("final", "latest"):
+        return (0, 0, "")
+    m = re.search(r"v(\d+)$", stem)
+    if m:
+        return (1, -int(m.group(1)), "")
+    return (2, 0, stem)
+
+
+def discover_models() -> list[dict]:
+    """Recursively scan models/duck_ppo/ for all .zip files."""
+    entries = []
+    for zip_path in sorted(MODELS_DIR.rglob("*.zip")):
+        if not zip_path.is_file():
+            continue
+        group = zip_path.parent.name if zip_path.parent != MODELS_DIR else ""
+        stem = zip_path.stem
+        slug = ((group + "_" + stem) if group else stem).replace(" ", "_")
+        label = ((group + " — " + stem) if group else stem)
+        entries.append({"id": slug, "label": label, "path": zip_path, "group": group or "(root)"})
+
+    def sort_key(e):
+        g = e["group"]
+        try:
+            gi = GROUP_ORDER.index(g)
+        except ValueError:
+            gi = len(GROUP_ORDER)
+        return (gi, _file_sort_key(Path(e["path"]).stem))
+
+    entries.sort(key=sort_key)
+    return entries
+
+
+_discovered: list[dict] | None = None
+
+
+def get_model_choices(refresh: bool = False) -> list[dict]:
+    """Get cached model list, optionally refresh it."""
+    global _discovered
+    if _discovered is None or refresh:
+        _discovered = discover_models()
+    return _discovered
+
 
 _model_cache: dict[str, MaskablePPO] = {}
 _model_lock = threading.Lock()
@@ -75,11 +117,12 @@ _model_lock = threading.Lock()
 
 def get_model(model_id: str):
     """Return (model, choice_dict), loading + caching lazily. Falls back to first."""
-    choice = next((m for m in MODEL_CHOICES if m["id"] == model_id), None)
+    choices = get_model_choices()
+    choice = next((m for m in choices if m["id"] == model_id), None)
     if choice is None:
-        if not MODEL_CHOICES:
+        if not choices:
             raise HTTPException(500, "No PPO model files found under models/duck_ppo/.")
-        choice = MODEL_CHOICES[0]
+        choice = choices[0]
     with _model_lock:
         if choice["id"] not in _model_cache:
             _model_cache[choice["id"]] = MaskablePPO.load(str(choice["path"]), device="cpu")
@@ -282,8 +325,9 @@ def _get_session(game_id: str) -> Session:
 
 
 @app.get("/api/models")
-def list_models():
-    return {"models": [{"id": m["id"], "label": m["label"]} for m in MODEL_CHOICES]}
+def list_models(refresh: bool = False):
+    choices = get_model_choices(refresh=refresh)
+    return {"models": [{"id": m["id"], "label": m["label"], "group": m["group"]} for m in choices]}
 
 
 @app.post("/api/new-game")
