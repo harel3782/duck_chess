@@ -31,24 +31,32 @@ class DuckChess(GameLogicMixin, RenderingMixin, InputHandlerMixin, AssetManagerM
 		self.rl_model = None
 		self.rl_searcher = None       # DuckMCTS wrapper (set below if USE_MCTS)
 		self._pending_duck_action = None
-		# The in-game AI uses the v2 model (trained from scratch vs an opponent pool
-		# with random starts + sparse reward — train_peter_v2.py), driven by
-		# AlphaZero-style PUCT MCTS (mcts.py) over the distilled value head
-		# (v2_value.zip). That combination beats Peter depth-2 100% WITHOUT the old
-		# king-rush exploit (raw policy alone is ~90%). It still loses to Peter
-		# depth-3; cracking d3 needs Expert Iteration (PLAN_V2.md Step 7b).
-		# To use the raw policy instead of MCTS, set USE_MCTS = False; to fall back
-		# to the basic alpha-beta AI (ai.py), set model_path = None.
-		model_path = "models/duck_ppo/v2/v2_value.zip"
+		# In-game AI = a strong RL policy driven by AlphaZero-style PUCT MCTS
+		# (mcts.py). MCTS over the policy + value head plays well above human level
+		# (it beats/holds the Peter engine at depth 2 — far stronger than a human).
+		# Model preference: v2_final then v2_value — both beat Peter d2 ~75% WITH MCTS
+		# and resist a king-rush (a human attacking the king is the same threat).
+		# Measured (sims=200): v2_final vs d1 1/0/3 (never loses), vs d2 3/1/0.
+		# NOTE: the exploit-free exit_best plays nicer but is WEAKER (draws d2, loses
+		# to d1), so it is deliberately NOT used as the opponent.
+		# DIFFICULTY sets MCTS sims: 'hard' crushes, 'easy' is beatable. USE_MCTS=False
+		# uses the raw policy; model_path=None falls back to alpha-beta (ai.py).
 		USE_MCTS = True
+		DIFFICULTY = "hard"                       # "easy" | "medium" | "hard"
+		_MCTS_SIMS = {"easy": 30, "medium": 100, "hard": 300}
+		model_path = next((p for p in (
+			"models/duck_ppo/v2/v2_final.zip",
+			"models/duck_ppo/v2/v2_value.zip",
+		) if os.path.exists(p)), None)
 		if model_path and os.path.exists(model_path):
 			print(f"[+] Loading RL Model for AI moves: {model_path}")
 			self.rl_model = MaskablePPO.load(model_path, device="cpu")
 			if USE_MCTS:
 				try:
 					from DuckChess_Game.SBThree.mcts import DuckMCTS
-					self.rl_searcher = DuckMCTS(self.rl_model, sims=200, c_puct=1.5)
-					print("[+] MCTS search enabled for AI moves (sims=200)")
+					_sims = _MCTS_SIMS.get(DIFFICULTY, 300)
+					self.rl_searcher = DuckMCTS(self.rl_model, sims=_sims, c_puct=1.5)
+					print(f"[+] MCTS enabled (difficulty={DIFFICULTY}, sims={_sims})")
 				except Exception as exc:
 					print(f"[!] MCTS unavailable ({exc!r}); using raw policy")
 					self.rl_searcher = None
