@@ -41,8 +41,8 @@ models/duck_ppo/**/*.zip
 # Training run artifacts (regenerable)
 logs/
 tensorboard_logs/
-models/duck_ppo/exit/data/
-models/duck_ppo/exit/exit_progress.csv
+models/duck_ppo/**/data/
+models/duck_ppo/**/exit_progress.csv
 
 
 #	Weights & Biases local files
