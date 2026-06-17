@@ -30,6 +30,20 @@ Thumbs.db
 #	Project logs and trained models
 tensorboard_logs.zip
 
+# Trained models: track only the key deliverables; ignore every other checkpoint
+models/duck_ppo/**/*.zip
+!models/duck_ppo/v2/v2_value.zip
+!models/duck_ppo/v2/v2_final.zip
+!models/duck_ppo/strong/strong_final.zip
+!models/duck_ppo/antiexploit_v2/ax_final.zip
+!models/duck_ppo/exit/exit_best.zip
+
+# Training run artifacts (regenerable)
+logs/
+tensorboard_logs/
+models/duck_ppo/exit/data/
+models/duck_ppo/exit/exit_progress.csv
+
 
 #	Weights & Biases local files
 wandb/
