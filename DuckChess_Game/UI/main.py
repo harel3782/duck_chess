@@ -34,19 +34,20 @@ class DuckChess(GameLogicMixin, RenderingMixin, InputHandlerMixin, AssetManagerM
 		# In-game AI = a strong RL policy driven by AlphaZero-style PUCT MCTS
 		# (mcts.py). MCTS over the policy + value head plays well above human level
 		# (it beats/holds the Peter engine at depth 2 — far stronger than a human).
-		# Model preference: v2_final then v2_value — both beat Peter d2 ~75% WITH MCTS
-		# and resist a king-rush (a human attacking the king is the same threat).
-		# Measured (sims=200): v2_final vs d1 1/0/3 (never loses), vs d2 3/1/0.
-		# NOTE: the exploit-free exit_best plays nicer but is WEAKER (draws d2, loses
-		# to d1), so it is deliberately NOT used as the opponent.
+		# Model preference: v2_value then v2_final. Measured WITH MCTS (sims=200, 15
+		# games/cell): v2_value beats Peter d1 80% (12/3/0) and d2 67% (10/5/0) — the
+		# strongest, most decisive opponent. v2_final is too drawish (d1 4/0/11) and
+		# even loses to d2 (6/9), and the exploit-free exit_best is weakest (loses to
+		# d1) — neither is used here. A human is weaker than Peter d2, so v2_value +
+		# MCTS beats humans easily.
 		# DIFFICULTY sets MCTS sims: 'hard' crushes, 'easy' is beatable. USE_MCTS=False
 		# uses the raw policy; model_path=None falls back to alpha-beta (ai.py).
 		USE_MCTS = True
 		DIFFICULTY = "hard"                       # "easy" | "medium" | "hard"
 		_MCTS_SIMS = {"easy": 30, "medium": 100, "hard": 300}
 		model_path = next((p for p in (
-			"models/duck_ppo/v2/v2_final.zip",
 			"models/duck_ppo/v2/v2_value.zip",
+			"models/duck_ppo/v2/v2_final.zip",
 		) if os.path.exists(p)), None)
 		if model_path and os.path.exists(model_path):
 			print(f"[+] Loading RL Model for AI moves: {model_path}")
