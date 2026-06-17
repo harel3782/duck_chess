@@ -10,9 +10,12 @@ from DuckChess_Game.SBThree.env_registry import REGISTRY
 # Registry completeness                                                #
 # ------------------------------------------------------------------ #
 
-_STAGE_KEYS = {f"stage{i}" for i in range(1, 15)}
-_PETER_KEYS = {"peter_easy", "peter_medium", "peter_hard"}
-_ALL_KEYS   = _STAGE_KEYS | _PETER_KEYS
+_STAGE_KEYS   = {f"stage{i}" for i in range(1, 15)}
+_PETER_KEYS   = {"peter_easy", "peter_medium", "peter_hard"}
+# Corrective / one-off runs that are neither numbered stages nor Peter levels.
+# Add new such envs here so the count tests below track the registry.
+_SPECIAL_KEYS = {"antiexploit_v2"}
+_ALL_KEYS     = _STAGE_KEYS | _PETER_KEYS | _SPECIAL_KEYS
 
 
 class TestRegistry:
@@ -24,6 +27,9 @@ class TestRegistry:
 
     def test_peter_keys_present(self):
         assert _PETER_KEYS.issubset(set(REGISTRY.keys()))
+
+    def test_special_keys_present(self):
+        assert _SPECIAL_KEYS.issubset(set(REGISTRY.keys()))
 
     def test_each_entry_is_callable(self):
         for name, factory in REGISTRY.items():

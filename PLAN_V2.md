@@ -2,6 +2,17 @@
 
 Self-contained plan. Give this file to any new session to continue the work.
 
+> **CURRENT STATUS (2026-06-15) — read this first.**
+> Steps 0–7a are **done and delivered**: `v2_final.zip` is the general policy (~90–95% vs Peter d2,
+> no king-rush exploit), `v2_value.zip` adds a distilled value head (sign-acc 0.98), and `mcts.py`
+> (PUCT MCTS over the value head) beats Peter d2 **100%** at ~0.9s/turn. Both are wired into the
+> desktop and web UIs. **The depth-3 wall still holds** (0 wins; inference search alone can't crack
+> it). Work has moved on to **Step 7b — Expert Iteration** (`gen_mcts_data.py` → `train_exit.py` →
+> `run_exit.py`) on branch `antiexploit_v2`, preceded by the antiexploit_v2 corrective run
+> (`train_antiexploit_v2.py`). See [docs/training_log.md](docs/training_log.md) for the up-to-date
+> narrative. Everything below is the **design rationale and historical record** — accurate as a
+> record, but check the training log for the latest numbers before acting.
+
 ## Status (updated 2026-06-12 night)
 
 - [x] Step 0 — baseline: real_latest vs Peter d2 = 6/4/0 (60%), vs d3 = 0/6/4 (score 0.200)

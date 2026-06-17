@@ -11,8 +11,9 @@
 
 This document specifies **20 critical test cases** that implement the strategy defined in
 STP-DUCK-001. They are the highest-value, must-pass cases — the subset that gates checkpoint
-promotion. They are a *representative slice* of the full implemented suite, which now contains
-**277 tests** across 14 modules under `tests/` (see [TESTING.md](../TESTING.md)).
+promotion. They are a *representative slice* of the full implemented suite under `tests/`; the
+engine + RL core runs ~**330 tests**. See [TESTING.md](TESTING.md) for the complete, layered
+breakdown (engine/RL, web UI, and end-to-end).
 
 **Test identification scheme:** `TC-<MODULE>-<NNN>`
 
@@ -116,22 +117,22 @@ pytest tests/test_move_pipeline.py -v
 
 ## Expected Output
 
-A fully green run looks like:
+A healthy engine + RL core run looks like:
 
 ```
-=================== 277 passed in N.NNs ===================
+=================== 330 passed, 2 failed in N.NNs ===================
 ```
 
-All 20 critical cases above must pass before a Stage 12/13 checkpoint is promoted.
+All 20 critical cases above must pass before a checkpoint is promoted.
 
-### Known issues (as of 2026-06-10)
+### Known issues
 
-The current run is **275 passed, 2 failed** (`277 collected`). Both failures are in
-`tests/test_env_factory.py` (`test_returns_expected_stage_count` and
-`test_has_expected_entry_count`): `EnvFactory.list_stages()` returns 16 entries while only 15 are
-unique — a **duplicate key in the stage registry**, not an engine-logic defect. All 20 critical
-cases in this STD pass. The duplicate-key fix is tracked separately; it does not block checkpoint
-promotion, which gates on the engine and RL-interface cases.
+The 2 failures are both in `tests/test_env_factory.py` (`test_has_expected_entry_count` and
+`test_returns_expected_stage_count`): they hard-code the expected number of registered environments
+at **17**, but `antiexploit_v2` was added to the registry, making **18** — a stale test assertion,
+**not** an engine-logic defect. All 20 critical cases in this STD pass. (Separately, the web-UI and
+end-to-end test layers need `httpx` and Playwright installed; see [TESTING.md](TESTING.md).) The
+count fix does not block checkpoint promotion, which gates on the engine and RL-interface cases.
 
 ---
 

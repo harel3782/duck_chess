@@ -1,98 +1,65 @@
-# Root Directory Structure
+# Repository Structure
 
-## Final Organization
+Where everything lives. The repo root holds three entry-point docs and the test/dependency config;
+everything else is organized into directories.
 
 ```
 duck_chess/
-├── CLAUDE.md              ← Project guidance (DO NOT MOVE)
-├── README.md              ← Project overview
-├── requirements.txt       ← Python dependencies
-├── pytest.ini             ← Test configuration
-├── conftest.py            ← Pytest fixtures (must stay in root)
+├── README.md              ← Project overview (keep in root)
+├── CLAUDE.md              ← Guidance for AI assistants (keep in root)
+├── PLAN_V2.md             ← v2 + search + Expert-Iteration plan and results
+├── requirements.txt       ← Pinned Python dependencies
+├── pytest.ini             ← Test configuration (testpaths = tests)
+├── conftest.py            ← Pytest fixtures / headless SDL setup (must stay in root)
 │
-├── docs/                  ← ALL DOCUMENTATION (moved here)
-│   ├── INDEX.md           ← Start here for guidance
+├── docs/                  ← All other documentation (see INDEX.md)
+│   ├── INDEX.md           ← Index of this folder — start here
 │   ├── QUICK_START.md
 │   ├── WEB_UI_SETUP.md
 │   ├── WEB_UI_IMPLEMENTATION_SUMMARY.md
 │   ├── DEMO_GUIDE.md
-│   ├── WEB_UI_TEST_SUMMARY.md
+│   ├── TESTING.md
 │   ├── WEB_UI_TEST_PLAN.md
-│   └── [9 more documentation files]
+│   ├── E2E_TESTS.md
+│   ├── HEADLESS_TRAINING.md
+│   ├── IMPLEMENTATION_SUMMARY.md
+│   ├── training_log.md
+│   ├── STP-DUCK-001.md    ← Formal Software Test Plan (+ .txt / .wd.docx siblings)
+│   └── STD-DUCK-001.md    ← Formal Software Test Design (+ .txt / .wd.docx siblings)
 │
-├── web_ui/                ← Web UI (FastAPI + HTML)
+├── web_ui/                ← FastAPI + HTML web app
 │   ├── server.py
 │   ├── index.html
 │   └── duck.png
 │
-├── DuckChess_Game/        ← Game engine
-│   ├── Logic/
-│   ├── UI/
-│   └── SBThree/
+├── DuckChess_Game/        ← Game engine + UI + RL
+│   ├── Logic/             ← Pure-Python engine (rules, bitboards, RL bridge)
+│   ├── UI/                ← Pygame desktop app
+│   └── SBThree/           ← RL training, MCTS, evaluation
 │
-├── tests/                 ← Test suite (56 tests)
-│   ├── test_web_ui_server.py
-│   └── test_web_ui_integration.py
-│
-├── models/                ← Trained RL models
-│   └── duck_ppo/
-│
+├── tests/                 ← Pytest suite (engine, RL, web UI, e2e/visual)
+├── models/duck_ppo/       ← Trained RL checkpoints, by stage/run
+├── logs/                  ← Training logs and CSV progress
+├── tensorboard_logs/      ← TensorBoard event files
 ├── saved_replays/         ← User-saved games
-├── tensorboard_logs/      ← Training logs
-├── scripts/               ← Utility scripts
-├── assets/                ← Images & resources
-└── .archive/              ← Archived files (hidden)
+├── scripts/               ← Utility scripts (build launcher, replay viewers, debug)
+└── assets/                ← Images, sounds, rules text
 ```
 
-## What Was Moved
+## What must stay in the root
 
-| From Root | To | Reason |
-|-----------|-----|--------|
-| QUICK_START.md | docs/ | Documentation |
-| WEB_UI_SETUP.md | docs/ | Documentation |
-| WEB_UI_IMPLEMENTATION_SUMMARY.md | docs/ | Documentation |
-| DEMO_GUIDE.md | docs/ | Documentation |
-| WEB_UI_TEST_SUMMARY.md | docs/ | Documentation |
-| WEB_UI_TEST_PLAN.md | docs/ | Documentation |
-| IMPLEMENTATION_SUMMARY.md | docs/ | Documentation |
-| training_log.md | docs/ | Documentation |
-| HEADLESS_TRAINING.md | docs/ | Documentation |
-| TESTING.md | docs/ | Documentation |
-| duck_chess_full_code.txt | .archive/ | Cleanup |
+| File | Why |
+|------|-----|
+| `README.md` | GitHub project overview |
+| `CLAUDE.md` | Referenced by AI assistants |
+| `PLAN_V2.md` | Self-contained plan; handed to new sessions |
+| `requirements.txt` | Pip dependency standard |
+| `pytest.ini` | Test configuration |
+| `conftest.py` | Pytest fixtures (sets headless SDL drivers before pygame imports) |
 
-## What Stayed in Root
+## How to navigate
 
-✅ **Must stay in root:**
-- `CLAUDE.md` — Project guidance (referenced by AI systems)
-- `README.md` — GitHub project overview
-- `requirements.txt` — Pip dependency standard
-- `pytest.ini` — Test configuration
-- `conftest.py` — Pytest fixtures
-
-## How to Navigate
-
-### For Quick Setup
-```bash
-# Read this first
-cat docs/QUICK_START.md
-
-# Install & run
-pip install -r requirements.txt
-python -m uvicorn web_ui.server:app --port 7890
-```
-
-### For Documentation
-See `docs/INDEX.md` for complete guide to all docs
-
-### For Testing
-```bash
-pytest tests/ -v
-```
-
-## Result
-
-✅ **Root files reduced from 12 to 5**  
-✅ **All docs organized in `docs/` folder**  
-✅ **Clean, professional structure**  
-✅ **Easy to navigate**
-
+- **Setup / run:** [QUICK_START.md](QUICK_START.md) (web UI) or [../README.md](../README.md) (both UIs)
+- **All docs:** [INDEX.md](INDEX.md)
+- **Tests:** [TESTING.md](TESTING.md) — `pytest` from the repo root
+- **Training history & plan:** [training_log.md](training_log.md), [../PLAN_V2.md](../PLAN_V2.md)

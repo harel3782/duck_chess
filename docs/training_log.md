@@ -141,9 +141,76 @@ per-move shaping (development, king safety, material, mobility, duck-blocking).
 
 ---
 
+## v2 — opponent-pool grounding (the first non-exploit model)
+
+- **Goal:** kill the king-rush exploit at its root by removing the three things that let PPO learn
+  it: a single fixed opponent, a fixed starting position, and dense shaped reward (see
+  [../PLAN_V2.md](../PLAN_V2.md) for the full diagnosis).
+- **Design:** `duck_env_v2.py` (`PoolEnv`) samples a different opponent per episode (Peter depths,
+  self-play vs latest, historical checkpoints, random mover), starts ~40% of episodes after a few
+  random legal plies, and uses **sparse terminal reward** — which also makes the value head a
+  calibrated win-probability estimator. Trained **from scratch** (no king-rush prior).
+- **Entry point:** `train_peter_v2.py`. **Run:** auto-launched, ~12h, finished at ~670k steps.
+- **Result (`models/duck_ppo/v2/v2_final.zip`):** beats Peter depth-2 **19/1 (95%)** in *general*
+  play (random starts, not the rush), anchor Elo ~1025; still **0/20 vs depth-3**. The healthy
+  signature held throughout: entropy glided down with no collapse, explained variance ~0.71.
+- **Known blind spot:** loses ~3/9 to a trivial greedy bot that was not in the training pool — fix
+  is to add `GreedyOpponent` to the pool next run.
+
+## Search / MCTS — inference-time lookahead
+
+- **`search.py`** (alpha-beta over full turns including the duck) and value-greedy / sample-veto
+  move selection were tried first and **failed**: they cratered the v2 d2 win rate from 95% to 0%.
+- **The lesson (project-worthy):** a value head is for **evaluating**; the policy is for
+  **choosing**. Value-argmax / veto throw away the policy's move skill. Diagnosed conclusively:
+  `mode=best` (always play the value-argmax) → 0% vs d2, while `sample-veto margin=5` (defer to the
+  policy) → 100%.
+- **What worked: `mcts.py`** — AlphaZero-style PUCT MCTS, factored over piece + duck, with policy
+  priors guiding exploration and the distilled value head scoring leaves. It force-plays available
+  king captures (the policy gives them ~0 prior). **Result:** sims=200 beats Peter d2 **100% (12/0)**
+  at ~0.9s/turn — matching/beating the raw policy. The d3 wall held even at sims=1200.
+
+## Value distillation (prerequisite for MCTS)
+
+- MCTS with the raw PPO value head doesn't work — its value sign-accuracy was only ~0.65.
+- `gen_value_data.py` records every move-piece position → eventual game outcome (using
+  `ForcedKingCaptureMask`); `finetune_value.py` regresses **only the value head** onto outcomes,
+  policy frozen (verified byte-for-byte identical).
+- **Result (`models/duck_ppo/v2/v2_value.zip`):** value sign-accuracy **0.65 → 0.98**. This is the
+  checkpoint wired into both UIs and used as the MCTS backbone.
+
+## antiexploit_v2 — corrective run (branch `antiexploit_v2`)
+
+- **Goal:** build the strongest model by first hardening the policy against three specific exploits
+  — repetitive openings, weak duck placement, and endgame collapse — then feeding it into Expert
+  Iteration.
+- **Design (warm-starts `v2_final`):** entropy schedule 0.06→0.02, `duck_placement_bonus` reward
+  (duck-phase only, capped), opponent mix 40% Peter d2 / 35% historical pool / 25% self-play +
+  opening randomization (no depth-1), `max_episode_plies=300` + step penalty.
+- **Entry point:** `train_antiexploit_v2.py`; config in `duck_env_antiexploit_v2.py`. Measured by
+  `eval_antiexploit.py` (detects the three exploits, not just W/L/D).
+- **Status:** checkpoints `models/duck_ppo/antiexploit_v2/ax_latest.zip` (+ `ax_v1..v3`). The full
+  unattended build (`scripts/run_full_build.ps1`) runs Phase A (8M steps → `ax_final.zip`) then the
+  ExIt loop; `ax_final.zip` / `exit/exit_best.zip` appear only once it completes.
+
+## Expert Iteration (ExIt) — the route to depth-3
+
+The standard AlphaZero loop, now well-founded because MCTS is a proven improvement operator (100%
+vs d2):
+
+1. `gen_mcts_data.py` — play self-play / vs-Peter games where the agent moves **with MCTS**,
+   recording the visit-count policy target π (for piece *and* duck) and the game outcome z.
+2. `train_exit.py` — joint training: policy → π (cross-entropy) + value → z (MSE). (Smoke-validated:
+   both heads learn; value sign-acc 0.43 → 0.86.)
+3. `run_exit.py` — the gen → train → eval(MCTS vs d2 and d3) → iterate loop; keeps `exit_best.zip`
+   guarded by (d3 score, d2 score).
+
+---
+
 ## Open problem: the Peter depth-3 wall
 
 Every model to date tops out at **0 wins vs Peter depth-3**. Depth-3 defends its king well enough
-that the learned king-rush never lands, and nothing better has yet formed. Cracking it likely needs
-either sustained depth-3 grounding (far more than 1–14h of ~3.4 steps/s training) or a larger
-network with more time. Until a checkpoint beats depth-3, the UI ships with `model_path = None`.
+that the learned king-rush never lands, and inference search alone cannot crack it (0 at sims=200 and
+sims=1200). The realistic route is the **Expert-Iteration loop** above: stronger net → better MCTS →
+stronger net. The desktop and web UIs currently ship the best general model, `v2_value.zip`, played
+with MCTS — which beats depth-2 without any exploit.

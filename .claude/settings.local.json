@@ -50,7 +50,19 @@
       "PowerShell(Get-Process python -ErrorAction SilentlyContinue)",
       "PowerShell(Get-Content logs\\\\v2_launcher.log -ErrorAction SilentlyContinue; Get-Process -Id 11984 -ErrorAction SilentlyContinue | Select-Object Id, CPU; Get-Content models\\\\duck_ppo\\\\real -ErrorAction SilentlyContinue; \\(Get-Item models\\\\duck_ppo\\\\real\\\\real_latest.zip\\).LastWriteTime)",
       "Bash(PYTHONPATH=. .venv/Scripts/python.exe -c ' *)",
-      "Bash(.venv/Scripts/python.exe -m py_compile DuckChess_Game/UI/main.py DuckChess_Game/Logic/turn_manager.py DuckChess_Game/SBThree/mcts.py DuckChess_Game/SBThree/search.py DuckChess_Game/SBThree/eval_search.py)"
+      "Bash(.venv/Scripts/python.exe -m py_compile DuckChess_Game/UI/main.py DuckChess_Game/Logic/turn_manager.py DuckChess_Game/SBThree/mcts.py DuckChess_Game/SBThree/search.py DuckChess_Game/SBThree/eval_search.py)",
+      "Bash(powershell -NoProfile -Command 'Get-CimInstance Win32_Process -Filter \"Name='\\\\''python.exe'\\\\''\" | Select-Object ProcessId, CreationDate, @{N='\\\\''Cmd'\\\\'';E={$_.CommandLine}} | Format-List')",
+      "Bash(ls -1 scripts/)",
+      "Bash(ls -d web_ui)",
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\afiks\\\\Documents\\\\Afik S\\\\Afik\\\\Afeka\\\\duck_chess-master\\\\duck_chess-master\" -Force)",
+      "Bash(Select-Object Name, FullName)",
+      "Bash(python -m pytest --collect-only -q)",
+      "Bash(./.venv/Scripts/python.exe -m pytest tests/ -q --ignore=tests/test_e2e_auth_and_menu.py --ignore=tests/test_e2e_gameplay.py --ignore=tests/test_e2e_save_replay.py --ignore=tests/test_visual_regression.py -p no:cacheprovider)",
+      "Bash(./.venv/Scripts/python.exe -m pytest tests/ -q -p no:cacheprovider --ignore=tests/test_e2e_auth_and_menu.py --ignore=tests/test_e2e_gameplay.py --ignore=tests/test_e2e_save_replay.py --ignore=tests/test_visual_regression.py --ignore=tests/test_web_ui_server.py --ignore=tests/test_web_ui_integration.py --ignore=tests/test_performance.py)",
+      "Bash(./.venv/Scripts/python.exe -m pytest tests/ --collect-only -q -p no:cacheprovider)",
+      "Bash(./.venv/Scripts/python.exe -m pytest DuckChess_Game/Logic/test_logic.py --collect-only -q -p no:cacheprovider)",
+      "Bash(git rm *)",
+      "PowerShell(.venv\\\\Scripts\\\\python.exe -m pytest tests/test_env_factory.py -v)"
     ]
   }
 }
