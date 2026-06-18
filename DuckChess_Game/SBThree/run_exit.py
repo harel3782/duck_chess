@@ -63,7 +63,7 @@ def _csv_init(path):
 
 def run(base, out_dir, *, iters=8, games=500, sims=300, workers=8,
         peter_frac=0.40, peter_depths=(1, 2), window=4, epochs=10, lr=1e-4,
-        eval_games=16, eval_sims=200, piece_topk=8, duck_topk=6, seed=0):
+        eval_games=16, eval_sims=200, piece_topk=8, duck_topk=6, seed=0, resume=False):
     os.makedirs(out_dir, exist_ok=True)
     data_dir = os.path.join(out_dir, "data")
     csv_path = os.path.join(out_dir, "exit_progress.csv")
@@ -74,11 +74,38 @@ def run(base, out_dir, *, iters=8, games=500, sims=300, workers=8,
     best_path = os.path.join(out_dir, "exit_best.zip")
     best_key = (-1.0, -1.0)   # (d1+d2 robustness, d3): maximize human-strength, tiebreak d3
 
-    print(f"=== ExIt | base={os.path.basename(base)} | {iters} iters | "
+    # Resume: continue from the latest exit_v{N}.zip and restore the best-key from
+    # CSV, so a reboot/crash loses at most the in-progress iteration.
+    start_iter = 1
+    if resume:
+        import glob, re
+        nums = []
+        for p in glob.glob(os.path.join(out_dir, "exit_v*.zip")):
+            m = re.search(r"exit_v(\d+)\.zip$", p)
+            if m:
+                nums.append(int(m.group(1)))
+        if nums:
+            n = max(nums)
+            current = os.path.join(out_dir, f"exit_v{n}.zip")
+            start_iter = n + 1
+            if os.path.exists(csv_path):
+                import csv as _csv
+                with open(csv_path, newline="") as f:
+                    for row in _csv.DictReader(f):
+                        try:
+                            best_key = max(best_key, (
+                                round(float(row["d1_score"]) + float(row["d2_score"]), 3),
+                                float(row["d3_score"])))
+                        except (KeyError, ValueError):
+                            pass
+            print(f"[run_exit] RESUME from exit_v{n} at iteration {start_iter} "
+                  f"(best so far {best_key})", flush=True)
+
+    print(f"=== ExIt | base={os.path.basename(current)} | iters {start_iter}..{start_iter + iters - 1} | "
           f"{games} games/iter (peter_frac={peter_frac}, depths={tuple(peter_depths)}) | "
           f"sims={sims} | window={window} files ===", flush=True)
 
-    for it in range(1, iters + 1):
+    for it in range(start_iter, start_iter + iters):
         t_it = time.time()
         peter_games = int(round(games * peter_frac))
         self_games = games - peter_games
@@ -173,12 +200,14 @@ def main():
     p.add_argument("--piece-topk", type=int, default=8)
     p.add_argument("--duck-topk", type=int, default=6)
     p.add_argument("--seed", type=int, default=0)
+    p.add_argument("--resume", action="store_true",
+                   help="continue from the latest exit_v*.zip in --out-dir")
     args = p.parse_args()
     run(args.base, args.out_dir, iters=args.iters, games=args.games, sims=args.sims,
         workers=args.workers, peter_frac=args.peter_frac, peter_depths=tuple(args.peter_depths),
         window=args.window, epochs=args.epochs, lr=args.lr,
         eval_games=args.eval_games, eval_sims=args.eval_sims,
-        piece_topk=args.piece_topk, duck_topk=args.duck_topk, seed=args.seed)
+        piece_topk=args.piece_topk, duck_topk=args.duck_topk, seed=args.seed, resume=args.resume)
 
 
 if __name__ == "__main__":
