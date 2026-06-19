@@ -273,16 +273,24 @@ def game_over_reason(engine, override=None):
 
 
 def _snapshots_from_halfmoves(halfmoves) -> list:
-    """Replay halfmove notation into a fresh engine and return the board grid after
-    each completed halfmove (plus the initial position).
+    """Replay halfmove notation into a fresh engine and return, after each completed
+    halfmove (plus the initial position), a snapshot dict:
 
-    Notation produced by this server is deterministic: the first 4 chars are the
-    piece move (e.g. 'e2e4'); an optional ' <duck-emoji><sq>' suffix is the duck
-    placement (e.g. 'e2e4 🦆d4'); a trailing '#' marks a king capture. This is the
-    source of `board_snapshots` for the replay viewer.
+        {"board": <8x8 piece grid>, "duck": [row, col] | None}
+
+    The duck is captured PER STEP (from eng.duck_pos) so the replay viewer can move
+    the duck, not just the pieces. On a king-capture halfmove (no duck placed) the
+    duck simply stays where it was — eng.duck_pos reflects that correctly.
+
+    Notation is deterministic: the first 4 chars are the piece move (e.g. 'e2e4');
+    an optional ' <duck-emoji><sq>' suffix is the duck placement (e.g. 'e2e4 🦆d4');
+    a trailing '#' marks a king capture. This is the source of `board_snapshots`.
     """
+    def _duck(eng):
+        return list(eng.duck_pos) if tuple(eng.duck_pos) != (-1, -1) else None
+
     eng = _HeadlessEngine()
-    snaps = [board_to_grid(eng)]
+    snaps = [{"board": board_to_grid(eng), "duck": _duck(eng)}]
     for hm in halfmoves:
         text = hm.get("text", "") if isinstance(hm, dict) else ""
         if len(text) >= 4:
@@ -298,7 +306,7 @@ def _snapshots_from_halfmoves(halfmoves) -> list:
                         eng.place_duck(duck, animated=False)
             except (ValueError, IndexError):
                 pass
-        snaps.append(board_to_grid(eng))
+        snaps.append({"board": board_to_grid(eng), "duck": _duck(eng)})
     return snaps
 
 
@@ -385,6 +393,10 @@ class SaveGameReq(BaseModel):
     game_id: str
     username: str = "Player"
     label: str = ""
+
+
+class DeleteGameReq(BaseModel):
+    filename: str
 
 
 def _get_session(game_id: str) -> Session:
@@ -644,9 +656,13 @@ def saved_games(username: str = ""):
     return {"games": games}
 
 
-@app.get("/api/load-game/{filename}")
-def load_game(filename: str):
-    """Return the full saved payload (incl. board_snapshots) for replay."""
+def _resolve_saved_game(filename: str) -> Path:
+    """Resolve a saved-game filename to a path inside SAVED_GAMES_DIR, or raise.
+
+    Shared path-traversal guard for load-game and delete-game: the name must be a
+    plain '.json' basename that resolves inside the saved-games dir. 400 for a bad
+    filename, 404 if the file does not exist.
+    """
     safe = Path(filename).name             # strip any path components
     if not safe.endswith(".json"):
         raise HTTPException(400, "Invalid file.")
@@ -658,15 +674,37 @@ def load_game(filename: str):
         raise HTTPException(400, "Invalid file path.")
     if not resolved.is_file():
         raise HTTPException(404, "Saved game not found.")
+    return resolved
+
+
+@app.get("/api/load-game/{filename}")
+def load_game(filename: str):
+    """Return the full saved payload (incl. board_snapshots) for replay."""
+    resolved = _resolve_saved_game(filename)
     try:
         with open(resolved, encoding="utf-8") as f:
             data = json.load(f)
     except (OSError, json.JSONDecodeError):
         raise HTTPException(500, "Could not read saved game.")
-    # Older saves may predate snapshots — rebuild them on the fly.
-    if not data.get("board_snapshots"):
+    # Rebuild snapshots on the fly (without touching the file on disk) when they
+    # are missing OR in the legacy duck-less format (a bare grid per entry, or a
+    # dict lacking a 'duck' key). The rebuild parses the duck from the history so
+    # old saves replay with a moving duck too.
+    bs = data.get("board_snapshots")
+    if not bs or not isinstance(bs[0], dict) or "duck" not in bs[0]:
         data["board_snapshots"] = _snapshots_from_halfmoves(data.get("history", []))
     return data
+
+
+@app.post("/api/delete-game")
+def delete_game(req: DeleteGameReq):
+    """Delete a saved game file (same dir + path-traversal guard as load-game)."""
+    resolved = _resolve_saved_game(req.filename)
+    try:
+        resolved.unlink()
+    except OSError as ex:
+        raise HTTPException(500, f"Could not delete game: {ex}")
+    return {"ok": True, "filename": Path(req.filename).name}
 
 
 # Static files LAST so /api/* routes win.  html=True -> "/" serves index.html.

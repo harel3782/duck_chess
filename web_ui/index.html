@@ -360,6 +360,11 @@
       background: var(--panel2); border: 1px solid var(--line);
       border-radius: 8px; padding: 10px; margin-bottom: 8px;
     }
+    .del-btn { color: #b06060; }
+    .del-btn:hover { color: #e07070; background: #2a1818; }
+    .del-confirm { background: #c0392b !important; color: #fff !important; border: 1px solid #e74c3c !important; }
+    .del-confirm:hover { background: #a93226 !important; }
+    .del-cancel { color: var(--muted); }
 
     /* tiny toast */
     .toast {
@@ -694,6 +699,8 @@
   }
   function goMenu(){
     isReplaying = false;  // exit replay mode if active
+    replayPlaying = false;
+    removeReplayControls();  // ensure the replay bar never lingers on the menu
     stopGameTimer();  // stop game timer
     showScreen('screen-menu');
     loadSavedGames();  // refresh saved games list
@@ -817,6 +824,7 @@
 
   async function newGame(){
     resetLocal();
+    removeReplayControls();  // a fresh game must not keep a stale replay bar
     showScreen('screen-game');
     setThinking('Starting game…');
     try{
@@ -1414,7 +1422,10 @@
           <div><strong>${g.label}</strong></div>
           <div style="font-size:11px; color: var(--muted); margin: 4px 0;">${g.timestamp} — ${g.result}</div>
           <div style="font-size:10px; color: #888;">${g.model_label || '2 Players'}</div>
-          <button class="btn btn-ghost" style="width:100%; margin-top:6px; font-size:11px" onclick="loadAndReplayGame('${g.filename}')">↻ Load & Review</button>
+          <div style="display:flex; gap:6px; margin-top:6px">
+            <button class="btn btn-ghost" style="flex:1; font-size:11px" onclick="loadAndReplayGame('${g.filename}')">↻ Load &amp; Review</button>
+            <button class="btn btn-ghost del-btn" style="width:auto; font-size:11px" title="Delete saved game" onclick="armDelete(this,'${g.filename}')">🗑</button>
+          </div>
         </div>
       `).join('');
     }catch(e){
@@ -1432,6 +1443,68 @@
     }
     setThinking('');
   }
+
+  /* ════════════ DELETE SAVED GAME (inline two-step confirm — no native confirm) ════════════ */
+  let armedDeleteBtn = null;   // only one delete can be armed at a time
+
+  function disarmDelete(btn){
+    if(!btn) return;
+    clearTimeout(btn._revertTimer);
+    if(btn.dataset.orig != null) btn.innerHTML = btn.dataset.orig;
+    btn.dataset.armed = '';
+    btn.classList.remove('del-confirm');
+    const next = btn.nextElementSibling;          // remove the paired Cancel button
+    if(next && next.classList.contains('del-cancel')) next.remove();
+    if(armedDeleteBtn === btn) armedDeleteBtn = null;
+  }
+
+  function armDelete(btn, filename){
+    // Second click on an already-armed button = confirm the delete.
+    if(btn.dataset.armed === '1'){ confirmDelete(filename, btn); return; }
+    // Arm: disarm any other card, turn this into a red "Confirm?" + a Cancel.
+    if(armedDeleteBtn && armedDeleteBtn !== btn) disarmDelete(armedDeleteBtn);
+    armedDeleteBtn = btn;
+    btn.dataset.armed = '1';
+    btn.dataset.orig = btn.innerHTML;
+    btn.textContent = 'Confirm?';
+    btn.classList.add('del-confirm');
+    const cancel = document.createElement('button');
+    cancel.className = 'btn btn-ghost del-cancel';
+    cancel.style.cssText = 'width:auto; font-size:11px';
+    cancel.textContent = 'Cancel';
+    cancel.onclick = (e)=>{ e.stopPropagation(); disarmDelete(btn); };
+    btn.insertAdjacentElement('afterend', cancel);
+    // Revert automatically after ~4s so a stray armed button can't linger.
+    clearTimeout(btn._revertTimer);
+    btn._revertTimer = setTimeout(()=>disarmDelete(btn), 4000);
+  }
+
+  async function confirmDelete(filename, btn){
+    clearTimeout(btn._revertTimer);
+    btn.disabled = true; btn.textContent = '⏳';
+    try{
+      await api('/api/delete-game', {filename});
+      armedDeleteBtn = null;
+      const card = btn.closest('.saved-game-card');
+      if(card) card.remove();
+      toast('Saved game deleted.');
+      // If that was the last card, fall back to the empty state.
+      const list = document.getElementById('saved-list');
+      if(list && !list.querySelector('.saved-game-card')) loadSavedGames();
+    }catch(e){
+      toast('Could not delete: ' + e.message);
+      btn.disabled = false;
+      disarmDelete(btn);           // keep the card, restore the trash button
+    }
+  }
+
+  // Clicking anything outside the armed control reverts it (stray clicks can't delete).
+  document.addEventListener('click', (e)=>{
+    if(!armedDeleteBtn) return;
+    const cancel = armedDeleteBtn.nextElementSibling;
+    if(e.target === armedDeleteBtn || (cancel && e.target === cancel)) return;
+    disarmDelete(armedDeleteBtn);
+  });
 
   function startReplay(gameData){
     // Initialize replay mode with full game state + snapshots
@@ -1536,19 +1609,29 @@
 
   function applyReplaySnapshot(snapshotIdx){
     if(!G || !G.boardSnapshots || snapshotIdx >= G.boardSnapshots.length) return;
-    // Update board from snapshot
-    G.board = JSON.parse(JSON.stringify(G.boardSnapshots[snapshotIdx]));
+    // Snapshots are {board, duck}. (Defensive: a legacy bare 8x8 grid -> no duck.)
+    const snap = G.boardSnapshots[snapshotIdx];
+    const board = Array.isArray(snap) ? snap : snap.board;
+    const duck  = Array.isArray(snap) ? null : (snap.duck || null);
+    G.board = JSON.parse(JSON.stringify(board));
+    G.duck  = duck ? [duck[0], duck[1]] : null;   // move the duck per step, not just pieces
     renderBoard();
     renderHistory();
     updateReplayUI();
+  }
+
+  function removeReplayControls(){
+    // The control bar lives on <body>, so it must be explicitly removed whenever
+    // we leave replay (menu, new game, exit) or it lingers over other screens.
+    const ctrlBar = document.getElementById('replay-controls');
+    if(ctrlBar) ctrlBar.remove();
   }
 
   function exitReplay(){
     isReplaying = false;
     replayPlaying = false;
     if(replayTimer) clearTimeout(replayTimer);
-    const ctrlBar = document.getElementById('replay-controls');
-    if(ctrlBar) ctrlBar.remove();
+    removeReplayControls();
     goMenu();
   }
 
