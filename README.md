@@ -47,12 +47,15 @@ up everywhere — in the UI input handling, and as the two-stage action space th
   blocking, with a dual board representation (a readable 2D array *and* 64-bit bitboards for speed).
 - **Full Pygame UI** — menu, interactive rules screen, a position editor, and live play with
   move highlighting, animations, sound, and a game-over screen.
+- **Browser web UI** — a FastAPI + JS app (`web_ui/`) to play any trained checkpoint or a
+  local 2-player game, with a model browser, save / load / replay (duck included), per-player
+  timers, and board flip. See [Quick start](#4-play-in-the-browser-web-ui).
 - **Reinforcement-learning pipeline** — a custom Gymnasium environment, strict legal-action
   masking, and a 13-stage curriculum trained with `sb3-contrib`'s MaskablePPO.
 - **A real engine opponent ("Peter")** — training and evaluation against a local alpha-beta
   chess engine, so model strength is measured against ground truth, not just self-play.
 - **277-test suite** — fast, headless `pytest` coverage of the engine, the RL interface, and
-  the opponents (see [TESTING.md](TESTING.md)).
+  the opponents (see [TESTING.md](docs/TESTING.md)).
 - **Formal test docs** — a Software Test Plan and Software Test Design under [`docs/`](docs).
 
 ---
@@ -66,8 +69,6 @@ up everywhere — in the UI input handling, and as the two-stage action space th
 
 ### 2. Install dependencies
 
-There is no `requirements.txt`; install the runtime dependencies directly:
-
 ```bash
 python -m venv .venv
 # Windows
@@ -75,11 +76,13 @@ python -m venv .venv
 # Linux / macOS
 source .venv/bin/activate
 
-pip install pygame numpy torch stable-baselines3 sb3-contrib gymnasium pytest pytest-cov
+pip install -r requirements.txt
 ```
 
-> Versions this project is developed against: `stable-baselines3` 2.8, `sb3-contrib` 2.8,
-> `gymnasium` 1.2, `numpy` 2.4, `pygame` 2.6, `torch` 2.11 (CPU). A GPU is **not** required.
+> Developed against **Python 3.12** with `stable-baselines3` 2.8, `sb3-contrib` 2.8,
+> `gymnasium` 1.2, `numpy` 2.4, `pygame` 2.6, `torch` 2.11 (CPU), `fastapi` 0.136,
+> `uvicorn` 0.49. A GPU is **not** required. Exact pins live in
+> [`requirements.txt`](requirements.txt).
 
 ### 3. Play the game
 
@@ -93,7 +96,46 @@ python DuckChess_Game/UI/main.py
 > "king-rush" exploit that a thinking human can refute. The game is fully playable
 > human-vs-human; wiring in a model is a one-line change once a checkpoint clears that bar.
 
-### 4. Run the tests
+### 4. Play in the browser (web UI)
+
+A FastAPI + vanilla-JS web app under [`web_ui/`](web_ui) plays Duck Chess in the browser
+against any trained checkpoint, or in local 2-player mode. Run it from the **project root**:
+
+```bash
+python -m uvicorn web_ui.server:app --port 7890
+# or simply:
+python web_ui/server.py
+```
+
+Then open **http://127.0.0.1:7890** in a real browser (Chrome / Edge / Firefox). It is a
+**local development server** — login is open (any name), game state is kept in memory plus
+optional JSON saves; don't expose it to a network.
+
+**What the web UI does (all implemented in `web_ui/server.py` + `index.html`):**
+
+- **Model browser** — the opponent dropdown is auto-populated by scanning
+  `models/duck_ppo/` for every `*.zip` checkpoint (grouped by folder, `final`/`latest`
+  first). Models load lazily on first use, on CPU.
+- **Play vs a model** as White or Black (the board auto-flips when you play Black, and the
+  model moves first), or **2-player local** (human vs human, no model).
+- **Two-phase turns** — move a piece (legal moves and captures are highlighted), then place
+  the duck on a highlighted square; the model then plays its full turn.
+- **Move history, captured pieces, a material evaluation bar,** and **per-player timers.**
+- **Board flip, resign,** and **undo** (one half-turn in 2-player; a full human+model round
+  vs a model).
+- **Game-over screen** that names the reason: king capture, fowling, resignation, or the
+  50-move draw.
+- **Save / load / review** — save a finished game to `saved_replays/web/`, then **Load &
+  Review** it from the menu: step Prev / Next / Play through the game with the **duck moving
+  per step** and the current move highlighted. Saved games can be **deleted** from the list
+  (inline two-step confirm).
+- **Keyboard shortcuts:** `F` flip, `R` resign, `←/→` step through past positions, `Esc`
+  close a modal / leave history view.
+
+> The model-*strength* caveat from the desktop app applies here too — the web UI simply lets
+> you load and play any checkpoint.
+
+### 5. Run the tests
 
 ```bash
 pytest
@@ -111,17 +153,17 @@ duck_chess/
 │   ├── Logic/        Pure-Python game engine (rules, bitboards, RL bridge)
 │   ├── UI/           Pygame application (menu, editor, play, rendering)
 │   └── SBThree/      RL training & evaluation pipeline (MaskablePPO)
+├── web_ui/           FastAPI + JS web app: play vs a model or 2-player, save/replay
 ├── tests/            Canonical pytest suite (277 tests)
-├── docs/             Formal Software Test Plan (STP) & Test Design (STD)
 ├── models/duck_ppo/  Saved model checkpoints, organized by stage
-├── logs/             Training logs, CSV progress, TensorBoard events
+├── logs/             Training logs, CSV progress
+├── tensorboard_logs/ TensorBoard event files (git-ignored)
+├── saved_replays/    Training replays; web game saves under saved_replays/web/
 ├── assets/           Piece sprites, sounds, rules text
-├── web_ui/           Standalone browser build of the board (experimental)
+├── requirements.txt  Pinned Python dependencies
 ├── README.md         You are here
 ├── CLAUDE.md         Guidance for AI coding assistants
-├── TESTING.md        How to run and extend the test suite
-├── HEADLESS_TRAINING.md  Running long training jobs in the background
-└── training_log.md   Stage-by-stage training history and results
+└── docs/             Test plan/design (STP/STD), training log, testing & web-UI notes
 ```
 
 ---
@@ -157,7 +199,7 @@ See [the next section](#the-reinforcement-learning-pipeline).
 ## The reinforcement-learning pipeline
 
 The agent learns the game's quirks — especially **defensive duck placement** and the two-phase
-turn — through a staged curriculum. Full results are in [training_log.md](training_log.md);
+turn — through a staged curriculum. Full results are in [training_log.md](docs/training_log.md);
 the short version:
 
 | Concept | How it's modeled |
@@ -182,7 +224,7 @@ python DuckChess_Game/SBThree/train.py train-peter
 python DuckChess_Game/SBThree/train_peter_headless.py --steps 10_000_000
 ```
 
-See [HEADLESS_TRAINING.md](HEADLESS_TRAINING.md) for long, unattended runs (nohup, `pythonw`,
+See [HEADLESS_TRAINING.md](docs/HEADLESS_TRAINING.md) for long, unattended runs (nohup, `pythonw`,
 PowerShell jobs, `screen`), resuming from checkpoints, and TensorBoard monitoring.
 
 ---
@@ -201,7 +243,7 @@ pytest --cov=DuckChess_Game.Logic   # with coverage
 
 A separate, smaller smoke test lives at
 [`DuckChess_Game/Logic/test_logic.py`](DuckChess_Game/Logic/test_logic.py) (26 tests). Full
-details, the headless test setup, and troubleshooting are in [TESTING.md](TESTING.md).
+details, the headless test setup, and troubleshooting are in [TESTING.md](docs/TESTING.md).
 
 ---
 
@@ -225,9 +267,9 @@ details, the headless test setup, and troubleshooting are in [TESTING.md](TESTIN
 |----------|----------------|
 | [README.md](README.md) | Project overview and quick start (this file) |
 | [CLAUDE.md](CLAUDE.md) | Architecture and commands for AI coding assistants |
-| [TESTING.md](TESTING.md) | Running, reading, and extending the test suite |
-| [HEADLESS_TRAINING.md](HEADLESS_TRAINING.md) | Long, unattended training runs |
-| [IMPLEMENTATION_SUMMARY.md](IMPLEMENTATION_SUMMARY.md) | Current build status at a glance |
-| [training_log.md](training_log.md) | Stage-by-stage training history and results |
+| [TESTING.md](docs/TESTING.md) | Running, reading, and extending the test suite |
+| [HEADLESS_TRAINING.md](docs/HEADLESS_TRAINING.md) | Long, unattended training runs |
+| [IMPLEMENTATION_SUMMARY.md](docs/IMPLEMENTATION_SUMMARY.md) | Current build status at a glance |
+| [training_log.md](docs/training_log.md) | Stage-by-stage training history and results |
 | [docs/STP-DUCK-001.md](docs/STP-DUCK-001.md) | Formal Software Test Plan |
 | [docs/STD-DUCK-001.md](docs/STD-DUCK-001.md) | Formal Software Test Design |

@@ -21,8 +21,10 @@ The three rules that make this *not* standard chess — and that the engine enfo
 ## Environment
 
 - **Python 3.12**, with a local `.venv/`.
-- No `requirements.txt` / `pyproject.toml`. Key packages: `pygame`, `numpy`, `torch` (CPU),
-  `stable-baselines3`, `sb3-contrib`, `gymnasium`, `pytest`, `pytest-cov`.
+- Dependencies are pinned in `requirements.txt` (`pip install -r requirements.txt`). Key
+  packages: `pygame`, `numpy`, `torch` (CPU), `stable-baselines3`, `sb3-contrib`, `gymnasium`
+  (engine/RL), plus `fastapi`, `uvicorn`, `pydantic` (web UI), and `pytest` (tests).
+  `pygame` is **required even headless** — the engine imports it via `turn_manager.py`.
 - Primary development platform is **Windows** (PowerShell), but the engine and training are
   cross-platform.
 
@@ -36,6 +38,26 @@ The UI currently loads **no** RL model — `model_path = None` in `DuckChess_Gam
 is intentional (see the comment there): every checkpoint so far either loses to the real Peter
 engine or only wins via a narrow king-rush exploit. To wire a model back in, set `model_path` to a
 checkpoint under `models/duck_ppo/`; it is loaded with `MaskablePPO.load(...)`.
+
+### Web UI
+
+A FastAPI + vanilla-JS app under `web_ui/` (separate from the Pygame UI). Run from the
+**project root**:
+```bash
+python -m uvicorn web_ui.server:app --port 7890   # then open http://127.0.0.1:7890
+# or:  python web_ui/server.py
+```
+`web_ui/server.py` wraps the pygame-free `_HeadlessEngine` and loads MaskablePPO checkpoints on
+CPU. The opponent list is auto-discovered by scanning `models/duck_ppo/**/*.zip`
+(`discover_models()`); models load lazily and are cached. A turn is still two phases, mirrored by
+the API: `/api/move-piece` then `/api/place-duck`, after which the model plays its full turn.
+
+Endpoints: `GET /api/models`; `POST /api/new-game` (`model: null` ⇒ local 2-player),
+`/api/legal-moves`, `/api/move-piece`, `/api/place-duck`, `/api/resign`, `/api/undo-move`,
+`/api/save-game`; `GET /api/saved-games`, `GET /api/load-game/{filename}`; `POST /api/delete-game`.
+Web game saves are JSON under `saved_replays/web/` (created on demand; git-ignored); replays store
+a `{board, duck}` snapshot per half-move so the duck moves during review. It is a local dev server
+with open login — use a real browser.
 
 ### RL training
 
@@ -162,7 +184,9 @@ RL training pipeline using Stable-Baselines3 + sb3-contrib MaskablePPO.
 | `DuckChess_Game/Logic/observation_encoder.py` | Board → 19-channel tensor encoding |
 | `DuckChess_Game/Logic/action_masker.py` | Legal-move mask for the 4096 action space |
 | `DuckChess_Game/Logic/move_pipeline.py` | Atomic two-phase turn orchestration |
-| `DuckChess_Game/UI/main.py` | Game entry point, model loading, game loop |
+| `DuckChess_Game/UI/main.py` | Pygame entry point, model loading, game loop |
+| `web_ui/server.py` | FastAPI web backend — model discovery, sessions, save/load/delete, replay snapshots |
+| `web_ui/index.html` | Web UI frontend (board, model browser, 2-player, save/replay, timers) — all-in-one HTML/CSS/JS |
 | `DuckChess_Game/SBThree/train.py` | Multi-mode training runner (train / train-peter / play / parallel) |
 | `DuckChess_Game/SBThree/train_peter_headless.py` | Headless, step-tracked Peter training |
 | `DuckChess_Game/SBThree/eval_vs_peter.py` | Ground-truth W/L/D vs the Peter engine |
@@ -170,8 +194,10 @@ RL training pipeline using Stable-Baselines3 + sb3-contrib MaskablePPO.
 | `tests/` | Canonical pytest suite (277 tests) |
 | `DuckChess_Game/Logic/test_logic.py` | Legacy smoke test (26 tests) |
 | `models/duck_ppo/` | Saved model checkpoints, by stage |
-| `training_log.md` | Training history and stage-by-stage notes |
-| `logs/` | Training logs, CSV progress, TensorBoard events |
+| `saved_replays/web/` | Web UI game saves (JSON; created on demand, git-ignored) |
+| `docs/training_log.md` | Training history and stage-by-stage notes |
+| `logs/`, `tensorboard_logs/` | Training CSV progress; TensorBoard event files |
+| `requirements.txt` | Pinned Python dependencies |
 
 ## Working in this repo
 

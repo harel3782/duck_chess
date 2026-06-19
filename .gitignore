@@ -29,6 +29,7 @@ Thumbs.db
 
 #	Project logs and trained models
 tensorboard_logs.zip
+tensorboard_logs/
 
 
 #	Weights & Biases local files
