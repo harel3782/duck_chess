@@ -237,6 +237,7 @@
     .mv-n { color: #555; min-width: 18px; }
     .mv-w { color: #d8cba8; flex: 1; }
     .mv-b { color: #888; flex: 1; }
+    .mv .cur { background: rgba(218,165,32,.28); color: #fff; font-weight: 700; border-radius: 3px; padding: 0 3px; }
     .history-empty { color: #555; font-size: 11px; padding: 4px 0; }
 
     /* Board */
@@ -518,6 +519,13 @@
             <div class="mc-sub">Local match against another player.</div></div>
         </div>
       </div>
+
+      <div class="saved-section">
+        <div class="saved-head">Saved Games</div>
+        <div id="saved-list">
+          <div class="saved-empty">No saved games yet — finish a game and save it to see it here.</div>
+        </div>
+      </div>
     </div>
   </div>
 </div>
@@ -711,6 +719,7 @@
     document.getElementById('menu-welcome').textContent = username;
     document.getElementById('menu-avatar').textContent = username[0].toUpperCase();
     showScreen('screen-menu');
+    loadSavedGames();  // populate saved-games list on first menu entry
   }
   function logout(){
     document.getElementById('auth-user').value = '';
@@ -819,20 +828,27 @@
       applyBoardFlip();  // apply flip to DOM
 
       // header / player cards
+      const youWhite = (playerColor==='w');
       if(is2Player){
-        // 2-player: show usernames for both
+        // 2-player: both sides are human — label the cards by colour, not username
         document.getElementById('game-model').textContent = '2 Players';
-        document.getElementById('opp-name').textContent = curUsername === 'Player' ? 'Player 2' : curUsername;
-        document.getElementById('opp-label').textContent = (playerColor==='w'?'Black':'White');
+        const oppWhite = !youWhite;  // playerColor is always white in 2-player
+        document.getElementById('opp-name').textContent = oppWhite ? 'White' : 'Black';
+        document.getElementById('opp-av').textContent = oppWhite ? 'W' : 'B';
+        document.getElementById('opp-av').className = 'avatar ' + (oppWhite ? 'av-white' : 'av-black');
+        document.getElementById('opp-label').textContent = 'To move';
       } else {
         // vs-model
         document.getElementById('game-model').textContent = state.modelLabel;
         document.getElementById('opp-name').textContent = 'Duck PPO';
+        document.getElementById('opp-av').textContent = '🧠';
+        document.getElementById('opp-av').className = 'avatar av-ai';
         document.getElementById('opp-label').textContent =
           state.modelLabel.replace('Duck PPO — ','') + ' · ' + (playerColor==='w'?'Black':'White');
       }
-      const youWhite = (playerColor==='w');
-      document.getElementById('you-name').textContent = youWhite ? curUsername + ' — White' : curUsername + ' — Black';
+      document.getElementById('you-name').textContent = is2Player
+        ? (youWhite ? 'White' : 'Black')
+        : (youWhite ? curUsername + ' — White' : curUsername + ' — Black');
       document.getElementById('you-av').className = 'avatar ' + (youWhite ? 'av-white':'av-black');
       applyState(state);
       // Capture initial game state (before any moves)
@@ -1011,57 +1027,57 @@
 
   async function doPlaceDuck(r,c){
     busy=true; awaitingDuck=false; validDuck=[]; renderBoard();
-    setThinking('Model is thinking…');
+    const vsModel = !is2Player;
+    if(vsModel) setThinking('Model is thinking…');
     try{
       const state = await api('/api/place-duck', {game_id:gameId, duck:[r,c]});
 
-      // Apply player's duck immediately, capture snapshot (don't wait for delays)
-      G.duck = [r, c];
-      moveHistorySnapshots.push({
-        board: JSON.parse(JSON.stringify(G.board)),
-        duck: G.duck ? [...G.duck] : null
-      });
-
-      // Show PLAYER'S duck placement
-      renderBoard();
-      renderTurnBar();
-
-      // Delay for visual animation (doesn't affect snapshot)
-      await new Promise(resolve => setTimeout(resolve, 1000));
-
-      // Apply model's state, capture snapshot immediately (don't wait for delays)
+      // (1) Snapshot the position right after THIS side's full turn (piece+duck),
+      //     before any reply. G is still the move-piece state here, so G.board is
+      //     the just-moved board and [r,c] is the duck that was just placed.
       const playerDuck = [r, c];
-      const modelDuck = state.duck;
-
-      G = state;
-      selectedSq = null;
-      legalTargets = [];
-      awaitingDuck = false;
-      validDuck = [];
-      G.duck = modelDuck;
-
-      // Capture snapshot immediately after model's turn is applied
+      G.duck = playerDuck;
       moveHistorySnapshots.push({
         board: JSON.parse(JSON.stringify(G.board)),
-        duck: modelDuck ? [...modelDuck] : null
+        duck: [...playerDuck]
       });
-
-      // Show model's piece move (with player's duck still visible) + delays for animation
-      G.duck = playerDuck;
       renderBoard();
-      renderCaptured();
-      renderEval();
-
-      // Delay before model's duck
-      await new Promise(resolve => setTimeout(resolve, 800));
-
-      // Show model's duck placement
-      G.duck = modelDuck;
-      renderBoard();
-      renderHistory();
       renderTurnBar();
-      renderPlayers();
-      setThinking('');
+
+      const modelMoved = vsModel && !!state.aiMove;   // server actually ran a model turn
+
+      if(modelMoved){
+        // brief pause so the player sees their own duck land first
+        await new Promise(res => setTimeout(res, 1000));
+
+        const modelDuck = state.duck;
+        G = state;
+        selectedSq=null; legalTargets=[]; awaitingDuck=false; validDuck=[];
+
+        // (2) Snapshot the position after the model's full turn
+        moveHistorySnapshots.push({
+          board: JSON.parse(JSON.stringify(G.board)),
+          duck: modelDuck ? [...modelDuck] : null
+        });
+
+        // show the model's piece move with the player's duck still visible…
+        G.duck = playerDuck;
+        renderBoard(); renderCaptured(); renderEval();
+        await new Promise(res => setTimeout(res, 800));
+        // …then move the duck to the model's square
+        G.duck = modelDuck;
+      } else {
+        // 2-player (no model), or the player's own duck ended the game.
+        // The single snapshot from (1) already captures the new position.
+        G = state;
+        selectedSq=null; legalTargets=[]; awaitingDuck=false; validDuck=[];
+      }
+
+      setThinking('');                  // clear busy/lock/thinking-pulse FIRST…
+      renderBoard(); renderHistory(); renderCaptured(); renderEval();
+      renderTurnBar(); renderPlayers(); // …so the turn bar repaints correctly
+
+      if(state.gameOver){ showGameOver(state); }
 
     }catch(e){
       busy=false;
@@ -1078,7 +1094,15 @@
   /* ════════════ RESIGN ════════════ */
   async function resignGame(){
     if(busy || !G || G.gameOver) return;
-    if(!confirm('Resign this game?')) return;
+    // confirm() is unavailable/throws in some sandboxed browsers (e.g. VS Code's
+    // Simple Browser). Don't let that block the resign — only honour an explicit
+    // Cancel when a real confirm dialog is actually available.
+    let proceed = true;
+    if(typeof window.confirm === 'function'){
+      try { proceed = window.confirm('Resign this game?'); }
+      catch(e){ proceed = true; }   // blocked/threw -> proceed
+    }
+    if(!proceed) return;
     try{
       const state = await api('/api/resign', {game_id:gameId, r:0, c:0});
       applyState(state);
@@ -1091,26 +1115,35 @@
     const rows = (G && G.history) ? G.history : [];
     if(!rows.length){ box.innerHTML='<div class="history-empty">No moves yet.</div>'; return; }
 
-    // Build move pairs (white-black) from halfmoves
+    // Build move pairs (white-black) from halfmoves. Track which halfmove index
+    // landed in each cell so we can highlight the current one during replay.
+    // Snapshot i shows the position AFTER halfmove i-1, so curHalf = replayIndex-1.
+    const curHalf = isReplaying ? (replayIndex - 1) : -1;
     const movePairs = [];
+    const cellHalf = [];
     for(let i = 0; i < rows.length; i++){
       const hm = rows[i];
       const moveText = hm.text || '';
 
       if(hm.color === 'w'){
         movePairs.push({n: Math.floor(i/2) + 1, w: moveText, b: ''});
+        cellHalf.push({w: i, b: null});
       } else {
         if(movePairs.length > 0){
           movePairs[movePairs.length - 1].b = moveText;
+          cellHalf[cellHalf.length - 1].b = i;
         } else {
           movePairs.push({n: 1, w: '…', b: moveText});
+          cellHalf.push({w: null, b: i});
         }
       }
     }
 
-    box.innerHTML = movePairs.map(m=>`
-      <div class="mv"><span class="mv-n">${m.n}.</span><span class="mv-w">${m.w||''}</span><span class="mv-b">${m.b||''}</span></div>
-    `).join('');
+    box.innerHTML = movePairs.map((m, idx)=>{
+      const wCur = cellHalf[idx].w === curHalf ? ' cur' : '';
+      const bCur = cellHalf[idx].b === curHalf ? ' cur' : '';
+      return `<div class="mv"><span class="mv-n">${m.n}.</span><span class="mv-w${wCur}">${m.w||''}</span><span class="mv-b${bCur}">${m.b||''}</span></div>`;
+    }).join('');
     box.scrollTop = box.scrollHeight;
   }
 
@@ -1214,41 +1247,72 @@
     const pcYou=document.getElementById('pc-you'), pcOpp=document.getElementById('pc-opp');
     pcYou.className = 'player-card ' + (youActive ? 'active':'inactive');
     pcOpp.className = 'player-card ' + (youActive ? 'inactive':'active');
+    if(is2Player){
+      // both sides human — show whose turn it is, never the model label
+      document.getElementById('you-label').textContent = youActive ? (awaitingDuck?'Place the duck':'To move') : 'Waiting';
+      document.getElementById('opp-label').textContent = !youActive ? (awaitingDuck?'Place the duck':'To move') : 'Waiting';
+      return;
+    }
     document.getElementById('you-label').textContent = youActive ? (awaitingDuck?'Place the duck':'Your turn') : 'Waiting';
-    document.getElementById('opp-label').textContent = (G? (G.modelLabel.replace('Duck PPO — ','')) : 'Model') + ' · ' + (playerColor==='w'?'Black':'White');
+    document.getElementById('opp-label').textContent = (G && G.modelLabel ? (G.modelLabel.replace('Duck PPO — ','')) : 'Model') + ' · ' + (playerColor==='w'?'Black':'White');
   }
 
   /* ════════════ GAME OVER ════════════ */
   function winnerLabel(state){
     if(state.winner==='draw') return 'Draw';
+    if(is2Player) return (state.winner==='w'?'White':'Black') + ' wins';
     return state.winner===playerColor ? 'You win' : 'Model wins';
+  }
+
+  // Human-readable reason for vs-model (player perspective) and 2-player (by colour).
+  function reasonText(reason, isWin){
+    switch(reason){
+      case 'king_capture': return isWin ? 'You captured the enemy king! 🎉' : 'Your king was captured.';
+      case 'fowling':      return isWin ? 'You had no legal moves — fowled, so you win!' : 'Your opponent was fowled (no legal moves) and wins.';
+      case 'resign':       return isWin ? 'Your opponent resigned.' : 'You resigned.';
+      case 'draw_50move':  return 'Draw by the 50-move rule.';
+      default:             return isWin ? 'You win!' : 'You lost.';
+    }
+  }
+  function reason2Player(reason, winner){
+    const wc = winner==='w' ? 'White' : 'Black';
+    switch(reason){
+      case 'king_capture': return wc + ' captured the enemy king.';
+      case 'fowling':      return wc + ' had no legal moves — fowled, so wins.';
+      case 'resign':       return 'Game resigned.';
+      case 'draw_50move':  return 'Draw by the 50-move rule.';
+      default:             return wc + ' wins.';
+    }
   }
   function showGameOver(state){
     stopGameTimer();  // Stop timer when game ends
 
     const title=document.getElementById('over-title');
     const sub=document.getElementById('over-sub');
-    let resultText = '';
-    let reason = '';
+    const isDraw = state.winner === 'draw';
+    const isWin  = !isDraw && !!state.winner && state.winner === playerColor;
+    let reason;
 
-    if(state.winner==='draw'){
+    if(is2Player){
+      // local game — describe by colour, not "you/opponent"
+      if(isDraw){ title.textContent='Draw'; title.className='over-title draw'; }
+      else { title.textContent = (state.winner==='w'?'White':'Black') + ' Wins'; title.className='over-title win'; }
+      reason = reason2Player(state.reason, state.winner);
+    } else if(isDraw){
       title.textContent='Draw'; title.className='over-title draw';
-      reason='The game ended in a draw (50-move rule).';
-    } else if(state.winner===playerColor){
+      reason = reasonText(state.reason, false);
+    } else if(isWin){
       title.textContent='You Win! 🎉'; title.className='over-title win';
-      reason = state.message==='resign' ? 'Opponent resigned.' : 'You captured the king!';
-    } else if(state.winner && state.winner !== playerColor){
-      title.textContent='You Lost'; title.className='over-title lose';
-      reason = state.message==='resign' ? 'You resigned.' : 'Your king was captured.';
+      reason = reasonText(state.reason, true);
     } else {
-      title.textContent='Game Over'; title.className='over-title draw';
-      reason = 'The game has ended.';
+      title.textContent='You Lost'; title.className='over-title lose';
+      reason = reasonText(state.reason, false);
     }
 
-    // Add material count and times
+    // Material (evalDiff is white-positive) + clocks — neutral phrasing works for all modes.
     const materialDiff = state.evalDiff || 0;
-    const materialText = materialDiff > 0 ? `You were ahead by ${Math.abs(materialDiff)} material.` :
-                         materialDiff < 0 ? `You were behind by ${Math.abs(materialDiff)} material.` :
+    const materialText = materialDiff > 0 ? `White leads by ${Math.abs(materialDiff)} material.` :
+                         materialDiff < 0 ? `Black leads by ${Math.abs(materialDiff)} material.` :
                          'Material was equal.';
 
     const timeText = `Time: ${formatTime(playerTime)} vs ${formatTime(opponentTime)}`;
@@ -1262,14 +1326,27 @@
   /* ════════════ SAVE & LOAD ════════════ */
   let pendingSaveData = null;  // for retry logic
 
+  function defaultSaveLabel(){
+    const opp = is2Player ? '2 Players' : (G && G.modelLabel ? G.modelLabel : 'Duck PPO');
+    const d = new Date();
+    const stamp = `${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+    return `vs ${opp} — ${stamp}`;
+  }
+
   async function saveGameFromModal(){
-    const label = prompt('Name this game:', '');
-    if(label === null) return;  // cancelled
+    // prompt() is unsupported in some embedded/sandboxed browsers (e.g. VS Code's
+    // Simple Browser) where it silently returns null. Don't abort on that — fall
+    // back to an auto-generated name so clicking Save always actually saves.
+    let label;
+    try { label = window.prompt('Name this game:', defaultSaveLabel()); }
+    catch(e){ label = null; }
+    if(label === null) label = defaultSaveLabel();   // cancelled or blocked
+    label = (label.trim() || defaultSaveLabel());
 
     const saveBtn = document.querySelector('.over-actions button:first-child');
     if(!saveBtn) return;
 
-    pendingSaveData = {game_id: gameId, username: curUsername, label: label || '(Unnamed)'};
+    pendingSaveData = {game_id: gameId, username: curUsername, label: label};
 
     // Show saving state
     const originalText = saveBtn.textContent;
@@ -1384,9 +1461,12 @@
     document.getElementById('you-name').textContent = curUsername + ' — ' + (playerColor==='w'?'White':'Black');
     document.getElementById('you-av').className = 'avatar ' + (playerColor==='w'?'av-white':'av-black');
 
-    // Show initial board state
-    applyReplaySnapshot(0);
+    // Build the replay controls FIRST so #replay-move-num exists before
+    // applyReplaySnapshot()/updateReplayUI() try to read it, then render the
+    // first position. (Doing it the other way throws a TypeError on the null
+    // element, aborting startReplay so the replay never starts.)
     renderReplayControls();
+    applyReplaySnapshot(0);
   }
 
   let replayIndex = 0;
@@ -1415,8 +1495,10 @@
   let replayTimer = null;
 
   function updateReplayUI(){
+    const el = document.getElementById('replay-move-num');
+    if(!el) return;   // controls not built yet — never throw and abort the replay
     const snapshotCount = (G && G.boardSnapshots) ? G.boardSnapshots.length : 0;
-    document.getElementById('replay-move-num').textContent = `${replayIndex + 1}/${snapshotCount}`;
+    el.textContent = `${replayIndex + 1}/${snapshotCount}`;
   }
 
   function replayPrev(){
@@ -1642,8 +1724,15 @@
   });
 
   /* ════════════ INIT ════════════ */
-  // Hide splash after 1.5s (fade animation takes 2s total)
-  setTimeout(()=>{ document.getElementById('splash').style.display = 'none'; }, 1500);
+  // Hide the splash only AFTER its 2s fade-out completes, so it never vanishes
+  // mid-fade. animationend is the primary signal; a 2200ms timeout is a fallback.
+  (function(){
+    const splash = document.getElementById('splash');
+    let hidden = false;
+    const hide = ()=>{ if(hidden) return; hidden = true; splash.style.display = 'none'; };
+    splash.addEventListener('animationend', hide);
+    setTimeout(hide, 2200);
+  })();
 
   loadModels();
   document.getElementById('auth-pass').addEventListener('keydown', e=>{ if(e.key==='Enter') submitAuth(); });
