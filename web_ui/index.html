@@ -690,7 +690,6 @@
     const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show');
     clearTimeout(toastTimer); toastTimer=setTimeout(()=>t.classList.remove('show'), 2200);
   }
-  function notYet(name){ toast(`${name} isn't available yet.`); }
 
   /* ════════════ SCREEN NAVIGATION ════════════ */
   function showScreen(id){
@@ -797,7 +796,10 @@
       const r = await fetch('/api/models'); const j = await r.json();
       const sel = document.getElementById('menu-model');
       if(!j.models || !j.models.length){ sel.innerHTML='<option value="">(no models found)</option>'; return; }
-      sel.innerHTML = j.models.map((m,i)=>`<option value="${m.id}" ${i===0?'selected':''}>${m.label}</option>`).join('');
+      // Pre-select the server's configured default opponent (strongest stable model),
+      // not just the first item in the list.
+      const def = j.default || j.models[0].id;
+      sel.innerHTML = j.models.map(m=>`<option value="${m.id}" ${m.id===def?'selected':''}>${m.label}</option>`).join('');
     }catch(e){
       document.getElementById('menu-model').innerHTML='<option value="">(server offline)</option>';
     }
@@ -1329,7 +1331,6 @@
     document.getElementById('modal-over').classList.add('active');
     renderTurnBar();
   }
-  function openHistory(){ toast('Model Game History — coming in Phase 3.'); }
 
   /* ════════════ SAVE & LOAD ════════════ */
   let pendingSaveData = null;  // for retry logic

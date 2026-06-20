@@ -117,18 +117,42 @@ def get_model_choices(refresh: bool = False) -> list[dict]:
     return _discovered
 
 
+# Default opponent: the strongest *stable* league checkpoint, NOT the experimental
+# v2 group (which sorts first). The first preference that actually exists on disk
+# wins; if none are present we fall back to the first discovered model. This drives
+# both the dropdown's pre-selected option and get_model()'s fallback for unknown ids.
+DEFAULT_MODEL_PREFERENCES = (
+    "stage_13_stage13_final",
+    "strong_strong_final",
+    "stage_12_stage12_final_master",
+)
+
+
+def get_default_choice() -> dict | None:
+    """The default opponent choice dict (preferred stable model, else first discovered)."""
+    choices = get_model_choices()
+    if not choices:
+        return None
+    by_id = {m["id"]: m for m in choices}
+    for pref in DEFAULT_MODEL_PREFERENCES:
+        if pref in by_id:
+            return by_id[pref]
+    return choices[0]
+
+
 _model_cache: dict[str, MaskablePPO] = {}
 _model_lock = threading.Lock()
 
 
 def get_model(model_id: str):
-    """Return (model, choice_dict), loading + caching lazily. Falls back to first."""
+    """Return (model, choice_dict), loading + caching lazily. Unknown ids fall back
+    to the configured default model (get_default_choice)."""
     choices = get_model_choices()
     choice = next((m for m in choices if m["id"] == model_id), None)
     if choice is None:
-        if not choices:
+        choice = get_default_choice()
+        if choice is None:
             raise HTTPException(500, "No PPO model files found under models/duck_ppo/.")
-        choice = choices[0]
     with _model_lock:
         if choice["id"] not in _model_cache:
             _model_cache[choice["id"]] = MaskablePPO.load(str(choice["path"]), device="cpu")
@@ -420,7 +444,11 @@ def _human_to_move(sess: Session) -> bool:
 @app.get("/api/models")
 def list_models(refresh: bool = False):
     choices = get_model_choices(refresh=refresh)
-    return {"models": [{"id": m["id"], "label": m["label"], "group": m["group"]} for m in choices]}
+    default = get_default_choice()
+    return {
+        "models": [{"id": m["id"], "label": m["label"], "group": m["group"]} for m in choices],
+        "default": default["id"] if default else None,
+    }
 
 
 @app.post("/api/new-game")

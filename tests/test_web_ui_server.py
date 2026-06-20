@@ -81,13 +81,21 @@ def test_new_game_2player():
 
 
 def test_new_game_vs_ai_white():
-    """Test creating vs-AI game as white."""
-    response = client.post("/api/new-game", json={"color": "white", "model": "stage11"})
+    """Test creating vs-AI game as white using the server's configured default model.
+
+    Robust against future model-list changes: we ask /api/models for the current
+    default and assert the new game reports that model's label.
+    """
+    models_resp = client.get("/api/models").json()
+    default_id = models_resp["default"]
+    labels = {m["id"]: m["label"] for m in models_resp["models"]}
+
+    response = client.post("/api/new-game", json={"color": "white", "model": default_id})
     assert response.status_code == 200
     data = response.json()
 
     assert data["playerColor"] == "w"
-    assert "stage 11" in data["modelLabel"].lower()
+    assert data["modelLabel"] == labels[default_id]
     assert data["gameId"] in SESSIONS
 
 
@@ -499,13 +507,18 @@ def test_2player_session_has_no_model():
 
 
 def test_ai_session_has_model_id():
-    """Test AI sessions have a model_id."""
-    resp = client.post("/api/new-game", json={"color": "white", "model": "stage11"})
+    """Test AI sessions record the requested model_id.
+
+    Uses the server's configured default model id so this stays correct if the
+    model list / default changes later.
+    """
+    default_id = client.get("/api/models").json()["default"]
+    resp = client.post("/api/new-game", json={"color": "white", "model": default_id})
     game_id = resp.json()["gameId"]
 
     session = SESSIONS[game_id]
     assert session.model_id is not None
-    assert session.model_id == "stage11"
+    assert session.model_id == default_id
 
 
 # ─────────────────────────────────────────────────────────────────────────
