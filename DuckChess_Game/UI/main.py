@@ -44,9 +44,9 @@ class DuckChess(GameLogicMixin, RenderingMixin, InputHandlerMixin, AssetManagerM
 		DIFFICULTY = "hard"                       # "easy" | "medium" | "hard"
 		_MCTS_SIMS = {"easy": 30, "medium": 100, "hard": 300}
 		model_path = next((p for p in (
-			"models/duck_ppo/exit2/exit_best.zip",
-			"models/duck_ppo/v2/v2_value.zip",
-			"models/duck_ppo/v2/v2_final.zip",
+			"models/duck_ppo/ranked/1_champion.zip",
+			"models/duck_ppo/ranked/2_allrounder.zip",
+			"models/duck_ppo/ranked/4_classic.zip",
 		) if os.path.exists(p)), None)
 		if model_path and os.path.exists(model_path):
 			print(f"[+] Loading RL Model for AI moves: {model_path}")

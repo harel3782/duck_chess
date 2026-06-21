@@ -30,14 +30,10 @@ Thumbs.db
 #	Project logs and trained models
 tensorboard_logs.zip
 
-# Trained models: track only the key deliverables; ignore every other checkpoint
+# Trained models: track only the key deliverables in models/duck_ppo/ranked/
+# Naming: 1_champion (best) -> 5_safe (weakest), all with confirmed Peter scores.
 models/duck_ppo/**/*.zip
-!models/duck_ppo/v2/v2_value.zip
-!models/duck_ppo/v2/v2_final.zip
-!models/duck_ppo/strong/strong_final.zip
-!models/duck_ppo/antiexploit_v2/ax_final.zip
-!models/duck_ppo/exit/exit_best.zip
-!models/duck_ppo/exit2/exit_best.zip
+!models/duck_ppo/ranked/*.zip
 
 # Training run artifacts (regenerable)
 logs/

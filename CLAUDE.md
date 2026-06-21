@@ -50,17 +50,18 @@ below use the venv interpreter.
 python DuckChess_Game/UI/main.py
 ```
 
-The desktop UI **does** load an RL model now (this changed — older docs said `model_path = None`).
-In `DuckChess_Game/UI/main.py`:
+The desktop UI loads the best available ranked model (tries 1_champion → 2_allrounder →
+4_classic). In `DuckChess_Game/UI/main.py`:
 
 ```python
-model_path = "models/duck_ppo/v2/v2_value.zip"   # set to None -> falls back to alpha-beta ai.py
-USE_MCTS   = True                                 # set to False -> raw policy, no search
-self.rl_searcher = DuckMCTS(self.rl_model, sims=200, c_puct=1.5)
+model_path = "models/duck_ppo/ranked/1_champion.zip"  # best model (d1 1.00, d2 1.00)
+USE_MCTS   = True                                      # set to False -> raw policy, no search
+DIFFICULTY = "hard"   # "easy" | "medium" | "hard" -> MCTS sims 30 / 100 / 300
+self.rl_searcher = DuckMCTS(self.rl_model, sims=300, c_puct=1.5)
 ```
 
-So the in-game AI = the `v2_value` policy driven by `DuckMCTS` (200 sims). Fallback chain:
-`model_path=None` → `ai.py` alpha-beta; `USE_MCTS=False` → raw policy.
+So the in-game AI = `1_champion` policy driven by `DuckMCTS` (300 sims at hard). Fallback
+chain: `model_path=None` -> `ai.py` alpha-beta; `USE_MCTS=False` -> raw policy.
 
 ### Web UI (FastAPI)
 
@@ -211,18 +212,20 @@ RL training pipeline using Stable-Baselines3 + sb3-contrib MaskablePPO.
 
 ## Models — current deliverables
 
-Checkpoints live under `models/duck_ppo/`, organized by stage/run:
+Key models live in `models/duck_ppo/ranked/`, named best→worst (confirmed with MCTS
+sims=200, 20 games/cell vs Peter). **Both UIs load the highest-ranked model present.**
 
-| Path | What it is |
-|------|------------|
-| `v2/v2_final.zip` | The general v2 policy — beats Peter d2 ~90–95% with no king-rush exploit (Elo ~1025). |
-| `v2/v2_value.zip` | Same policy + a distilled value head (sign-acc ~0.98). The search backbone; **wired into both UIs**. |
-| `antiexploit_v2/ax_latest.zip` (+ `ax_v1..v3`) | Checkpoints from the current corrective run. (`ax_final.zip` and an `exit/exit_best.zip` are produced only when the full build completes.) |
-| `real/`, `strong/`, `stage 1`…`stage 14`, `peter_local/`, `antiexploit/` | Earlier curriculum and corrective runs (historical). |
-| `baseline_eval_snapshot.zip` | Frozen baseline used for v2 comparisons. |
+| Path | Score vs Peter d1 | Score vs Peter d2 | Notes |
+|------|:-----------------:|:-----------------:|-------|
+| `ranked/1_champion.zip` | **1.00** (20/0/0) | **1.00** (20/0/0) | ExIt iter1 from strong base — **current best, wired into UI** |
+| `ranked/2_allrounder.zip` | 0.80 (12/3/0) | 0.67 (10/5/0) | v2 policy + value head — balanced, previous default |
+| `ranked/3_aggressive.zip` | 0.46 (glass cannon) | 1.00 (20/0/0) | strong_final — perfect vs d2, weak to king-rush |
+| `ranked/4_classic.zip` | ~0.27 (drawish) | ~0.55 | Original v2 policy, no value head |
+| `ranked/5_safe.zip` | weak | weak | antiexploit_v2 corrective run — exploit-free but most passive |
 
-The standing wall: every model so far beats Peter **depth-2** but scores **0 vs Peter depth-3**.
-Cracking depth-3 is the goal of the ExIt loop (PLAN_V2.md Step 7b).
+d1 = Peter depth-1 (aggressive king-rush, mirrors how humans play).
+d2 = Peter depth-2 (proper positional play).
+d3 wall: every model scores 0 vs Peter depth-3 — that remains the open challenge.
 
 ## Key files
 
