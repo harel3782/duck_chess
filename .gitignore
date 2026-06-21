@@ -37,6 +37,7 @@ models/duck_ppo/**/*.zip
 !models/duck_ppo/strong/strong_final.zip
 !models/duck_ppo/antiexploit_v2/ax_final.zip
 !models/duck_ppo/exit/exit_best.zip
+!models/duck_ppo/exit2/exit_best.zip
 
 # Training run artifacts (regenerable)
 logs/
