@@ -101,9 +101,10 @@ Web (FastAPI, then open <http://localhost:7890>):
 python -m uvicorn web_ui.server:app --host 127.0.0.1 --port 7890
 ```
 
-> **AI opponent:** the desktop UI loads `models/duck_ppo/v2/v2_value.zip` and plays it with
-> `DuckMCTS` (200 simulations). That combination beats the local Peter engine at depth-2 ~100%
-> *without* the old "king-rush" exploit. To revert to the simple alpha-beta AI, set
+> **AI opponent:** the desktop UI loads the best available ranked model
+> (`models/duck_ppo/ranked/1_champion.zip`, trying 1_champion → 2_allrounder → 4_classic) and plays
+> it with `DuckMCTS` (300 simulations at "hard"). That combination beats the local Peter engine at
+> depth-2 ~100% *without* the old "king-rush" exploit. To revert to the simple alpha-beta AI, set
 > `model_path = None` in [`main.py`](DuckChess_Game/UI/main.py); to disable search and use the raw
 > policy, set `USE_MCTS = False`. (The web UI lets you pick any checkpoint from a dropdown.)
 
