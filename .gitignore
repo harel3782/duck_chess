@@ -7,6 +7,9 @@ build/
 
 # ML Data - DO NOT TRACK IN GIT
 *.pkl
+# Trained model checkpoints — large (~1.3 GB); deploy out-of-band, not via git
+models/duck_ppo/*.zip
+models/duck_ppo/**/*.zip
 
 # Ignored text files
 duck_chess_full_code.txt

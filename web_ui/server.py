@@ -757,6 +757,61 @@ app.mount("/assets", StaticFiles(directory=str(ASSETS_DIR)), name="assets")
 app.mount("/", StaticFiles(directory=str(WEB_DIR), html=True), name="static")
 
 
+def ensure_models_downloaded() -> None:
+    """Fetch model checkpoints at boot when the models dir is empty.
+
+    The ~1.3 GB MaskablePPO checkpoints are not stored in git, so a fresh
+    container starts with an empty models/duck_ppo/. If MODEL_ZIP_URL is set
+    (a direct link to a zip of the checkpoints), download and extract it into
+    models/duck_ppo/ so vs-model play works; the zip is expected to contain the
+    checkpoint files/folders directly. With no URL set we warn and continue —
+    local 2-player play still works without any model. A failed download never
+    crashes boot.
+    """
+    import os
+    import zipfile
+
+    import requests
+
+    if MODELS_DIR.exists() and any(MODELS_DIR.rglob("*.zip")):
+        return  # models already present — nothing to do
+
+    url = os.environ.get("MODEL_ZIP_URL")
+    if not url:
+        print("[Duck Chess] WARNING: No models found and MODEL_ZIP_URL not set — "
+              "vs-model play will be unavailable.")
+        return
+
+    MODELS_DIR.mkdir(parents=True, exist_ok=True)
+    zip_path = MODELS_DIR.parent / "_models_download.zip"
+    print("[Duck Chess] No models found — downloading from MODEL_ZIP_URL …")
+    try:
+        with requests.get(url, stream=True, timeout=300) as resp:
+            resp.raise_for_status()
+            total = int(resp.headers.get("content-length", 0))
+            got = mark = 0
+            with open(zip_path, "wb") as fh:
+                for chunk in resp.iter_content(chunk_size=1 << 20):   # 1 MB
+                    fh.write(chunk)
+                    got += len(chunk)
+                    if total and got >= mark:                         # log ~every 10%
+                        print(f"[Duck Chess]   {got/1e6:.0f}/{total/1e6:.0f} MB "
+                              f"({100 * got // total}%)", flush=True)
+                        mark += max(total // 10, 1)
+        with zipfile.ZipFile(zip_path) as zf:
+            zf.extractall(MODELS_DIR)
+        n = len(list(MODELS_DIR.rglob("*.zip")))
+        print(f"[Duck Chess] Models ready — extracted {n} checkpoint(s) into {MODELS_DIR}.")
+    except Exception as exc:                                          # never crash boot over a fetch
+        print(f"[Duck Chess] WARNING: model download failed ({exc}) — "
+              "vs-model play will be unavailable.")
+    finally:
+        try:
+            zip_path.unlink(missing_ok=True)
+        except OSError:
+            pass
+
+
 if __name__ == "__main__":
     import os
 
@@ -781,5 +836,8 @@ if __name__ == "__main__":
 
     import uvicorn
     print(f"[Duck Chess] python: {sys.executable}")
+    ensure_models_downloaded()
     print(f"[Duck Chess] models available: {[m['id'] for m in get_model_choices()]}")
-    uvicorn.run(app, host="127.0.0.1", port=7890)
+    host = os.environ.get("HOST", "0.0.0.0")
+    port = int(os.environ.get("PORT", "7890"))
+    uvicorn.run(app, host=host, port=port)
