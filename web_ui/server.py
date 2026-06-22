@@ -740,6 +740,26 @@ app.mount("/", StaticFiles(directory=str(WEB_DIR), html=True), name="static")
 
 
 if __name__ == "__main__":
+    import os
+
+    # The model checkpoints were saved with this project's .venv (Python 3.12 /
+    # torch 2.11). Loading them under a different interpreter — notably the system
+    # Python 3.13 + torch 2.12 — hard-crashes (segfaults, exit 139) the moment a
+    # game loads a model, with no Python traceback. If we were launched with the
+    # wrong python, transparently re-exec under the project's .venv so that a bare
+    # `python web_ui/server.py` just works. Set DUCK_NO_REEXEC=1 to opt out.
+    _venv_py = ROOT / ".venv" / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
+    if (
+        os.environ.get("DUCK_NO_REEXEC") != "1"
+        and _venv_py.exists()
+        and Path(sys.executable).resolve() != _venv_py.resolve()
+    ):
+        print(f"[Duck Chess] wrong interpreter ({sys.executable});\n"
+              f"             re-launching under the project venv: {_venv_py}")
+        os.environ["DUCK_NO_REEXEC"] = "1"          # guard against any re-exec loop
+        os.execv(str(_venv_py), [str(_venv_py), str(Path(__file__).resolve()), *sys.argv[1:]])
+
     import uvicorn
+    print(f"[Duck Chess] python: {sys.executable}")
     print(f"[Duck Chess] models available: {[m['id'] for m in get_model_choices()]}")
     uvicorn.run(app, host="127.0.0.1", port=7890)
