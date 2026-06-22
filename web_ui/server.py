@@ -47,6 +47,8 @@ MODELS_DIR = ROOT / "models" / "duck_ppo"
 # Web game saves live in their own subfolder of saved_replays/ so they never
 # collide with the training-replay pickles (saved under numbered stage dirs).
 SAVED_GAMES_DIR = ROOT / "saved_replays" / "web"
+# Shared art (piece sprites, duck, sounds), a sibling of web_ui/. Served at /assets.
+ASSETS_DIR = ROOT / "assets"
 
 DUCK = "\U0001F986"  # 🦆
 FILES = "abcdefgh"
@@ -746,6 +748,10 @@ def delete_game(req: DeleteGameReq):
         raise HTTPException(500, f"Could not delete game: {ex}")
     return {"ok": True, "filename": Path(req.filename).name}
 
+
+# Serve the shared assets/ dir (piece sprites, duck, sounds) at /assets. Must be
+# mounted BEFORE the catch-all "/" mount below, or "/" would swallow these paths.
+app.mount("/assets", StaticFiles(directory=str(ASSETS_DIR)), name="assets")
 
 # Static files LAST so /api/* routes win.  html=True -> "/" serves index.html.
 app.mount("/", StaticFiles(directory=str(WEB_DIR), html=True), name="static")
