@@ -8,7 +8,10 @@ __pycache__
 wandb
 tensorboard_logs
 saved_replays
-models/duck_ppo
+models/duck_ppo/**/*.zip
+!models/duck_ppo/stage 14/stage14_recovery_v274.zip
+!models/duck_ppo/strong/strong_final.zip
+!models/duck_ppo/v2/v2_value.zip
 tests
 playwright_game
 assets/sounds
