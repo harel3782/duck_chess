@@ -837,6 +837,9 @@ if __name__ == "__main__":
     import uvicorn
     print(f"[Duck Chess] python: {sys.executable}")
     ensure_models_downloaded()
+    print(f"[Duck Chess] MODELS_DIR = {MODELS_DIR}")
+    print(f"[Duck Chess] MODELS_DIR exists = {MODELS_DIR.exists()}")
+    print(f"[Duck Chess] MODELS_DIR contents = {list(MODELS_DIR.iterdir()) if MODELS_DIR.exists() else 'N/A'}")
     print(f"[Duck Chess] models available: {[m['id'] for m in get_model_choices()]}")
     host = os.environ.get("HOST", "0.0.0.0")
     port = int(os.environ.get("PORT", "7890"))
