@@ -1,4 +1,4 @@
-import pygame
+import time
 from DuckChess_Game.Logic.constants import *
 from DuckChess_Game.Logic.notation_helper import NotationHelper
 from DuckChess_Game.Logic.move_executor import MoveExecutor
@@ -162,13 +162,13 @@ class TurnManagerMixin:
 		is_ai_next = (self.game_mode == 'white_ai' and self.turn == 'b') or \
 					 (self.game_mode == 'black_ai' and self.turn == 'w')
 		if is_ai_next and not self.game_over:
-			self.waiting_for_ai, self.ai_wait_start = True, pygame.time.get_ticks()
+			self.waiting_for_ai, self.ai_wait_start = True, int(time.monotonic() * 1000)
 		else: self.waiting_for_ai = False
 
 	def ai_turn(self):
 		"""AI logic using either the RL model or basic AI."""
 		if self.view_index != len(self.history) - 1 or getattr(self, 'game_over', False) or not getattr(self, 'waiting_for_ai', False): return
-		if pygame.time.get_ticks() - getattr(self, 'ai_wait_start', 0) < AI_MOVE_DELAY: return
+		if int(time.monotonic() * 1000) - getattr(self, 'ai_wait_start', 0) < AI_MOVE_DELAY: return
 
 		# IF WE HAVE AN MCTS SEARCHER (strongest: policy priors + distilled value)
 		if getattr(self, 'rl_searcher', None) is not None:
@@ -190,7 +190,7 @@ class TurnManagerMixin:
 				else:
 					target = self.ai.get_duck_move(self.board, getattr(self, 'duck_pos', (-1, -1)), getattr(self, 'prev_duck_pos', (-1, -1)))
 					if target: self.place_duck(target, animated=True)
-			self.ai_wait_start = pygame.time.get_ticks()
+			self.ai_wait_start = int(time.monotonic() * 1000)
 			return
 
 		# IF WE HAVE AN RL MODEL LOADED
@@ -213,8 +213,8 @@ class TurnManagerMixin:
 			elif self.phase == 'move_duck':
 				_, end = self._decode_move(action)
 				self.place_duck(end, animated=True)
-			
-			self.ai_wait_start = pygame.time.get_ticks()
+
+			self.ai_wait_start = int(time.monotonic() * 1000)
 			return
 
 		# FALLBACK TO BASIC AI (The old logic)
@@ -222,7 +222,7 @@ class TurnManagerMixin:
 			move = self.ai.get_piece_move(self.board, self.turn, self.get_piece_legal_moves)
 			if move:
 				self.execute_move(move[0], move[1], animated=True)
-				self.ai_wait_start = pygame.time.get_ticks() 
+				self.ai_wait_start = int(time.monotonic() * 1000)
 			else:
 				self.game_over, self.winner = True, ('b' if self.turn == 'w' else 'w')
 				self.waiting_for_ai = False

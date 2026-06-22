@@ -120,9 +120,6 @@ pytest tests/test_rules_checker.py -v
 
 # With coverage
 pytest --cov=DuckChess_Game.Logic --cov-report=html
-
-# Legacy smoke test (26 tests), outside the default testpaths
-pytest DuckChess_Game/Logic/test_logic.py -v
 ```
 
 ### Monitoring training
@@ -192,7 +189,6 @@ RL training pipeline using Stable-Baselines3 + sb3-contrib MaskablePPO.
 | `DuckChess_Game/SBThree/eval_vs_peter.py` | Ground-truth W/L/D vs the Peter engine |
 | `DuckChess_Game/SBThree/peter_local.py` | Local Peter engine opponent integration |
 | `tests/` | Canonical pytest suite (277 tests) |
-| `DuckChess_Game/Logic/test_logic.py` | Legacy smoke test (26 tests) |
 | `models/duck_ppo/` | Saved model checkpoints, by stage |
 | `saved_replays/web/` | Web UI game saves (JSON; created on demand, git-ignored) |
 | `docs/training_log.md` | Training history and stage-by-stage notes |

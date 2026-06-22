@@ -175,6 +175,7 @@ class Session:
 
 
 SESSIONS: dict[str, Session] = {}
+MAX_SESSIONS = 100        # cap memory: oldest sessions are evicted past this (local dev server)
 
 
 # ---------------------------------------------------------------------------
@@ -453,6 +454,8 @@ def list_models(refresh: bool = False):
 
 @app.post("/api/new-game")
 def new_game(req: NewGameReq):
+    if req.color not in ("white", "black"):
+        raise HTTPException(400, "color must be 'white' or 'black'.")
     player_color = "w" if req.color == "white" else "b"
     engine = _HeadlessEngine()
 
@@ -464,6 +467,8 @@ def new_game(req: NewGameReq):
 
     gid = uuid.uuid4().hex[:12]
     SESSIONS[gid] = sess
+    while len(SESSIONS) > MAX_SESSIONS:           # evict oldest (insertion order)
+        SESSIONS.pop(next(iter(SESSIONS)))
 
     ai_move = None
     with sess.lock:
@@ -478,6 +483,8 @@ def new_game(req: NewGameReq):
 
 @app.post("/api/legal-moves")
 def legal_moves(req: SelectReq):
+    if not (0 <= req.r <= 7 and 0 <= req.c <= 7):
+        raise HTTPException(400, "Square out of bounds.")
     sess = _get_session(req.game_id)
     e = sess.engine
     with sess.lock:
@@ -502,6 +509,8 @@ def move_piece(req: MovePieceReq):
         mover = e.turn                         # actual side to move (== player_color in vs-model)
         frm = (int(req.frm[0]), int(req.frm[1]))
         to = (int(req.to[0]), int(req.to[1]))
+        if not (0 <= frm[0] <= 7 and 0 <= frm[1] <= 7 and 0 <= to[0] <= 7 and 0 <= to[1] <= 7):
+            raise HTTPException(400, "Square out of bounds.")
         p = e.board[frm[0]][frm[1]]
         if p is None or p.color != mover:
             raise HTTPException(400, "No piece of yours on the start square.")
@@ -569,8 +578,11 @@ def resign(req: SelectReq):
     sess = _get_session(req.game_id)
     e = sess.engine
     with sess.lock:
+        if e.game_over:
+            raise HTTPException(400, "Game is already over.")
+        resigning_color = e.turn                  # the side to move is the one resigning
         e.game_over = True
-        e.winner = sess.model_color
+        e.winner = "b" if resigning_color == "w" else "w"
         state = serialize(sess, message="resign", reason="resign")
     return state
 
@@ -745,19 +757,21 @@ if __name__ == "__main__":
     # The model checkpoints were saved with this project's .venv (Python 3.12 /
     # torch 2.11). Loading them under a different interpreter — notably the system
     # Python 3.13 + torch 2.12 — hard-crashes (segfaults, exit 139) the moment a
-    # game loads a model, with no Python traceback. If we were launched with the
-    # wrong python, transparently re-exec under the project's .venv so that a bare
-    # `python web_ui/server.py` just works. Set DUCK_NO_REEXEC=1 to opt out.
+    # game loads a model, with no Python traceback. Refuse to start under the wrong
+    # interpreter with a clear message instead of crashing later. Set DUCK_NO_REEXEC=1
+    # to override the check (e.g. you know your interpreter is ABI-compatible).
     _venv_py = ROOT / ".venv" / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
     if (
         os.environ.get("DUCK_NO_REEXEC") != "1"
         and _venv_py.exists()
         and Path(sys.executable).resolve() != _venv_py.resolve()
     ):
-        print(f"[Duck Chess] wrong interpreter ({sys.executable});\n"
-              f"             re-launching under the project venv: {_venv_py}")
-        os.environ["DUCK_NO_REEXEC"] = "1"          # guard against any re-exec loop
-        os.execv(str(_venv_py), [str(_venv_py), str(Path(__file__).resolve()), *sys.argv[1:]])
+        print(f"[Duck Chess] Wrong Python interpreter: {sys.executable}")
+        print(f"[Duck Chess] Models were saved with the project's .venv and crash "
+              f"(segfault) when loaded under a different Python/torch.")
+        print(f"[Duck Chess] Run with .venv python: .venv/Scripts/python web_ui/server.py")
+        print(f"[Duck Chess] (set DUCK_NO_REEXEC=1 to skip this check)")
+        sys.exit(1)
 
     import uvicorn
     print(f"[Duck Chess] python: {sys.executable}")

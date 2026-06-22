@@ -1,7 +1,7 @@
 import pickle
 import json
 import copy
-import pygame
+import time
 import os
 from DuckChess_Game.Logic.bitboard_manager import BitboardManager
 
@@ -66,7 +66,7 @@ class HistoryManagerMixin:
 
 		if getattr(self, 'game_mode', None) == 'black_ai':
 			self.waiting_for_ai = True
-			self.ai_wait_start = pygame.time.get_ticks()
+			self.ai_wait_start = int(time.monotonic() * 1000)
 		else:
 			self.waiting_for_ai = False
 
