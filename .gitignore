@@ -34,6 +34,17 @@ Thumbs.db
 tensorboard_logs.zip
 tensorboard_logs/
 
+# Trained models: track only the key deliverables in models/duck_ppo/ranked/
+# Naming: 1_champion (best) -> 5_safe (weakest), all with confirmed Peter scores.
+models/duck_ppo/**/*.zip
+!models/duck_ppo/ranked/*.zip
+
+# Training run artifacts (regenerable)
+logs/
+tensorboard_logs/
+models/duck_ppo/**/data/
+models/duck_ppo/**/exit_progress.csv
+
 
 #	Weights & Biases local files
 wandb/

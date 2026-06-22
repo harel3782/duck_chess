@@ -130,6 +130,68 @@ class DuckMCTS:
         duck_a = int(child.actions[int(np.argmax(child.N))])
         return piece_a, duck_a
 
+    def choose_turn_with_targets(self, engine, temperature: float = 1.0, rng=None):
+        """Run MCTS and return (piece_a, duck_a, targets) for Expert Iteration.
+
+        `targets` is a list of (obs, action_idxs, visit_probs, to_move) — one
+        entry for the piece node and one for the chosen duck node. visit_probs is
+        the normalized root visit-count distribution: the AlphaZero policy target
+        π that train_exit regresses the policy head onto. Recording the DUCK node
+        too is what teaches stronger duck placement (the second exploit).
+
+        Moves are SAMPLED from π at `temperature` (→0 = argmax) so self-play
+        explores instead of collapsing to one line — the antidote to the
+        repetitive-opening exploit at the search level. `to_move` carries the
+        side so the outcome label z gets the right sign per position.
+        """
+        assert engine.phase == "move_piece"
+        if rng is None:
+            rng = np.random.default_rng()
+        self.nodes = 0
+
+        # Forced winning capture — degenerate but valuable target: it teaches the
+        # policy to take an enemy king, which it chronically under-weights.
+        masks0 = engine.action_masks()
+        for a in np.where(masks0)[0]:
+            if self._captures_king(engine, int(a)):
+                obs = engine._get_obs().copy()
+                return int(a), None, [
+                    (obs, [int(a)], np.array([1.0], dtype=np.float32), engine.turn)
+                ]
+
+        root = _Node(clone_engine(engine))
+        self._expand(root, add_noise=self.dirichlet > 0)
+        if not root.actions:
+            return None, None, []
+        for _ in range(self.sims):
+            self._simulate(root)
+
+        targets = []
+        piece_pi = root.N / max(1.0, root.N.sum())
+        targets.append((root.engine._get_obs().copy(), list(root.actions),
+                        piece_pi.astype(np.float32), root.to_move))
+
+        piece_a = int(root.actions[self._sample_visit(root.N, temperature, rng)])
+        child = root.children.get(piece_a)
+        if child is None or child.terminal or not child.actions:
+            return piece_a, None, targets
+
+        duck_pi = child.N / max(1.0, child.N.sum())
+        targets.append((child.engine._get_obs().copy(), list(child.actions),
+                        duck_pi.astype(np.float32), child.to_move))
+        duck_a = int(child.actions[self._sample_visit(child.N, temperature, rng)])
+        return piece_a, duck_a, targets
+
+    @staticmethod
+    def _sample_visit(counts, temperature: float, rng) -> int:
+        """Index sampled from visit counts at `temperature` (≤0 → argmax)."""
+        counts = np.asarray(counts, dtype=np.float64)
+        if temperature <= 1e-3 or counts.sum() <= 0:
+            return int(np.argmax(counts))
+        p = counts ** (1.0 / temperature)
+        p /= p.sum()
+        return int(rng.choice(len(counts), p=p))
+
     # ---- search core -------------------------------------------------- #
 
     def _simulate(self, node: _Node) -> float:

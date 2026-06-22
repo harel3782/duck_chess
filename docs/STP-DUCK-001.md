@@ -188,7 +188,7 @@ pytest --cov=DuckChess_Game.Logic --cov-report=html
 | Integration: full turn pipeline | 2026-05-20 | Complete |
 | RL env: observation + mask tests | 2026-05-20 | Complete |
 | Peter integration tests | 2026-06-10 | Complete |
-| Suite expansion to per-module coverage (277 tests) | 2026-06-10 | Complete |
+| Suite expansion to per-module engine + RL coverage | 2026-06-10 | Complete |
 | Coverage target: 80%+ | TBD | In progress |
 
 ---
