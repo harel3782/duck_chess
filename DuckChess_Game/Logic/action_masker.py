@@ -40,7 +40,13 @@ class ActionMasker:
 		return int((sr * 8 + sc) * 64 + (er * 8 + ec))
 
 	def decode_move(self, action_index):
-		"""Converts an integer index (0-4095) back to start and end coordinates."""
+		"""Converts an integer index (0-4095) back to start and end coordinates.
+
+		NOTE: index block 0..63 (start==(0,0)) is OVERLOADED — it is both a piece
+		move FROM a8 and a duck placement (ducks encode a dummy (0,0) start). This
+		function cannot tell them apart; only the engine PHASE disambiguates, so a
+		decoded index must always be interpreted in the context of the current
+		phase (see BaseDuckChessEnv._apply_action, which asserts that invariant)."""
 		action_index = int(action_index) 
 		start_sq = action_index // 64
 		end_sq = action_index % 64

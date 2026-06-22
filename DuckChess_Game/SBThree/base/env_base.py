@@ -177,10 +177,28 @@ class BaseDuckChessEnv(gym.Env):
     # ---- Internal helpers ------------------------------------------- #
 
     def _apply_action(self, action: int) -> None:
+        # ── 4096 action-space overload (safe via phase) ──────────────────────
+        # The action space is 64 from-squares × 64 to-squares = 4096. Index block
+        # 0..63 decodes to start==(0,0) and is OVERLOADED with two meanings: a real
+        # piece move FROM a8 (during move_piece), and a duck placement to `end`
+        # (during move_duck, where the duck is encoded with a dummy (0,0) start).
+        # They share the same indices and are disambiguated SOLELY by engine.phase,
+        # so they never actually collide. The asserts pin that invariant — a
+        # misrouted index in the wrong phase fails loudly instead of silently
+        # aliasing an a8 move into a duck placement (or vice versa):
+        #   (1) a duck action only ever resolves in move_duck — its decoded start
+        #       must be the (0,0) sentinel;
+        #   (2) an a8-origin piece move only ever resolves in move_piece — piece
+        #       moves are executed only on that branch (place_duck never moves a piece).
         start, end = self.engine._decode_move(action)
-        if self.engine.phase == 'move_piece':
+        phase = self.engine.phase
+        assert phase in ('move_piece', 'move_duck'), \
+            f"_apply_action: action {action} decoded in unexpected phase {phase!r}"
+        if phase == 'move_piece':
             self.engine.execute_move(start, end, animated=False)
-        else:
+        else:  # move_duck — only the duck target `end` is used; `start` is a sentinel
+            assert start == (0, 0), \
+                f"duck-phase action {action} decoded to non-sentinel start {start}"
             self.engine.place_duck(end, animated=False)
 
     def _play_opponent_turn(self) -> None:
