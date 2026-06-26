@@ -404,6 +404,14 @@
         <div class="select-wrap">
           <select id="menu-model"><option>Loading models…</option></select>
         </div>
+        <label>Search depth</label>
+        <div class="select-wrap">
+          <select id="menu-search-depth" title="Alpha-beta lookahead on top of the model (ignored in 2-player)">
+            <option value="">Off (raw policy)</option>
+            <option value="1">Depth 1</option>
+            <option value="2">Depth 2</option>
+          </select>
+        </div>
       </div>
 
       <div class="menu-grid">
@@ -700,7 +708,9 @@
     showScreen('screen-game');
     setThinking('Starting game…');
     try{
-      const reqBody = {color: curColor, model: is2Player ? null : curModel};
+      const sd = document.getElementById('menu-search-depth');
+      const searchDepth = (is2Player || !sd || !sd.value) ? null : Number(sd.value);
+      const reqBody = {color: curColor, model: is2Player ? null : curModel, search_depth: searchDepth};
       const state = await api('/api/new-game', reqBody);
       gameId = state.gameId;
       playerColor = state.playerColor;
