@@ -649,8 +649,9 @@
 
   // Game timers
   let playerTime = 0;  // seconds elapsed for current player
-  let opponentTime = 0;
+  let opponentTime = 0;  // thinking seconds for last model move
   let timerInterval = null;
+  let thinkingStart = null;
 
   // History navigation (for undo/arrow key navigation)
   let moveHistorySnapshots = [];  // board states: [initial, after_move_1, after_move_2, ...]
@@ -905,9 +906,11 @@
   async function doPlaceDuck(r,c){
     busy=true; awaitingDuck=false; validDuck=[]; renderBoard();
     const vsModel = !is2Player;
-    if(vsModel) setThinking('Model is thinking…');
+    if(vsModel){ setThinking('Model is thinking…'); thinkingStart = Date.now(); }
     try{
       const state = await api('/api/place-duck', {game_id:gameId, duck:[r,c]});
+      const thinkingSecs = (vsModel && thinkingStart) ? Math.round((Date.now() - thinkingStart) / 1000) : 0;
+      thinkingStart = null;
 
       // (1) Snapshot the position right after THIS side's full turn (piece+duck),
       //     before any reply. G is still the move-piece state here, so G.board is
@@ -925,10 +928,12 @@
 
       if(modelMoved){
         // brief pause so the player sees their own duck land first
-        await new Promise(res => setTimeout(res, 1000));
+        await new Promise(res => setTimeout(res, 400));
 
         const modelDuck = state.duck;
         G = state;
+        opponentTime = thinkingSecs;
+        updateTimerDisplay();
         selectedSq=null; legalTargets=[]; awaitingDuck=false; validDuck=[];
 
         // (2) Snapshot the position after the model's full turn
@@ -940,7 +945,7 @@
         // show the model's piece move with the player's duck still visible…
         G.duck = playerDuck;
         renderBoard(); renderCaptured(); renderEval();
-        await new Promise(res => setTimeout(res, 800));
+        await new Promise(res => setTimeout(res, 300));
         // …then move the duck to the model's square
         G.duck = modelDuck;
       } else {
@@ -1520,18 +1525,14 @@
     if(timerInterval) clearInterval(timerInterval);
     timerInterval = setInterval(()=>{
       if(!G || G.gameOver || isReplaying) return;
-      if(G.turn === playerColor){
-        playerTime++;
-      } else {
-        opponentTime++;
-      }
+      if(G.turn === playerColor) playerTime++;
       updateTimerDisplay();
     }, 1000);
   }
 
   function updateTimerDisplay(){
     document.getElementById('you-time').textContent = formatTime(playerTime);
-    document.getElementById('opp-time').textContent = formatTime(opponentTime);
+    document.getElementById('opp-time').textContent = opponentTime > 0 ? 'Thought: ' + opponentTime + 's' : '';
   }
 
   function stopGameTimer(){
