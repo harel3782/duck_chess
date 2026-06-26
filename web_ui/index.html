@@ -1028,7 +1028,7 @@
   function renderCaptured(){
     const w = (G && G.capturedByWhite) ? G.capturedByWhite : [];
     const b = (G && G.capturedByBlack) ? G.capturedByBlack : [];
-    const diff = G ? G.evalDiff : 0;
+    const diff = G ? (G.materialDiff || 0) : 0;
     const cw = document.getElementById('cap-white');
     const cb = document.getElementById('cap-black');
     cw.innerHTML = w.length ? w.map(p=>`<img src="${IMG[p]}">`).join('') : '<span class="empty">none</span>';
@@ -1190,7 +1190,7 @@
     }
 
     // Material (evalDiff is white-positive) + clocks — neutral phrasing works for all modes.
-    const materialDiff = state.evalDiff || 0;
+    const materialDiff = state.materialDiff || 0;
     const materialText = materialDiff > 0 ? `White leads by ${Math.abs(materialDiff)} material.` :
                          materialDiff < 0 ? `Black leads by ${Math.abs(materialDiff)} material.` :
                          'Material was equal.';

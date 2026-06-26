@@ -308,6 +308,7 @@ def serialize(sess, *, highlight=None, ai_move=None, player_move=None, message=N
         "history": history_rows(sess.halfmoves),
         "capturedByWhite": cap_w,
         "capturedByBlack": cap_b,
+        "materialDiff": e.calculate_material_score(e.board),
         "evalDiff": eval_position(e),
         "highlight": highlight or [],
         "aiMove": ai_move,
