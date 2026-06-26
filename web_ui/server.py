@@ -52,7 +52,6 @@ ASSETS_DIR = ROOT / "assets"
 
 DUCK = "\U0001F986"  # 🦆
 FILES = "abcdefgh"
-PIECE_VALUES = {"P": 1, "N": 3, "B": 3, "R": 5, "Q": 9, "K": 0}
 START_COUNT = {"P": 8, "N": 2, "B": 2, "R": 2, "Q": 1, "K": 1}
 
 
@@ -214,14 +213,68 @@ def captured_lists(engine):
     return cap_w, cap_b
 
 
-def material_diff(engine):
-    s = 0
+def eval_position(engine) -> float:
+    score = 0.0
+
+    # 1. Material
+    score += engine.calculate_material_score(engine.board)
+
+    # 2. Duck bonus/penalty relative to both kings
+    if engine.duck_pos and tuple(engine.duck_pos) != (-1, -1):
+        dr, dc = engine.duck_pos
+        duck_sq = set()
+        for dd in [(-1,-1),(-1,0),(-1,1),(0,-1),(0,1),(1,-1),(1,0),(1,1)]:
+            nr, nc = dr+dd[0], dc+dd[1]
+            if 0 <= nr <= 7 and 0 <= nc <= 7:
+                duck_sq.add((nr, nc))
+        wk = bk = None
+        for r in range(8):
+            for c in range(8):
+                p = engine.board[r][c]
+                if p and p.type == 'K':
+                    if p.color == 'w': wk = (r, c)
+                    else: bk = (r, c)
+        if wk and wk in duck_sq: score -= 0.3
+        if bk and bk in duck_sq: score += 0.5
+
+        def king_duck_adj(kpos):
+            kr, kc = kpos
+            blocked = 0
+            for dd in [(-1,-1),(-1,0),(-1,1),(0,-1),(0,1),(1,-1),(1,0),(1,1)]:
+                nr, nc = kr+dd[0], kc+dd[1]
+                if (nr, nc) == (dr, dc): blocked += 1
+            return blocked
+
+        if wk: score -= 0.15 * king_duck_adj(wk)
+        if bk: score += 0.2  * king_duck_adj(bk)
+
+    # 3. King safety: adjacent friendly pieces cushion the king
+    def king_safety(board, king_pos, color):
+        if not king_pos: return 0
+        kr, kc = king_pos
+        friendly = 0
+        for dd in [(-1,-1),(-1,0),(-1,1),(0,-1),(0,1),(1,-1),(1,0),(1,1)]:
+            nr, nc = kr+dd[0], kc+dd[1]
+            if 0 <= nr <= 7 and 0 <= nc <= 7:
+                p = board[nr][nc]
+                if p and p.color == color: friendly += 1
+        return friendly * 0.1
+
     for r in range(8):
         for c in range(8):
             p = engine.board[r][c]
-            if p:
-                s += PIECE_VALUES[p.type] * (1 if p.color == "w" else -1)
-    return s
+            if p and p.type == 'K':
+                safety = king_safety(engine.board, (r, c), p.color)
+                score += safety if p.color == 'w' else -safety
+
+    # 4. Activity proxy: minor/major pieces on the board
+    for r in range(8):
+        for c in range(8):
+            p = engine.board[r][c]
+            if p and p.type not in ('K', 'P', 'D'):
+                score += 0.05 if p.color == 'w' else -0.05
+
+    return round(score, 2)
 
 
 def history_rows(halfmoves):
@@ -241,7 +294,6 @@ def valid_duck_squares(engine):
 def serialize(sess, *, highlight=None, ai_move=None, player_move=None, message=None, reason=None):
     e = sess.engine
     cap_w, cap_b = captured_lists(e)
-    diff = material_diff(e)
     duck = list(e.duck_pos) if tuple(e.duck_pos) != (-1, -1) else None
     return {
         "board": board_to_grid(e),
@@ -256,7 +308,7 @@ def serialize(sess, *, highlight=None, ai_move=None, player_move=None, message=N
         "history": history_rows(sess.halfmoves),
         "capturedByWhite": cap_w,
         "capturedByBlack": cap_b,
-        "evalDiff": diff,
+        "evalDiff": eval_position(e),
         "highlight": highlight or [],
         "aiMove": ai_move,
         "playerMove": player_move,

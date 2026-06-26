@@ -1041,9 +1041,12 @@
   /* ════════════ RENDER: EVAL ════════════ */
   function renderEval(){
     const diff = G ? G.evalDiff : 0;
-    document.getElementById('eval-label').textContent = diff>=0 ? 'White advantage' : 'Black advantage';
-    document.getElementById('eval-score').textContent = (diff>0?'+':'') + diff;
-    const fill = Math.max(5, Math.min(95, 50 + diff*4));
+    if (diff > 0.1)       document.getElementById('eval-label').textContent = 'White advantage';
+    else if (diff < -0.1) document.getElementById('eval-label').textContent = 'Black advantage';
+    else                  document.getElementById('eval-label').textContent = 'Equal position';
+    document.getElementById('eval-score').textContent = (diff > 0 ? '+' : '') + diff.toFixed(1);
+    const t = Math.tanh(diff / 4);
+    const fill = Math.max(5, Math.min(95, 50 + t * 45));
     document.getElementById('eval-fill').style.width = fill + '%';
   }
 
