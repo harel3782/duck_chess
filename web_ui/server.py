@@ -418,7 +418,6 @@ class UndoMoveReq(BaseModel):
 
 class SaveGameReq(BaseModel):
     game_id: str
-    username: str = "Player"
     label: str = ""
 
 
@@ -645,12 +644,10 @@ def save_game(req: SaveGameReq):
     e = sess.engine
     with sess.lock:
         SAVED_GAMES_DIR.mkdir(parents=True, exist_ok=True)
-        safe_user = re.sub(r"[^A-Za-z0-9_-]", "_", (req.username or "Player"))[:40] or "Player"
-        filename = f"{safe_user}_{uuid.uuid4().hex[:8]}.json"
+        filename = f"game_{uuid.uuid4().hex[:8]}.json"
         duck = list(e.duck_pos) if tuple(e.duck_pos) != (-1, -1) else None
         payload = {
             "filename": filename,
-            "username": req.username or "Player",
             "label": req.label or "(Unnamed)",
             "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M"),
             "saved_at": int(time.time()),
@@ -674,8 +671,8 @@ def save_game(req: SaveGameReq):
 
 
 @app.get("/api/saved-games")
-def saved_games(username: str = ""):
-    """List saved games for a username, newest first."""
+def saved_games():
+    """List all saved games, newest first."""
     SAVED_GAMES_DIR.mkdir(parents=True, exist_ok=True)
     games = []
     for p in SAVED_GAMES_DIR.glob("*.json"):
@@ -683,8 +680,6 @@ def saved_games(username: str = ""):
             with open(p, encoding="utf-8") as f:
                 data = json.load(f)
         except (OSError, json.JSONDecodeError):
-            continue
-        if username and data.get("username") != username:
             continue
         games.append({
             "filename": data.get("filename", p.name),

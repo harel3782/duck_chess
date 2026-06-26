@@ -49,47 +49,6 @@
     .btn-ghost:hover { background: #1a1e2a; color: #ccc; }
 
     /* ════════════════════════════════════════════════════
-       AUTH SCREEN
-    ════════════════════════════════════════════════════ */
-    #screen-auth {
-      align-items: center; justify-content: center;
-      background:
-        radial-gradient(circle at 50% 0%, #1d2230 0%, var(--bg) 60%);
-      padding: 20px;
-      overflow-y: auto; max-height: 100vh; max-height: 100dvh;
-    }
-    .auth-card {
-      width: 100%; max-width: 380px;
-      background: var(--panel); border: 1px solid var(--line);
-      border-radius: 18px; padding: 28px 26px;
-      box-shadow: 0 20px 60px rgba(0,0,0,.5);
-    }
-    .auth-logo {
-      text-align: center; font-size: 30px; font-weight: 800;
-      color: var(--gold); letter-spacing: .5px; margin-bottom: 4px;
-    }
-    .auth-logo em { color: var(--text); font-style: normal; }
-    .auth-logo img { width: 40px; height: 40px; vertical-align: -8px; margin-right: 6px; }
-    .auth-sub { text-align: center; color: var(--muted); font-size: 13px; margin-bottom: 22px; }
-
-    .auth-tabs { display: flex; background: #0e1018; border-radius: 10px; padding: 4px; margin-bottom: 20px; }
-    .auth-tab {
-      flex: 1; text-align: center; padding: 8px; border-radius: 7px;
-      font-size: 0.8125rem; font-weight: 700; color: var(--muted); cursor: pointer; transition: all .15s;
-    }
-    .auth-tab.active { background: var(--panel2); color: var(--gold); }
-
-    .field { margin-bottom: 14px; }
-    .field label { display: block; font-size: 0.6875rem; color: var(--muted); margin-bottom: 6px; font-weight: 600; }
-    .field input {
-      width: 100%; background: #0e1018; border: 1px solid var(--line);
-      border-radius: 9px; padding: 11px 13px; color: var(--text); font-size: 0.875rem; font-family: inherit;
-    }
-    .field input:focus { outline: none; border-color: var(--gold); }
-    .auth-error { color: #e07070; font-size: 12px; min-height: 16px; margin-bottom: 6px; }
-    .auth-hint { text-align: center; font-size: 11px; color: #555; margin-top: 14px; }
-
-    /* ════════════════════════════════════════════════════
        MENU / HOME SCREEN
     ════════════════════════════════════════════════════ */
     .topbar {
@@ -100,23 +59,6 @@
     .logo { font-size: 1.1875rem; font-weight: 800; color: var(--gold); letter-spacing: .5px; white-space: nowrap; display: flex; align-items: center; gap: 7px; }
     .logo em { color: var(--text); font-style: normal; }
     .logo img { width: 26px; height: 26px; }
-
-    .profile-chip {
-      display: flex; align-items: center; gap: 9px;
-      background: var(--panel2); border: 1px solid var(--line);
-      border-radius: 22px; padding: 5px 7px 5px 10px;
-    }
-    .profile-chip .pname { font-size: 0.8125rem; font-weight: 700; }
-    .profile-chip .pav {
-      width: 30px; height: 30px; border-radius: 50%;
-      background: var(--gold); color: #111; font-weight: 800;
-      display: flex; align-items: center; justify-content: center; font-size: 0.875rem;
-    }
-    .logout-btn {
-      background: transparent; border: none; color: var(--muted);
-      cursor: pointer; font-size: 0.75rem; padding: 10px 14px; border-radius: 6px; font-family: inherit; min-height: 44px;
-    }
-    .logout-btn:hover { background: #2a1818; color: #e07070; }
 
     #screen-menu { max-height: 100vh; max-height: 100dvh; overflow-y: auto; }
     .menu-body { flex: 1; overflow-y: auto; padding: 26px 22px; }
@@ -428,9 +370,7 @@
     @media (max-width: 480px) {
       .menu-body { padding: 18px 14px; }
       .topbar { padding: 0 14px; }
-      .profile-chip .pname { display: none; }
       :root { --sq: min(11.2vw, 46px); }
-      .auth-card { padding: 22px 18px; }
       .model-pick { flex-direction: column; align-items: stretch; }
       .select-wrap { min-width: 0; width: 100%; }
     }
@@ -447,51 +387,16 @@
   <div id="splash-text">Duck Chess</div>
 </div>
 
-<!-- ════════════ AUTH SCREEN ════════════ -->
-<div class="screen active" id="screen-auth">
-  <div class="auth-card">
-    <div class="auth-logo"><img src="/assets/pieces/duck.png" alt="">Duck<em>Chess</em></div>
-    <div class="auth-sub">Sign in to save and review your games</div>
-
-    <div class="auth-tabs">
-      <div class="auth-tab active" id="tab-login" onclick="switchAuth('login')">Login</div>
-      <div class="auth-tab" id="tab-register" onclick="switchAuth('register')">Register</div>
-    </div>
-
-    <div class="field">
-      <label>Username</label>
-      <input id="auth-user" type="text" autocomplete="username" placeholder="your name"/>
-    </div>
-    <div class="field">
-      <label>Password</label>
-      <input id="auth-pass" type="password" autocomplete="current-password" placeholder="••••••••"/>
-    </div>
-    <div class="field" id="field-confirm" style="display:none">
-      <label>Confirm password</label>
-      <input id="auth-confirm" type="password" autocomplete="new-password" placeholder="••••••••"/>
-    </div>
-
-    <div class="auth-error" id="auth-error"></div>
-    <button class="btn btn-gold" id="auth-submit" onclick="submitAuth()">Login</button>
-    <div class="auth-hint">Login is open for now — any name gets you in.</div>
-  </div>
-</div>
-
 <!-- ════════════ MENU SCREEN ════════════ -->
-<div class="screen" id="screen-menu">
+<div class="screen active" id="screen-menu">
   <div class="topbar">
     <div class="logo"><img src="/assets/pieces/duck.png" alt="">Duck<em>Chess</em></div>
-    <div class="profile-chip">
-      <span class="pname" id="menu-username">player</span>
-      <button class="logout-btn" onclick="openRules()" title="Rules">?</button>
-      <button class="logout-btn" onclick="logout()">Logout</button>
-      <div class="pav" id="menu-avatar">P</div>
-    </div>
+    <button style="background:transparent;border:none;color:var(--muted);cursor:pointer;font-size:0.75rem;padding:10px 14px;border-radius:6px;font-family:inherit;min-height:44px" onclick="openRules()" title="Rules">?</button>
   </div>
 
   <div class="menu-body">
     <div class="menu-inner">
-      <div class="menu-title">Welcome, <span class="accent" id="menu-welcome">player</span></div>
+      <div class="menu-title">Duck <span class="accent">Chess</span></div>
       <div class="menu-desc">Choose how you want to play.</div>
 
       <div class="model-pick">
@@ -699,35 +604,6 @@
     loadSavedGames();  // refresh saved games list
   }
 
-  /* ════════════ AUTH — OPEN PASS-THROUGH (no real logic yet) ════════════ */
-  let authMode = 'login';
-  function switchAuth(mode){
-    authMode = mode;
-    document.getElementById('tab-login').classList.toggle('active', mode==='login');
-    document.getElementById('tab-register').classList.toggle('active', mode==='register');
-    document.getElementById('field-confirm').style.display = mode==='register' ? 'block' : 'none';
-    document.getElementById('auth-submit').textContent = mode==='register' ? 'Create account' : 'Login';
-    document.getElementById('auth-error').textContent = '';
-  }
-  function submitAuth(){
-    const u = document.getElementById('auth-user').value.trim() || 'Player';
-    enterApp(u);
-  }
-  function enterApp(username){
-    curUsername = username;  // store globally
-    document.getElementById('menu-username').textContent = username;
-    document.getElementById('menu-welcome').textContent = username;
-    document.getElementById('menu-avatar').textContent = username[0].toUpperCase();
-    showScreen('screen-menu');
-    loadSavedGames();  // populate saved-games list on first menu entry
-  }
-  function logout(){
-    document.getElementById('auth-user').value = '';
-    document.getElementById('auth-pass').value = '';
-    const c = document.getElementById('auth-confirm'); if(c) c.value = '';
-    showScreen('screen-auth');
-  }
-
   /* ════════════ API HELPER ════════════ */
   async function api(path, body){
     const r = await fetch(path, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body||{})});
@@ -769,7 +645,6 @@
   let validDuck = [];      // [[r,c],...]
   let curColor = 'white';  // for restart
   let curModel = 'stage12';
-  let curUsername = 'Player';  // current logged-in username
   let is2Player = false;   // flag for 2-player local mode
 
   // Game timers
@@ -850,9 +725,7 @@
         document.getElementById('opp-label').textContent =
           state.modelLabel.replace('Duck PPO — ','') + ' · ' + (playerColor==='w'?'Black':'White');
       }
-      document.getElementById('you-name').textContent = is2Player
-        ? (youWhite ? 'White' : 'Black')
-        : (youWhite ? curUsername + ' — White' : curUsername + ' — Black');
+      document.getElementById('you-name').textContent = youWhite ? 'White' : 'Black';
       document.getElementById('you-av').className = 'avatar ' + (youWhite ? 'av-white':'av-black');
       applyState(state);
       // Capture initial game state (before any moves)
@@ -1349,7 +1222,7 @@
     const saveBtn = document.querySelector('.over-actions button:first-child');
     if(!saveBtn) return;
 
-    pendingSaveData = {game_id: gameId, username: curUsername, label: label};
+    pendingSaveData = {game_id: gameId, label: label};
 
     // Show saving state
     const originalText = saveBtn.textContent;
@@ -1401,7 +1274,7 @@
 
   async function loadSavedGames(){
     try{
-      const r = await fetch(`/api/saved-games?username=${encodeURIComponent(curUsername)}`).then(res => res.json());
+      const r = await fetch('/api/saved-games').then(res => res.json());
       const list = document.getElementById('saved-list');
       if(!r.games || !r.games.length){
         list.innerHTML = `
@@ -1526,7 +1399,7 @@
     document.getElementById('game-model').textContent = gameData.model_label || '2 Players';
     document.getElementById('opp-name').textContent = gameData.model_label ? 'Duck PPO' : 'Player 2';
     document.getElementById('opp-label').textContent = (playerColor==='w'?'Black':'White');
-    document.getElementById('you-name').textContent = curUsername + ' — ' + (playerColor==='w'?'White':'Black');
+    document.getElementById('you-name').textContent = playerColor==='w' ? 'White' : 'Black';
     document.getElementById('you-av').className = 'avatar ' + (playerColor==='w'?'av-white':'av-black');
 
     // Build the replay controls FIRST so #replay-move-num exists before
@@ -1813,8 +1686,7 @@
   })();
 
   loadModels();
-  document.getElementById('auth-pass').addEventListener('keydown', e=>{ if(e.key==='Enter') submitAuth(); });
-  document.getElementById('auth-confirm').addEventListener('keydown', e=>{ if(e.key==='Enter') submitAuth(); });
+  loadSavedGames();
 </script>
 </body>
 </html>

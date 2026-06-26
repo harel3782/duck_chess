@@ -69,3 +69,6 @@ htmlcov/
 *.xml
 coverage.xml
 saved_replays/
+
+# Student guide (internal documentation, not for public repo)
+docs/student_guide/
