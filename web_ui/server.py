@@ -198,7 +198,7 @@ def get_mcts(model_id: str, sims: int) -> DuckMCTS:
     key = (choice["id"], sims)
     with _mcts_lock:
         if key not in _mcts_cache:
-            _mcts_cache[key] = DuckMCTS(model, sims=sims)
+            _mcts_cache[key] = DuckMCTS(model, sims=sims, tactical_override=True)
     return _mcts_cache[key]
 
 
@@ -450,7 +450,7 @@ def play_model_turn(sess):
         mcts = get_mcts(sess.model_id, sess.mcts_sims)
         timeout = max(10, sess.mcts_sims / 30)
         try:
-            future = _search_executor.submit(mcts.choose_turn, e)
+            future = _search_executor.submit(mcts.choose_turn, e, True)  # DEBUG
             piece_a, duck_a = future.result(timeout=timeout)
         except FuturesTimeoutError:
             print(f"[Duck Chess] MCTS sims={sess.mcts_sims} timed out — falling back to raw policy")
