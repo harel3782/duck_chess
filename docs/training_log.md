@@ -146,7 +146,7 @@ per-move shaping (development, king safety, material, mobility, duck-blocking).
 - **Goal:** kill the king-rush exploit at its root by removing the three things that let PPO learn
   it: a single fixed opponent, a fixed starting position, and dense shaped reward (see
   [../PLAN_V2.md](../PLAN_V2.md) for the full diagnosis).
-- **Design:** `duck_env_v2.py` (`PoolEnv`) samples a different opponent per episode (Peter depths,
+- **Design:** `duck_env_pool.py` (`PoolEnv`) samples a different opponent per episode (Peter depths,
   self-play vs latest, historical checkpoints, random mover), starts ~40% of episodes after a few
   random legal plies, and uses **sparse terminal reward** — which also makes the value head a
   calibrated win-probability estimator. Trained **from scratch** (no king-rush prior).
@@ -187,7 +187,7 @@ per-move shaping (development, king safety, material, mobility, duck-blocking).
 - **Design (warm-starts `v2_final`):** entropy schedule 0.06→0.02, `duck_placement_bonus` reward
   (duck-phase only, capped), opponent mix 40% Peter d2 / 35% historical pool / 25% self-play +
   opening randomization (no depth-1), `max_episode_plies=300` + step penalty.
-- **Entry point:** `train_antiexploit_v2.py`; config in `duck_env_antiexploit_v2.py`. Measured by
+- **Entry point:** `train_antiexploit_v2.py`; config in `duck_env_antiexploit.py`. Measured by
   `eval_antiexploit.py` (detects the three exploits, not just W/L/D).
 - **Status:** checkpoints `models/duck_ppo/antiexploit_v2/ax_latest.zip` (+ `ax_v1..v3`). The full
   unattended build (`scripts/run_full_build.ps1`) runs Phase A (8M steps → `ax_final.zip`) then the

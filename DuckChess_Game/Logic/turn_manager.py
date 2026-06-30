@@ -86,8 +86,8 @@ class TurnManagerMixin:
 				self._handle_auto_promotion(p, end)
 			else:
 				# Snapshot the duck's current position before the duck phase begins.
-			# place_duck uses prev_duck_pos to forbid replanting on the same square.
-			self.prev_duck_pos, self.phase = self.duck_pos, 'move_duck'
+				# place_duck uses prev_duck_pos to forbid replanting on the same square.
+				self.prev_duck_pos, self.phase = self.duck_pos, 'move_duck'
 
 	def _handle_auto_promotion(self, pawn, pos):
 		"""Logic for automatic promotion."""

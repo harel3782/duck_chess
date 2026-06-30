@@ -1,5 +1,5 @@
 """
-duck_env_v2.py — v2 training environment: per-episode opponent pool + random starts.
+duck_env_pool.py — v2 training environment: per-episode opponent pool + random starts.
 
 Fixes the two structural causes of the king-rush exploit (see PLAN_V2.md):
 

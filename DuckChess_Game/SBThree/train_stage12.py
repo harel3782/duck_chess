@@ -8,7 +8,7 @@ from stable_baselines3.common.vec_env import SubprocVecEnv
 
 torch.distributions.Distribution.set_default_validate_args(False)
 
-from DuckChess_Game.SBThree.duck_env_stage12_final import DuckChessEnvStage12
+from DuckChess_Game.SBThree.duck_env_stage12 import DuckChessEnvStage12
 
 class FinalLeagueCallback(BaseCallback):
 	"""Handles dynamic pool updates for extreme long-term training."""

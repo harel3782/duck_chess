@@ -1,12 +1,12 @@
 #!/usr/bin/env python
 """
-eval_with_replays.py — Evaluate a Duck Chess model and save game replays.
+eval_peter_save_replays.py — Evaluate a Duck Chess model and save game replays.
 
 Plays games against Peter engine at specified depths and saves all games
 to the replay directory for inspection.
 
 Usage:
-  python -m DuckChess_Game.SBThree.eval_with_replays \
+  python -m DuckChess_Game.SBThree.eval_peter_save_replays \
       --model "models/duck_ppo/real/real_final.zip" \
       --games 16 --depth2-games 8 --depth3-games 8
 """

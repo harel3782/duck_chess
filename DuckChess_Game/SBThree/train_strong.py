@@ -51,7 +51,7 @@ from stable_baselines3.common.vec_env import SubprocVecEnv
 torch.distributions.Distribution.set_default_validate_args(False)
 
 from DuckChess_Game.SBThree.peter_local import PeterLocalEnv, make_peter_config
-from DuckChess_Game.SBThree.duck_env_stage12_final import DuckChessEnvStage12
+from DuckChess_Game.SBThree.duck_env_stage12 import DuckChessEnvStage12
 
 SAVE_DIR = os.path.join("models", "duck_ppo", "strong")
 # Historical league opponents — STRONG snapshots only.

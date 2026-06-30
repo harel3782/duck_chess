@@ -1,14 +1,14 @@
 #!/usr/bin/env python
 """
-train_with_replays.py — 1-hour training continuation with replay saving.
+train_real_logged.py — 1-hour training continuation with replay saving.
 
 Loads the final model from the 14-hour run and trains for 1 hour,
 capturing all games to disk.
 
 Usage:
-  cd DuckChess_Game/SBThree && python train_with_replays.py
+  cd DuckChess_Game/SBThree && python train_real_logged.py
   OR from project root:
-  python DuckChess_Game/SBThree/train_with_replays.py
+  python DuckChess_Game/SBThree/train_real_logged.py
 """
 import os
 import sys

@@ -41,7 +41,7 @@ from stable_baselines3.common.vec_env import SubprocVecEnv
 
 torch.distributions.Distribution.set_default_validate_args(False)
 
-from DuckChess_Game.SBThree.duck_env_v2 import PoolEnv
+from DuckChess_Game.SBThree.duck_env_pool import PoolEnv
 
 SAVE_DIR = os.path.join("models", "duck_ppo", "v2")
 CSV_PATH = os.path.join("logs", "v2_progress.csv")

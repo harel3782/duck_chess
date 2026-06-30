@@ -126,7 +126,7 @@ python -m DuckChess_Game.SBThree.eval_vs_peter           # ground-truth W/L/D vs
 python -m DuckChess_Game.SBThree.eval_antiexploit --model <ckpt>   # measures the 3 exploits directly
 python -m DuckChess_Game.SBThree.eval_search --engine mcts --sims 200   # evaluate WITH MCTS search
 python -m DuckChess_Game.SBThree.eval_anchors            # strength vs a fixed anchor set -> Elo
-python -m DuckChess_Game.SBThree.eval_with_replays       # evaluate while recording replays
+python -m DuckChess_Game.SBThree.eval_peter_save_replays  # evaluate while recording replays
 ```
 
 `eval_vs_peter.py` is the source of truth for strength — self-play numbers have historically
@@ -204,8 +204,8 @@ play, save/load, and replay. Independent from the desktop UI.
 RL training pipeline using Stable-Baselines3 + sb3-contrib MaskablePPO.
 
 - **Environments:** per-stage Gymnasium envs (`duck_env_stage1_random.py` …
-  `duck_env_stage14_recovery.py`), the v2 pool env (`duck_env_v2.py`), and the current
-  `duck_env_antiexploit_v2.py`, all built on the shared `base/` package (`env_base.py`,
+  `duck_env_stage14_recovery.py`), the v2 pool env (`duck_env_pool.py`), and the current
+  `duck_env_antiexploit.py`, all built on the shared `base/` package (`env_base.py`,
   `mask_strategy.py`, `opponent_strategy.py`, `reward_calculator.py`). `env_factory.py` /
   `env_registry.py` wire stage names to configs.
 - **Curriculum:** league-based opponents (alpha-beta AI from `ai.py` + historical RL checkpoints)

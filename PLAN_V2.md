@@ -16,7 +16,7 @@ Self-contained plan. Give this file to any new session to continue the work.
 ## Status (updated 2026-06-12 night)
 
 - [x] Step 0 — baseline: real_latest vs Peter d2 = 6/4/0 (60%), vs d3 = 0/6/4 (score 0.200)
-- [x] Step 1 — `duck_env_v2.py` (PoolEnv) + `train_peter_v2.py` written
+- [x] Step 1 — `duck_env_pool.py` (PoolEnv) + `train_peter_v2.py` written
 - [x] Step 2 — smoke test passed (all 6 pool opponents sampled, CSV/checkpoints/league refresh OK, 277 tests pass)
 - [x] Step 3 — DONE. Old run exited 04:50; v2 auto-launched 04:51 (PID 37364),
       12h budget; finished ~17:14 at ~670k steps. v2_final.zip saved. At 380k steps / ~4.5h the per-opponent W/L/D shows the
@@ -120,7 +120,7 @@ Self-contained plan. Give this file to any new session to continue the work.
       (3) the stronger net guides better MCTS -> repeat.
       This is the standard AlphaZero loop and the realistic route to d3.
       Expensive (MCTS self-play ~0.9s/move). Also add GreedyOpponent to the v2
-      pool (duck_env_v2.py DEFAULT_POOL_WEIGHTS) to fix the greedy blind spot.
+      pool (duck_env_pool.py DEFAULT_POOL_WEIGHTS) to fix the greedy blind spot.
 
 ## DELIVERABLES (final)
 
@@ -129,7 +129,7 @@ Self-contained plan. Give this file to any new session to continue the work.
 - models/duck_ppo/v2/v2_value.zip — same policy + distilled value head
   (sign-acc 0.98). The backbone for search.
 - mcts.py + v2_value + MCTS = the strongest agent (100% vs Peter d2, ~0.9s/turn).
-- Scripts: duck_env_v2.py, train_peter_v2.py, search.py, mcts.py,
+- Scripts: duck_env_pool.py, train_peter_v2.py, search.py, mcts.py,
   gen_value_data.py, finetune_value.py, eval_search.py, eval_anchors.py.
 - DECISION TAKEN: MCTS+v2_value is WIRED into the UI as the in-game opponent
   (DuckChess_Game/UI/main.py: model_path=v2_value.zip, USE_MCTS=True, sims=200;

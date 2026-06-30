@@ -13,7 +13,7 @@ from stable_baselines3.common.vec_env import SubprocVecEnv
 
 torch.distributions.Distribution.set_default_validate_args(False)
 
-from DuckChess_Game.SBThree.duck_env_stage11_alpha import DuckChessEnvStage11
+from DuckChess_Game.SBThree.duck_env_stage11_mixed import DuckChessEnvStage11
 
 class LeagueCallback(BaseCallback):
 	"""League Management. Only prints once to avoid terminal spam."""

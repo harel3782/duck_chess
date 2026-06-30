@@ -21,9 +21,9 @@ from DuckChess_Game.SBThree.base.opponent_strategy import (
     SelfPlayOpponent,
 )
 from DuckChess_Game.SBThree.base.reward_calculator import ShapedReward, TerminalReward
-from DuckChess_Game.SBThree.duck_env_stage13_fast import make_stage13_config
+from DuckChess_Game.SBThree.duck_env_stage13_impl import make_stage13_config
 from DuckChess_Game.SBThree.duck_env_stage14_recovery import make_stage14_config
-from DuckChess_Game.SBThree.duck_env_antiexploit_v2 import make_antiexploit_v2_config
+from DuckChess_Game.SBThree.duck_env_antiexploit import make_antiexploit_v2_config
 from DuckChess_Game.SBThree.peter_local import (
     make_peter_easy_config,
     make_peter_medium_config,
