@@ -1,6 +1,8 @@
 import random
 
+# Baseline alpha-beta/random AI opponent for the desktop game (no learned model).
 class DuckAI:
+    # Store search depth (currently unused; reserved for future minimax).
     def __init__(self, depth=2):
         self.depth = depth
         # TODO: Initialize Bitboards here for the CS Project optimization
@@ -15,6 +17,7 @@ class DuckAI:
 
         # 1. Generate all possible moves for the AI
         # (Later, we will replace this loop with Bitboard generation)
+        # Scan every square; collect (start, dest) for each of our pieces' legal moves.
         for r in range(8):
             for c in range(8):
                 p = board[r][c]
@@ -23,6 +26,7 @@ class DuckAI:
                     for dest in valid_destinations:
                         all_moves.append(((r, c), dest))
 
+        # No legal piece moves -> caller handles (in Duck Chess, no moves = fowling win).
         if not all_moves:
             return None
 
@@ -38,13 +42,14 @@ class DuckAI:
         Decides where to place the duck.
         Output: Tuple (r, c)
         """
+        # Collect every unoccupied square as a duck-placement candidate.
         empties = []
         for r in range(8):
             for c in range(8):
                 if not board[r][c]:
                     empties.append((r, c))
 
-        # Filter out the square the duck was just on
+        # Filter out the square the duck was just on (duck may not stay put).
         valid_squares = [pos for pos in empties if pos != prev_duck_pos]
 
         if not valid_squares:

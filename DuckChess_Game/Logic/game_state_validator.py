@@ -5,6 +5,7 @@ from typing import List, Optional, Tuple
 from DuckChess_Game.Logic.constants import PAWN, KNIGHT, BISHOP, ROOK, QUEEN, KING
 
 
+# Result of a validation: ok flag plus hard errors (issues) and soft notes (warnings)
 @dataclass
 class ValidationReport:
     ok: bool
@@ -36,11 +37,13 @@ class GameStateValidator:
         issues: List[str] = []
         warnings: List[str] = []
         try:
+            # Walk every square and compare the 2D board against the bitboards
             for r in range(8):
                 for c in range(8):
-                    sq = r * 8 + c
+                    sq = r * 8 + c  # 0..63 bit index for this square
                     cell = board_2d[r][c]
 
+                    # For each piece type, the bit must be set iff the 2D cell holds it
                     for color in ('w', 'b'):
                         for p_type in self.VALID_PIECE_TYPES:
                             try:
@@ -51,6 +54,7 @@ class GameStateValidator:
                                     and cell.color == color
                                     and cell.type == p_type
                                 )
+                                # Disagreement between the two representations is a sync error
                                 if bb_has != board_has:
                                     issues.append(
                                         f"Piece sync mismatch at ({r},{c}) for "
@@ -61,6 +65,7 @@ class GameStateValidator:
                                     f"Exception checking ({r},{c}) {color}{p_type}: {e}"
                                 )
 
+                    # The duck bitboard bit must match duck_pos for this square
                     try:
                         bb_duck = bool(bb_mgr.duck_board & (1 << sq))
                         pos_duck = (duck_pos == (r, c))
@@ -90,12 +95,14 @@ class GameStateValidator:
         issues: List[str] = []
         warnings: List[str] = []
         try:
+            # Phase must be one of the two turn sub-phases
             if phase not in self.VALID_PHASES:
                 issues.append(f"Invalid phase: {phase!r}")
 
             if turn not in self.VALID_COLORS:
                 issues.append(f"Invalid turn: {turn!r}")
 
+            # (-1, -1) means "duck not placed yet"; otherwise it must be on the board
             for name, pos in [("duck_pos", duck_pos), ("prev_duck_pos", prev_duck_pos)]:
                 if pos == (-1, -1):
                     continue
@@ -107,6 +114,7 @@ class GameStateValidator:
                 ):
                     issues.append(f"{name} out of bounds: {pos}")
 
+            # The duck must move each turn, so it can't stay on its previous square
             if duck_pos != (-1, -1) and duck_pos == prev_duck_pos:
                 warnings.append(
                     "duck_pos == prev_duck_pos: duck has not moved from previous position"
@@ -145,6 +153,7 @@ class GameStateValidator:
                     f"en_passant_target row {er} is not a valid EP row (expected 2 or 5)"
                 )
 
+            # Look for a pawn of the capturing color directly left/right of the target
             capturing_color = 'w' if er == 5 else 'b'
             found_pawn = False
             for dc in (-1, 1):
@@ -185,6 +194,7 @@ class GameStateValidator:
             turn = game_logic_instance.turn
             ep = getattr(game_logic_instance, 'en_passant_target', None)
 
+            # Run every validator and merge their issues/warnings into one report
             for report in (
                 self.validate_board_sync(board, bb_mgr, duck_pos),
                 self.validate_phase_consistency(phase, turn, duck_pos, prev_duck_pos),

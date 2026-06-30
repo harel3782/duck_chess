@@ -1250,15 +1250,15 @@
 
     try{
       await api('/api/save-game', pendingSaveData);
-      // Success: show checkmark
+      // Success: show checkmark briefly, then re-enable so the user can save again
       saveBtn.innerHTML = '✅ Saved!';
       saveBtn.disabled = true;
       toast('Game saved! You can load it from the menu later.');
       setThinking('');
       setTimeout(() => {
-        closeOver();
-        goMenu();
-      }, 1000);
+        saveBtn.textContent = originalText;
+        saveBtn.disabled = false;
+      }, 2000);
     }catch(e){
       setThinking('');
       // Failure: offer retry or download fallback
