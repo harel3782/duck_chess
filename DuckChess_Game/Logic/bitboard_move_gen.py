@@ -3,7 +3,10 @@ from DuckChess_Game.Logic.constants import *
 class BitboardMoveGenerator:
 	"""Generates legal moves using extremely fast 64-bit bitwise operations."""
 	
-	# Masks to prevent pieces from wrapping around board edges
+	# Bit-shift wrap guards. Shifting a piece on the A-file left by 1 column (<<1)
+	# would land on the H-file of the rank above — ANDing with NOT_A_FILE clears
+	# those bits before the shift. Similar guards apply to H-file (right edge) and
+	# the two-column knight leaps (NOT_AB_FILE, NOT_GH_FILE).
 	NOT_A_FILE = 0xFEFEFEFEFEFEFEFE
 	NOT_H_FILE = 0x7F7F7F7F7F7F7F7F
 	NOT_AB_FILE = 0xFCFCFCFCFCFCFCFC
@@ -39,7 +42,13 @@ class BitboardMoveGenerator:
 		return self._bb_to_coords(valid_moves_bb)
 
 	def _get_knight_attacks(self, knight_bb):
-		"""Calculates all possible knight jumps using bit shifts."""
+		"""Calculates all 8 knight destinations via two groups of horizontal+vertical shifts.
+
+		Group h1 (±1 file): shift 2 ranks up/down → the long-axis jumps.
+		Group h2 (±2 files): shift 1 rank up/down → the short-axis jumps.
+		File masks applied before shifts to prevent the ±1/±2 column steps from
+		wrapping across the board edge.
+		"""
 		l1 = (knight_bb >> 1) & self.NOT_H_FILE
 		l2 = (knight_bb >> 2) & self.NOT_GH_FILE
 		r1 = (knight_bb << 1) & self.NOT_A_FILE
@@ -56,13 +65,24 @@ class BitboardMoveGenerator:
 		return (h << 8) | (h >> 8) | l1 | r1
 
 	def _get_pawn_moves(self, pawn_bb, color, all_pieces, enemy_pieces, duck):
-		"""Calculates pawn pushes and captures."""
+		"""Calculates pawn pushes and diagonal captures.
+
+		Row 0 = rank 8 (top), row 7 = rank 1 (bottom) in this coordinate system.
+		White advances toward row 0, so >>8 moves forward; black advances toward
+		row 7, so <<8 moves forward.
+
+		The duck is merged into blockers so it stops pawn pushes, but it is NOT
+		in enemy_pieces, so a pawn cannot capture the duck diagonally.
+		"""
 		moves = 0
 		blockers = all_pieces | duck
 		if color == 'w':
 			push1 = (pawn_bb >> 8) & ~blockers
 			moves |= push1
-			if pawn_bb & 0x00FF000000000000: # White starting row mask
+			# 0x00FF000000000000 = row 6 = rank 2 — white's starting rank.
+			# push2 starts from push1 (not pawn_bb) so a blocked first step
+			# also blocks the double push.
+			if pawn_bb & 0x00FF000000000000:
 				push2 = (push1 >> 8) & ~blockers
 				moves |= push2
 			moves |= ((pawn_bb >> 9) & self.NOT_H_FILE) & enemy_pieces
@@ -70,7 +90,8 @@ class BitboardMoveGenerator:
 		else:
 			push1 = (pawn_bb << 8) & ~blockers
 			moves |= push1
-			if pawn_bb & 0x000000000000FF00: # Black starting row mask
+			# 0x000000000000FF00 = row 1 = rank 7 — black's starting rank.
+			if pawn_bb & 0x000000000000FF00:
 				push2 = (push1 << 8) & ~blockers
 				moves |= push2
 			moves |= ((pawn_bb << 9) & self.NOT_A_FILE) & enemy_pieces
@@ -99,8 +120,8 @@ class BitboardMoveGenerator:
 				elif d == -7: ray = (ray >> 7) & self.NOT_A_FILE
 				
 				if ray == 0: break
-				moves |= ray
-				if ray & blockers: break # Stop if we hit a piece or duck
+				moves |= ray           # include the blocker's square (enables captures)
+				if ray & blockers: break  # but stop extending past it
 				
 		return moves
 

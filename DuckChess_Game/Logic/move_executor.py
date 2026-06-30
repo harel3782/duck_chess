@@ -16,8 +16,10 @@ class MoveExecutor:
 
 		# 1. Handle En Passant Capture
 		if piece.type == PAWN and (er, ec) == en_passant_target:
-			# Only an actual adjacent pawn is taken; a plain push onto the
-			# (empty) EP square must not be mistaken for a capture.
+			# The captured pawn sits on (sr, ec) — same rank as the capturing pawn,
+			# same file as the landing square — not on the landing square itself (er, ec).
+			# A plain push that happens to land on the EP target square (when the adjacent
+			# pawn was already removed) must not be treated as a capture, hence the guard.
 			ep_captured = board[sr][ec]
 			if ep_captured is not None:
 				captured = ep_captured
@@ -28,9 +30,9 @@ class MoveExecutor:
 		# 2. Handle Castling (King moves 2 squares)
 		if piece.type == KING and abs(sc - ec) == 2:
 			rook_sr = sr
-			rook_sc = 7 if ec > sc else 0
+			rook_sc = 7 if ec > sc else 0   # kingside rook at col 7, queenside at col 0
 			rook_er = sr
-			rook_ec = 5 if ec > sc else 3
+			rook_ec = 5 if ec > sc else 3   # kingside rook lands at col 5, queenside at col 3
 			
 			rook = board[rook_sr][rook_sc]
 			if rook:
@@ -42,6 +44,9 @@ class MoveExecutor:
 					bb_mgr.add_piece(rook.color, rook.type, rook_er, rook_ec)
 
 		# 3. Standard Move Execution
+		# board[er][ec] is checked (not captured) because for EP the captured pawn
+		# was already removed from the bitboard in step 1 and board[er][ec] is now
+		# None — so this block correctly skips the double-remove.
 		if captured and captured != piece:
 			if bb_mgr and board[er][ec]:
 				bb_mgr.remove_piece(captured.color, captured.type, er, ec)

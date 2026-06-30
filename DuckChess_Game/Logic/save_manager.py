@@ -27,8 +27,8 @@ class SaveManager:
 				"black": black_player
 			},
 			"result": winner,
-			"moves": move_history,
-			"replay_actions": replay_actions
+			"moves": move_history,         # human-readable notation log (e.g. "1. e4 @ g5")
+			"replay_actions": replay_actions  # typed action list used by load_replay_file
 		}
 		
 		with open(file_path, 'w', encoding='utf-8') as json_file:

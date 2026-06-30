@@ -1,7 +1,10 @@
-# --- Piece Constants ---
+# Piece type constants double as FEN letters ('K','Q','R','B','N','P'),
+# so they can be written directly into FEN strings without a lookup table.
 KING, QUEEN, ROOK, BISHOP, KNIGHT, PAWN = 'K', 'Q', 'R', 'B', 'N', 'P'
 
-# --- Evaluation Values  ---
+# Standard material values (integers) used for eval and captured-piece display.
+# KING = 0 because the king is never traded; king-capture is a game-ending event,
+# not a material exchange to be scored.
 PIECE_VALUES = {
 	PAWN: 1,
 	KNIGHT: 3,
@@ -11,10 +14,12 @@ PIECE_VALUES = {
 	KING: 0
 }
 
-# --- Piece Visuals ---
 UNICODE_PIECES = {
 	'w': {KING: '♔', QUEEN: '♕', ROOK: '♖', BISHOP: '♗', KNIGHT: '♘', PAWN: '♙'},
 	'b': {KING: '♚', QUEEN: '♛', ROOK: '♜', BISHOP: '♝', KNIGHT: '♞', PAWN: '♟'}
 }
 
+# Sentinel meaning "duck not yet on the board". Stored as a tuple so it is
+# comparable with (r, c) tuples, but (-1,-1) is truthy — always check with
+# `duck_pos != (-1,-1)`, never with plain `if duck_pos:`.
 STARTING_DUCK_POS = (-1, -1)

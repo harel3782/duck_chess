@@ -5,7 +5,13 @@ from DuckChess_Game.Logic.move_executor import MoveExecutor
 from DuckChess_Game.UI.settings import AI_MOVE_DELAY
 
 class TurnManagerMixin:
-	"""Handles movement logic, state updates, and 50-move rule maintenance."""
+	"""Handles movement logic, state updates, and 50-move rule maintenance.
+
+	Every full turn is two phases stored in self.phase:
+	  'move_piece' → player moves a piece (execute_move) → transitions to 'move_duck'
+	  'move_duck'  → player places the duck (place_duck)  → flips turn back to 'move_piece'
+	Exception: capturing the enemy king ends the game immediately, skipping duck placement.
+	"""
 
 	def execute_move(self, start, end, animated=True):
 		"""Executes a move, updates clocks, and sets the last move highlight."""
@@ -61,12 +67,15 @@ class TurnManagerMixin:
 				self.play_sound('move')
 
 		if captured and captured.type == KING:
+			# Duck Chess win condition: capturing the king ends the game instantly.
+			# No check/checkmate — the king is taken like any other piece.
+			# Duck placement is skipped; the turn never flips.
 			self.current_move_str += "#"
 			if self.turn == 'w':
 				self.move_log.append(f"{self.turn_number}. {self.current_move_str}")
 			else:
 				self.move_log.append(f"{self.turn_number}... {self.current_move_str}")
-				
+
 			self.game_over, self.winner = True, self.turn
 			if hasattr(self, 'play_sound') and getattr(self, 'game_mode', '') != 'replay':
 				self.play_sound('game_over')
@@ -76,7 +85,9 @@ class TurnManagerMixin:
 			if p.type == PAWN and end[0] == promote_rank:
 				self._handle_auto_promotion(p, end)
 			else:
-				self.prev_duck_pos, self.phase = self.duck_pos, 'move_duck'
+				# Snapshot the duck's current position before the duck phase begins.
+			# place_duck uses prev_duck_pos to forbid replanting on the same square.
+			self.prev_duck_pos, self.phase = self.duck_pos, 'move_duck'
 
 	def _handle_auto_promotion(self, pawn, pos):
 		"""Logic for automatic promotion."""
@@ -127,7 +138,8 @@ class TurnManagerMixin:
 		self.prev_duck_pos, self.phase = self.duck_pos, 'move_duck'
 
 	def place_duck(self, pos, animated=True):
-		"""Finalizes turn by placing the duck."""
+		"""Finalizes turn by placing the duck, then hands control to the other side."""
+		# Reject occupied squares and the duck's own previous square (can't stay in place).
 		if self.board[pos[0]][pos[1]] or pos == getattr(self, 'prev_duck_pos', (-1, -1)): return
 		
 		# --- RECORD ACTION FOR JSON REPLAYS ---
@@ -141,6 +153,7 @@ class TurnManagerMixin:
 		if hasattr(self, 'bb_mgr'):
 			self.bb_mgr.move_duck(pos[0], pos[1])
 			
+		# Turn flips here — everything below sees the NEXT player's color.
 		self.duck_pos, self.phase, self.turn = pos, 'move_piece', ('b' if self.turn == 'w' else 'w')
 
 		# --- PARALLEL STATE SANITY CHECK ---
@@ -148,7 +161,8 @@ class TurnManagerMixin:
 			if not self.bb_mgr.verify_sync(self.board, self.duck_pos):
 				print("CRITICAL WARNING: The Bitboard engine is out of sync with the 2D board!")
 
-		if self.turn == 'b': self.move_log.append(f"{self.turn_number}. {log_entry}") 
+		# After the flip, turn=='b' means WHITE just finished; turn=='w' means BLACK just finished.
+		if self.turn == 'b': self.move_log.append(f"{self.turn_number}. {log_entry}")
 		else:
 			self.move_log.append(f"{self.turn_number}... {log_entry}")
 			self.turn_number += 1
@@ -174,6 +188,8 @@ class TurnManagerMixin:
 		if getattr(self, 'rl_searcher', None) is not None:
 			if self.phase == 'move_piece':
 				from DuckChess_Game.SBThree.mcts import headless_snapshot
+				# MCTS evaluates piece + duck together in one search, so both actions are
+				# returned now and the duck action is stashed for the move_duck phase.
 				piece_a, duck_a = self.rl_searcher.choose_turn(headless_snapshot(self))
 				self._pending_duck_action = duck_a
 				if piece_a is None:

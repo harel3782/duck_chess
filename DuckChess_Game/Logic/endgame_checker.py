@@ -4,7 +4,7 @@ class EndgameCheckerMixin:
 	"""Evaluates material and checks for terminal game states according to Duck Chess rules."""
 
 	def calculate_material_score(self, board_state):
-		"""Calculates material balance using PIECE_VALUES."""
+		"""Returns white material minus black material (positive = white ahead)."""
 		score = 0
 		for r in range(8):
 			for c in range(8):
@@ -18,12 +18,13 @@ class EndgameCheckerMixin:
 		"""Validates terminal states: 50-move rule and Fowling (Stalemate win)."""
 		if getattr(self, 'game_over', False): return
 		
-		# Draw by 50-move rule (100 half-moves)
+		# Each pawn push or capture resets the clock; all other plies increment it.
+		# 100 half-moves = 50 full moves per the FIDE definition.
 		if hasattr(self, 'half_move_clock') and self.half_move_clock >= 100:
 			self.game_over, self.winner = True, 'draw'
 			return
 
-		# Check for legal moves
+		# Short-circuit scan: stop as soon as any legal move is found.
 		has_moves = False
 		for r in range(8):
 			for c in range(8):

@@ -3,10 +3,15 @@ from DuckChess_Game.Logic.action_masker import ActionMasker
 from DuckChess_Game.Logic.notation_helper import NotationHelper
 
 class RLMixin:
-	"""Provides a clean interface for Reinforcement Learning operations using specialized helper classes."""
+	"""Thin adapter exposing _get_obs / action_masks / _decode_move to GameLogicMixin.
+
+	Delegates all real work to ObservationEncoder and ActionMasker. Both helpers
+	are stateless, so a new instance is created per call — no shared state to corrupt
+	between the UI and RL training paths.
+	"""
 
 	def _get_obs(self):
-		"""Returns the current board state encoded as an observation tensor."""
+		"""Returns the current board state encoded as a 19×8×8 float32 tensor."""
 		encoder = ObservationEncoder()
 		return encoder.encode_state(
 			bb_mgr=self.bb_mgr,
@@ -33,7 +38,10 @@ class RLMixin:
 		return masker.decode_move(action_index)
 
 	def debug_print_observation(self):
-		"""Prints a human-readable summary of the current observation tensor to the console."""
+		"""Prints active squares for channels 0-14 (pieces, duck, EP, turn) to the console.
+		Channels 15-18 (castling rights) are omitted for brevity.
+		"""
+		# Guard against flooding stdout during training or replay playback.
 		if getattr(self, 'game_mode', '') in ['rl_training', 'replay']: return
 		
 		obs = self._get_obs()
@@ -61,5 +69,7 @@ class RLMixin:
 				print(f"[{channel}] {channel_names[channel]:<18}: {', '.join(active_squares)}")
 
 		print("-" * 40)
+		# Channel 14 is a constant plane: all cells are 1.0 for white, 0.0 for black.
+		# Reading any single cell ([0][0]) is sufficient to determine the turn.
 		current_turn = "White" if obs[14][0][0] == 1.0 else "Black"
 		print(f"[14] Turn               : {current_turn}")

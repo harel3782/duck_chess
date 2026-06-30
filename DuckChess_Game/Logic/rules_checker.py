@@ -1,10 +1,18 @@
 from DuckChess_Game.Logic.constants import *
 
 class RulesChecker:
-	"""Validates global game states like Check conditions."""
+	"""Validates global game states like Check conditions.
+
+	Stateless — a fresh instance is created per call, making it safe to use
+	from both the UI and RL training paths concurrently.
+	"""
 
 	def is_in_check(self, color, board, duck_pos):
-		"""Checks if the King of the given color is under attack."""
+		"""Returns True if the king of `color` is under attack.
+
+		Returns False if no king is found — handles the post-king-capture state
+		without crashing (the game_over flag should already be set by then).
+		"""
 		king_pos = self._find_king(color, board)
 		if not king_pos: return False
 
@@ -37,8 +45,11 @@ class RulesChecker:
 		return False
 
 	def _is_attacked_by_sliding(self, r, c, enemy, board, duck_pos):
-		"""Checks for straight and diagonal attacks from Queens, Rooks, and Bishops."""
-		# Rooks and Queens (Straight)
+		"""Checks for straight and diagonal attacks from Queens, Rooks, and Bishops.
+
+		Duck Chess addition: the duck terminates any sliding ray, blocking attacks
+		through it just like a piece would — but without being capturable.
+		"""
 		for dr, dc in [(1,0), (-1,0), (0,1), (0,-1)]:
 			for i in range(1, 8):
 				nr, nc = r + dr*i, c + dc*i
@@ -60,7 +71,12 @@ class RulesChecker:
 		return False
 
 	def _is_attacked_by_pawn(self, r, c, enemy, board):
-		"""Checks for diagonal pawn captures."""
+		"""Checks for diagonal pawn captures targeting the king at (r, c).
+
+		d encodes the enemy's forward direction: white advances toward row 0 (d=-1),
+		black toward row 7 (d=+1). `r - d` looks one rank behind the king in the
+		enemy pawn's forward direction — where an attacking pawn would stand.
+		"""
 		d = -1 if enemy == 'w' else 1
 		for dc in [-1, 1]:
 			nr, nc = r - d, c + dc

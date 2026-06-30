@@ -8,6 +8,9 @@ class TurnResult:
     ok: bool
     captured_piece: Any = None
     error: Optional[str] = None
+    # ok=False without "ATOMIC_FAILURE" in error → no state was mutated.
+    # ok=False with "ATOMIC_FAILURE" → piece move already executed, game is
+    # stuck in 'move_duck' phase and the caller must complete or roll back.
 
 
 class MovePipeline:
@@ -58,8 +61,10 @@ class MovePipeline:
                 error=f"Illegal piece move: {piece_start} -> {piece_end}",
             )
 
-        # Validate duck destination against the projected post-move board so
-        # we can reject it before touching any state.
+        # Validate the duck destination against the PROJECTED post-move board
+        # before any state mutation. _projected_duck_invalids simulates the
+        # piece move (vacates start, occupies end) so we can reject an
+        # impossible duck placement without having to undo a half-executed turn.
         if duck_dest in self._projected_duck_invalids(piece_start, piece_end):
             return TurnResult(
                 ok=False,
@@ -70,7 +75,8 @@ class MovePipeline:
         captured = g.board[piece_end[0]][piece_end[1]]
         g.execute_move(piece_start, piece_end, animated=False)
 
-        # A king capture ends the game immediately; duck placement is moot.
+        # King capture: execute_move sets game_over and leaves phase='move_piece'.
+        # Duck placement is skipped — the turn is already over.
         if g.phase != 'move_duck':
             return TurnResult(ok=True, captured_piece=captured)
 
@@ -88,6 +94,9 @@ class MovePipeline:
         phase_before = g.phase
         g.place_duck(duck_dest, animated=False)
 
+        # place_duck returns None and has a silent no-op path. Detect the no-op
+        # by checking whether the phase advanced — if it didn't, the placement
+        # was rejected internally and we flag it as an atomic failure.
         if g.phase == phase_before:
             return TurnResult(
                 ok=False,
@@ -176,9 +185,10 @@ class MovePipeline:
                 if g.board[r][c] is not None:
                     invalid.add((r, c))
 
-        invalid.discard(piece_start)
-        invalid.add(piece_end)
+        invalid.discard(piece_start)  # source square will be vacated
+        invalid.add(piece_end)         # destination square will be occupied
 
+        # The duck also cannot stay on its current square (it must actually move).
         prev = getattr(g, 'prev_duck_pos', (-1, -1))
         if prev != (-1, -1):
             invalid.add(prev)

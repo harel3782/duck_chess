@@ -19,7 +19,9 @@ class HistoryManagerMixin:
 			self.bb_mgr = BitboardManager()
 
 	def save_snapshot(self):
-		"""Saves a single point in history including En Passant target."""
+		"""Appends the current position to history and advances view_index to the latest."""
+		# deepcopy is required: board and captured are mutable containers.
+		# Without it, every history entry would reflect the live board state.
 		self.history.append({
 			'board': copy.deepcopy(self.board),
 			'duck_pos': self.duck_pos,
@@ -29,6 +31,10 @@ class HistoryManagerMixin:
 			'captured': copy.deepcopy(getattr(self, 'captured', {'w': [], 'b': []})),
 			'log': list(self.move_log)
 		})
+		# view_index tracks which snapshot the UI is displaying. Setting it to the
+		# last entry keeps the display at the live position after each move.
+		# When the user rewinds, view_index falls behind len(history)-1 and the
+		# AI is blocked from moving (see ai_turn's guard in turn_manager).
 		self.view_index = len(self.history) - 1
 
 	def reset_game_state(self):
@@ -64,6 +70,10 @@ class HistoryManagerMixin:
 		self.board = [[None] * 8 for _ in range(8)]
 		self.init_board()
 
+		# In black_ai mode the human plays white and moves first, so the AI
+		# does not need to move at game start — waiting_for_ai is pre-set here
+		# so the AI fires immediately after white's first duck placement flips
+		# the turn, without needing an extra trigger.
 		if getattr(self, 'game_mode', None) == 'black_ai':
 			self.waiting_for_ai = True
 			self.ai_wait_start = int(time.monotonic() * 1000)
@@ -73,25 +83,31 @@ class HistoryManagerMixin:
 		self.save_snapshot()
 
 	def load_replay_file(self, filepath):
-		"""Loads a .pkl or .json replay file and reconstructs history."""
+		"""Loads a .pkl or .json replay file and reconstructs history by replaying actions.
+
+		Two save formats are supported:
+		  .json — human-readable, typed actions ('piece'/'duck'/'promote') written by the UI.
+		  .pkl  — RL training output; stores raw numeric action indices decoded via _decode_move.
+		          The PKL loop uses self.phase (mutated by each call) to decide whether each
+		          index encodes a piece move or a duck placement — same disambiguation as live play.
+		"""
 		if not os.path.exists(filepath): return
-		
+
 		try:
 			if filepath.endswith('.json'):
 				with open(filepath, 'r', encoding='utf-8') as f:
 					game_data = json.load(f)
 				actions = game_data.get('replay_actions', [])
-				
+
 				if not actions: return
-				
+
 				self.reset_game_state()
 				self.game_mode, self.state = 'replay', 'game'
-				
-				# --- Extract player names for HUD ---
+
 				players = game_data.get('players', {})
 				self.replay_white_name = players.get('white', 'Unknown')
 				self.replay_black_name = players.get('black', 'Unknown')
-				
+
 				for act in actions:
 					if act['type'] == 'piece':
 						self.execute_move(tuple(act['start']), tuple(act['end']), animated=False)
@@ -99,18 +115,18 @@ class HistoryManagerMixin:
 						self.place_duck(tuple(act['pos']), animated=False)
 					elif act['type'] == 'promote':
 						self.promote_pawn(act['piece'])
-						
+
 			else:
 				with open(filepath, 'rb') as f:
 					game_data = pickle.load(f)
-					
+
 				actions = game_data.get('action_history', [])
 				if not actions: return
-				
+
 				self.reset_game_state()
 				self.game_mode, self.state = 'replay', 'game'
 				self.replay_learning_color = game_data.get('learning_color', 'unknown')
-				
+
 				for act in actions:
 					start, end = getattr(self, '_decode_move')(act)
 					if self.phase == 'move_piece':

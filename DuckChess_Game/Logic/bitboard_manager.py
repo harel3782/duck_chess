@@ -15,7 +15,12 @@ class BitboardManager:
 		# 1 Bitboard for the Duck
 		self.duck_board = 0
 		
-		# Occupancy bitboards (cached for fast move generation)
+		# Derived union boards, kept in sync after every add/remove.
+		# Move generators read these on every call, so caching avoids OR-ing
+		# 6 piece boards together repeatedly per position.
+		# NOTE: all_occupancy does NOT include the duck — duck blocking is
+		# handled separately in move generation because the duck obstructs
+		# both sides equally, unlike normal piece occupancy.
 		self.white_occupancy = 0
 		self.black_occupancy = 0
 		self.all_occupancy = 0
@@ -56,7 +61,9 @@ class BitboardManager:
 		self._update_occupancies()
 
 	def move_duck(self, r, c):
-		"""Updates the duck's single bitboard."""
+		"""Moves the duck to (r, c), or clears it when called with the (-1,-1) sentinel."""
+		# Reset to 0 first: the duck occupies exactly one square, so the old bit
+		# must be cleared unconditionally before setting the new position.
 		self.duck_board = 0
 		if r != -1 and c != -1:
 			sq = self.coords_to_square(r, c)
@@ -86,7 +93,12 @@ class BitboardManager:
 		print("-" * 20)
 
 	def verify_sync(self, board_2d, duck_pos_2d):
-		"""Validates that the 2D array and the 64-bit boards are perfectly synchronized."""
+		"""Cross-checks bitboards against the 2D board; prints the first mismatch and returns False.
+
+		Called after every duck placement in production (see place_duck). O(64 × 12)
+		but cheap compared to a full move-generation pass. Logs rather than raises so
+		a sync error surfaces as a warning without crashing a live game.
+		"""
 		for r in range(8):
 			for c in range(8):
 				sq = self.coords_to_square(r, c)
@@ -143,6 +155,7 @@ class BitboardManager:
 			fen.append(rank_str)
 
 		fen_str = "/".join(fen)
+		# duck_pos[1] = column → file letter; duck_pos[0] = row → rank number.
 		duck_notation = chr(ord('a') + duck_pos[1]) + str(duck_pos[0] + 1)
 		return f"{fen_str} {turn} - - 0 1 [{duck_notation}]"
 

@@ -155,6 +155,8 @@ class GameStateValidator:
                         found_pawn = True
                         break
 
+            # Absent pawn is a warning, not an issue: a stale EP target with no
+            # capturing pawn is harmless — move gen will ignore it naturally.
             if not found_pawn:
                 warnings.append(
                     f"No {capturing_color} pawn adjacent to en_passant_target "
