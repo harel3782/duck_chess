@@ -404,12 +404,15 @@
         <div class="select-wrap">
           <select id="menu-model"><option>Loading models…</option></select>
         </div>
-        <label>Search depth</label>
+        <label>AI thinking mode</label>
         <div class="select-wrap">
-          <select id="menu-search-depth" title="Alpha-beta lookahead on top of the model (ignored in 2-player)">
+          <select id="menu-ai-mode" title="AI search mode on top of the model (ignored in 2-player)">
             <option value="">Off (raw policy)</option>
-            <option value="1">Depth 1</option>
-            <option value="2">Depth 2</option>
+            <option value="ab1">Alpha-beta — Depth 1</option>
+            <option value="ab2">Alpha-beta — Depth 2</option>
+            <option value="mcts30">MCTS — Fast (30 sims)</option>
+            <option value="mcts100">MCTS — Medium (100 sims)</option>
+            <option value="mcts300">MCTS — Strong (300 sims, slower)</option>
           </select>
         </div>
       </div>
@@ -708,9 +711,14 @@
     showScreen('screen-game');
     setThinking('Starting game…');
     try{
-      const sd = document.getElementById('menu-search-depth');
-      const searchDepth = (is2Player || !sd || !sd.value) ? null : Number(sd.value);
-      const reqBody = {color: curColor, model: is2Player ? null : curModel, search_depth: searchDepth};
+      const mode = is2Player ? '' : (document.getElementById('menu-ai-mode')?.value ?? '');
+      let search_depth = null, mcts_sims = null;
+      if (mode === 'ab1') search_depth = 1;
+      else if (mode === 'ab2') search_depth = 2;
+      else if (mode === 'mcts30') mcts_sims = 30;
+      else if (mode === 'mcts100') mcts_sims = 100;
+      else if (mode === 'mcts300') mcts_sims = 300;
+      const reqBody = {color: curColor, model: is2Player ? null : curModel, search_depth, mcts_sims};
       const state = await api('/api/new-game', reqBody);
       gameId = state.gameId;
       playerColor = state.playerColor;
