@@ -1,7 +1,10 @@
 #!/usr/bin/env python
 """
-train_real.py — 14-hour corrective run to break the king-rush exploit and teach
-real positional play.
+train_real.py — corrective run to break the king-rush exploit and teach real positional play.
+
+Replaces train_real_logged.py. For the old 1-hour continuation with draw=0.1:
+  python -m DuckChess_Game.SBThree.train_real \
+      --resume models/duck_ppo/real/real_final.zip --hours 1 --draw 0.1
 
 Diagnosis (proven, not assumed): the existing models win only via a ~4-move
 knight-rush at the enemy king. It works vs shallow Peter depth-2 and other RL
@@ -59,36 +62,36 @@ SAVE_DIR = os.path.join("models", "duck_ppo", "real")
 BASE = "models/duck_ppo/strong/strong_final.zip"
 
 
-def anti_cheese_reward():
+def anti_cheese_reward(draw=-0.3):
     return ShapedReward(
-        material_weight=0.05,     # don't sacrifice pieces for a doomed rush
-        loss_multiplier=1.3,      # losing material hurts a bit more
-        development_bonus=0.08,   # reward developing MANY pieces (rush uses 1 knight)
-        castling_bonus=0.20,      # reward king safety
-        defense_weight=0.05,      # reward reducing checks on OWN king (it ignores this)
-        mobility_scale=0.004,     # reward having options (discourages corner-shuffle)
-        blocking_scale=0.015,     # reward using the duck to block (it wastes the duck)
-        step_penalty=0.0,         # OFF: step penalty rewards fast games = the rush
-        king_push_bonus=0.01,     # small push toward aggression (was 0.0 — model draws too much)
-        win=1.0, loss=-1.0, draw=-0.3,  # draws now cost — model learned to survive, must learn to win
+        material_weight=0.05,
+        loss_multiplier=1.3,
+        development_bonus=0.08,
+        castling_bonus=0.20,
+        defense_weight=0.05,
+        mobility_scale=0.004,
+        blocking_scale=0.015,
+        step_penalty=0.0,
+        king_push_bonus=0.01,
+        win=1.0, loss=-1.0, draw=draw,
     )
 
 
-def make_cfg(depth):
+def make_cfg(depth, draw=-0.3):
     return EnvConfig(
         stage_name=f"real_d{depth}",
         opponent=PeterLocalOpponent(depth=depth),
-        reward=anti_cheese_reward(),
+        reward=anti_cheese_reward(draw=draw),
         mask=ForcedKingCaptureMask(),
         randomize_color=True,
-        replay_every=1,            # SAVE EVERY GAME
-        replay_chief_only=False,   # ALL environments save replays
+        replay_every=1,
+        replay_chief_only=False,
     )
 
 
-def make_env(rank, depth):
+def make_env(rank, depth, draw=-0.3):
     def _init():
-        return Monitor(PeterLocalEnv(make_cfg(depth), env_index=rank))
+        return Monitor(PeterLocalEnv(make_cfg(depth, draw=draw), env_index=rank))
     return _init
 
 
@@ -173,6 +176,8 @@ def main():
     p.add_argument("--ckpt-every", type=int, default=50_000)
     p.add_argument("--resume", type=str, default=None,
                    help="Resume from this checkpoint instead of BASE (e.g. models/duck_ppo/real/real_v4.zip)")
+    p.add_argument("--draw", type=float, default=-0.3,
+                   help="Draw reward (default -0.3; use 0.1 to incentivize survival over winning)")
     args = p.parse_args()
 
     os.makedirs(SAVE_DIR, exist_ok=True)
@@ -185,7 +190,7 @@ def main():
 
     print(f"\n=== TRAINING {args.hours}h vs Peter depth-{args.depth} "
           f"({args.n_envs} envs), DENSE anti-cheese reward ===", flush=True)
-    vec = SubprocVecEnv([make_env(i, args.depth) for i in range(args.n_envs)])
+    vec = SubprocVecEnv([make_env(i, args.depth, draw=args.draw) for i in range(args.n_envs)])
     model = MaskablePPO.load(
         start_model, env=vec,
         tensorboard_log="./tensorboard_logs/real/",
