@@ -19,6 +19,10 @@ UNICODE_PIECES = {
 	'b': {KING: '♚', QUEEN: '♛', ROOK: '♜', BISHOP: '♝', KNIGHT: '♞', PAWN: '♟'}
 }
 
+# Time (ms) the AI waits before each action, used to pace AI turns in an
+# interactive front-end so moves don't appear instantaneous.
+AI_MOVE_DELAY = 1200
+
 # Sentinel meaning "duck not yet on the board". Stored as a tuple so it is
 # comparable with (r, c) tuples, but (-1,-1) is truthy — always check with
 # `duck_pos != (-1,-1)`, never with plain `if duck_pos:`.

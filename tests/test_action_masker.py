@@ -3,7 +3,7 @@ import pytest
 import numpy as np
 from DuckChess_Game.Logic.action_masker import ActionMasker
 from DuckChess_Game.Logic.constants import PAWN, KNIGHT, BISHOP, ROOK, QUEEN, KING
-from DuckChess_Game.UI.pieces import Piece
+from DuckChess_Game.Logic.pieces import Piece
 
 
 @pytest.fixture

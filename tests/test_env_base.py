@@ -165,7 +165,7 @@ class TestStep:
 class TestForcedKingCaptureMaskIntegration:
     def test_only_king_capture_when_available(self):
         from DuckChess_Game.Logic.constants import KING, ROOK
-        from DuckChess_Game.UI.pieces import Piece
+        from DuckChess_Game.Logic.pieces import Piece
 
         config = EnvConfig(
             stage_name="fkc_test",

@@ -1,9 +1,4 @@
 """Tests for BitboardManager — bit operations, occupancy tracking, and sync validation."""
-import os
-os.environ['PYGAME_HIDE_SUPPORT_PROMPT'] = '1'
-import pygame
-pygame.init()
-
 import pytest
 from DuckChess_Game.Logic.bitboard_manager import BitboardManager
 from DuckChess_Game.Logic.board_manager import BoardManager

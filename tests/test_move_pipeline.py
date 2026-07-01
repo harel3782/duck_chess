@@ -2,7 +2,7 @@
 import pytest
 from DuckChess_Game.Logic.move_pipeline import MovePipeline, TurnResult
 from DuckChess_Game.Logic.constants import PAWN, KNIGHT, BISHOP, ROOK, QUEEN, KING
-from DuckChess_Game.UI.pieces import Piece
+from DuckChess_Game.Logic.pieces import Piece
 
 
 @pytest.fixture

@@ -1,13 +1,8 @@
 """Tests for RulesChecker — check detection with and without duck blocking."""
-import os
-os.environ['PYGAME_HIDE_SUPPORT_PROMPT'] = '1'
-import pygame
-pygame.init()
-
 import pytest
 from DuckChess_Game.Logic.rules_checker import RulesChecker
 from DuckChess_Game.Logic.board_manager import BoardManager
-from DuckChess_Game.UI.pieces import Piece
+from DuckChess_Game.Logic.pieces import Piece
 from DuckChess_Game.Logic.constants import PAWN, KNIGHT, BISHOP, ROOK, QUEEN, KING
 
 

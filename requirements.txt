@@ -20,11 +20,6 @@ gymnasium==1.2.3
 numpy==2.4.4
 torch==2.11.0          # CPU build; for GPU install torch from the CUDA index
 
-# ── Game engine ────────────────────────────────────────────────────────────
-# Required (not optional): the headless engine imports pygame via turn_manager.py,
-# so even the web server and training pull it in.
-pygame==2.6.1
-
 # ── Dev / test (optional) ──────────────────────────────────────────────────
 # Needed only to run the test suite / web E2E tooling, not to play or train.
 pytest==9.0.3

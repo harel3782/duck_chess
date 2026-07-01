@@ -46,7 +46,7 @@ class TestGreedyOpponent:
 
     def test_prefers_capture_when_available(self, engine):
         from DuckChess_Game.Logic.constants import PAWN
-        from DuckChess_Game.UI.pieces import Piece
+        from DuckChess_Game.Logic.pieces import Piece
 
         # Place a black pawn on row 5 adjacent to white pawn — white can capture
         engine.board[5][3] = Piece('b', PAWN)
@@ -75,7 +75,7 @@ class TestAlphaBetaOpponent:
 
     def test_captures_king_immediately(self, engine):
         from DuckChess_Game.Logic.constants import KING
-        from DuckChess_Game.UI.pieces import Piece
+        from DuckChess_Game.Logic.pieces import Piece
 
         # Place black king adjacent to a white piece that can capture it
         engine.board[5][4] = Piece('b', KING)

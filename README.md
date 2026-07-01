@@ -1,8 +1,8 @@
 # Duck Chess AI 🦆
 
-A complete **Duck Chess** engine, two front-ends (a Pygame desktop app and a FastAPI web app), and
-a reinforcement-learning agent trained with MaskablePPO and played with AlphaZero-style MCTS — built
-as a Computer Science final project.
+A complete **Duck Chess** engine, a FastAPI web front-end, and a reinforcement-learning agent
+trained with MaskablePPO and played with AlphaZero-style MCTS — built as a Computer Science final
+project.
 
 > **Duck Chess** is a chess variant with one extra twist: after *every* move, the player must also
 > move a neutral **duck**. The duck can't be captured, blocks whatever square it stands on, and
@@ -46,11 +46,9 @@ everywhere — in the UI input handling, and as the two-stage action space the R
 
 - **Pure-Python engine** — legal move generation, castling, en passant, promotion, and duck
   blocking, with a dual board representation (a readable 2D array *and* 64-bit bitboards for speed).
-- **Pygame desktop UI** — menu, interactive rules screen, a position editor, and live play with
-  move highlighting, animations, sound, an eval bar, and a game-over screen.
 - **Browser web UI** — a FastAPI + JS app (`web_ui/`) to play any trained checkpoint or a
   local 2-player game, with a model browser, save / load / replay (duck included), per-player
-  timers, and board flip. See [Quick start](#4-play-in-the-browser-web-ui).
+  timers, and board flip. See [Quick start](#3-play-in-the-browser-web-ui).
 - **Reinforcement-learning pipeline** — a custom Gymnasium environment, strict legal-action masking,
   a staged curriculum trained with `sb3-contrib`'s MaskablePPO, and an **AlphaZero-style PUCT MCTS**
   (`mcts.py`) for inference-time search.
@@ -83,32 +81,11 @@ pip install -r requirements.txt
 ```
 
 > Developed against **Python 3.12** with `stable-baselines3` 2.8, `sb3-contrib` 2.8,
-> `gymnasium` 1.2, `numpy` 2.4, `pygame` 2.6, `torch` 2.11 (CPU), `fastapi` 0.136,
+> `gymnasium` 1.2, `numpy` 2.4, `torch` 2.11 (CPU), `fastapi` 0.136,
 > `uvicorn` 0.49. A GPU is **not** required. Exact pins live in
 > [`requirements.txt`](requirements.txt).
 
-### 3. Play the game
-
-Desktop (Pygame):
-
-```bash
-python DuckChess_Game/UI/main.py
-```
-
-Web (FastAPI, then open <http://localhost:7890>):
-
-```bash
-python -m uvicorn web_ui.server:app --host 127.0.0.1 --port 7890
-```
-
-> **AI opponent:** the desktop UI loads the best available ranked model
-> (`models/duck_ppo/ranked/1_champion.zip`, trying 1_champion → 2_allrounder → 4_classic) and plays
-> it with `DuckMCTS` (300 simulations at "hard"). That combination beats the local Peter engine at
-> depth-2 ~100% *without* the old "king-rush" exploit. To revert to the simple alpha-beta AI, set
-> `model_path = None` in [`main.py`](DuckChess_Game/UI/main.py); to disable search and use the raw
-> policy, set `USE_MCTS = False`. (The web UI lets you pick any checkpoint from a dropdown.)
-
-### 4. Play in the browser (web UI)
+### 3. Play in the browser (web UI)
 
 A FastAPI + vanilla-JS web app under [`web_ui/`](web_ui) plays Duck Chess in the browser
 against any trained checkpoint, or in local 2-player mode. Run it from the **project root**:
@@ -144,10 +121,10 @@ optional JSON saves; don't expose it to a network.
 - **Keyboard shortcuts:** `F` flip, `R` resign, `←/→` step through past positions, `Esc`
   close a modal / leave history view.
 
-> The model-*strength* caveat from the desktop app applies here too — the web UI simply lets
+> Model *strength* is measured against the Peter engine, not self-play — the web UI simply lets
 > you load and play any checkpoint.
 
-### 5. Run the tests
+### 4. Run the tests
 
 ```bash
 pytest
@@ -164,7 +141,6 @@ This runs the canonical suite in [`tests/`](tests) (configured via `pytest.ini`)
 duck_chess/
 ├── DuckChess_Game/
 │   ├── Logic/        Pure-Python game engine (rules, bitboards, RL bridge)
-│   ├── UI/           Pygame desktop app (menu, editor, play, rendering)
 │   └── SBThree/      RL training, search (MCTS), and evaluation pipeline
 ├── web_ui/           FastAPI + JS web app (server.py, index.html): play vs a model or 2-player, save/replay
 ├── tests/            Canonical pytest suite (engine + RL + web/e2e layers)
@@ -173,7 +149,7 @@ duck_chess/
 ├── tensorboard_logs/ TensorBoard event files (git-ignored)
 ├── saved_replays/    Training replays; web game saves under saved_replays/web/
 ├── scripts/          Utility scripts (build launcher, replay viewers, debug)
-├── assets/           Piece sprites, sounds, rules text
+├── assets/           Duck sprite/favicon served by the web UI at /assets (plus legacy sprites/sounds)
 ├── requirements.txt  Pinned Python dependencies
 ├── README.md         You are here
 ├── CLAUDE.md         Guidance for AI coding assistants
@@ -185,7 +161,7 @@ duck_chess/
 
 ## Architecture
 
-The codebase is three Python modules under `DuckChess_Game/` plus the `web_ui/` package. Each Python
+The codebase is two Python modules under `DuckChess_Game/` plus the `web_ui/` package. Each Python
 module is built with a **mixin composition pattern** — a central class inherits focused behaviour
 from several mixins.
 
@@ -200,11 +176,6 @@ from several mixins.
 - **RL bridge:** [`rl_mixin.py`](DuckChess_Game/Logic/rl_mixin.py) exposes a 19-channel observation
   ([`observation_encoder.py`](DuckChess_Game/Logic/observation_encoder.py)) and a 4096-action mask
   ([`action_masker.py`](DuckChess_Game/Logic/action_masker.py)) to the training environment.
-
-### UI — the Pygame app
-`main.py`'s `DuckChess` composes `GameLogicMixin`, `RenderingMixin`, `InputHandlerMixin`, and
-`AssetManagerMixin`. Game states are `menu`, `rules`, `edit`, and `game`; input and rendering are
-split per state. All visual constants live in [`settings.py`](DuckChess_Game/UI/settings.py).
 
 ### web_ui — the browser app
 A FastAPI backend ([`server.py`](web_ui/server.py), port 7890) that loads every checkpoint under
@@ -285,7 +256,6 @@ Full details, the headless test setup, and troubleshooting are in
 | Layer | Technology |
 |-------|------------|
 | Language | Python 3.12 |
-| Desktop UI | Pygame |
 | Web UI | FastAPI + Uvicorn, single-file HTML/JS |
 | RL framework | Stable-Baselines3 + sb3-contrib (MaskablePPO) |
 | RL environment | Gymnasium |

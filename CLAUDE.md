@@ -9,8 +9,7 @@ change something it describes, update this file in the same change.
 Duck Chess is a chess-variant AI project with three parts:
 
 1. **A pure-Python game engine** that enforces the Duck Chess rules (`DuckChess_Game/Logic/`).
-2. **Two front-ends** — a Pygame desktop app (`DuckChess_Game/UI/`) and a FastAPI + HTML web app
-   (`web_ui/`).
+2. **A front-end** — a FastAPI + HTML web app (`web_ui/`).
 3. **A reinforcement-learning pipeline** that trains an agent with MaskablePPO and plays it with
    AlphaZero-style MCTS at inference (`DuckChess_Game/SBThree/`).
 
@@ -31,9 +30,9 @@ mislead you.
 
 - **Python 3.12**, with a local `.venv/` (use `.venv\Scripts\python.exe` on Windows).
 - Dependencies are pinned in **`requirements.txt`** (`pip install -r requirements.txt`). Key
-  packages: `fastapi`, `uvicorn`, `pydantic` (web UI), `pygame`, `numpy`, `torch` (CPU),
+  packages: `fastapi`, `uvicorn`, `pydantic` (web UI), `numpy`, `torch` (CPU),
   `stable-baselines3`, `sb3-contrib`, `gymnasium`, `pytest`, `pytest-cov`. A GPU is **not** required.
-  `pygame` is **required even headless** — it is imported at engine/web-server startup.
+  The engine is pure Python — no `pygame` or other GUI toolkit is needed to run, train, or serve.
 - Primary development platform is **Windows** (PowerShell). The engine and training are
   cross-platform.
 - **Known gap:** `requirements.txt` lists `httpx` and `playwright`, but the current `.venv` does
@@ -45,28 +44,9 @@ mislead you.
 Run SBThree scripts as **modules from the repo root** (`-m`) so package imports resolve. Examples
 below use the venv interpreter.
 
-### Desktop game UI
-
-```bash
-python DuckChess_Game/UI/main.py
-```
-
-The desktop UI loads the best available ranked model (tries 1_champion → 2_allrounder →
-4_classic). In `DuckChess_Game/UI/main.py`:
-
-```python
-model_path = "models/duck_ppo/ranked/1_champion.zip"  # best model (d1 1.00, d2 1.00)
-USE_MCTS   = True                                      # set to False -> raw policy, no search
-DIFFICULTY = "hard"   # "easy" | "medium" | "hard" -> MCTS sims 30 / 100 / 300
-self.rl_searcher = DuckMCTS(self.rl_model, sims=300, c_puct=1.5)
-```
-
-So the in-game AI = `1_champion` policy driven by `DuckMCTS` (300 sims at hard). Fallback
-chain: `model_path=None` -> `ai.py` alpha-beta; `USE_MCTS=False` -> raw policy.
-
 ### Web UI
 
-A FastAPI + vanilla-JS app under `web_ui/` (separate from the Pygame UI). Run from the
+A FastAPI + vanilla-JS app under `web_ui/` (the only front-end). Run from the
 **project root**:
 ```bash
 python -m uvicorn web_ui.server:app --port 7890   # then open http://127.0.0.1:7890
@@ -174,7 +154,7 @@ Pure-Python game engine. The hub class is **`GameLogicMixin`** in `logic.py`, wh
 
 Key abstractions:
 
-- **Dual board representation:** a 2D array (`board_manager.py`) for UI/logic clarity, plus 64-bit
+- **Dual board representation:** a 2D array (`board_manager.py`) for logic clarity, plus 64-bit
   bitboards (`bitboard_manager.py`, `bitboard_move_gen.py`) for fast move generation.
   `game_state_validator.py` is a stateless diagnostic that confirms the two stay in sync.
 - **RL interface (`rl_mixin.py` + `observation_encoder.py` + `action_masker.py`):**
@@ -187,18 +167,10 @@ Key abstractions:
 - `move_pipeline.py` orchestrates the atomic two-phase turn; an illegal move produces **zero** state
   mutation.
 
-### UI (`DuckChess_Game/UI/`)
-Pygame application. `main.py`'s `DuckChess` class composes `GameLogicMixin`, `RenderingMixin`,
-`InputHandlerMixin`, and `AssetManagerMixin`.
-
-- Game states: **`menu`, `rules`, `edit`, `game`** (the run loop checks `menu`/`rules`/`edit` and
-  treats everything else as `game`). Input and rendering are split per state.
-- `settings.py` — all visual constants (colors, fonts, layout, timing). Edit here for UI tweaks.
-
 ### web_ui (`web_ui/`)
-A standalone FastAPI backend (`server.py`) + single-file HTML/JS frontend (`index.html`), port
-**7890**. It loads all checkpoints from `models/duck_ppo/`, supports human-vs-AI and 2-player local
-play, save/load, and replay. Independent from the desktop UI.
+The single front-end: a FastAPI backend (`server.py`) + single-file HTML/JS frontend
+(`index.html`), port **7890**. It loads all checkpoints from `models/duck_ppo/`, supports
+human-vs-AI and 2-player local play, save/load, and replay.
 
 ### SBThree (`DuckChess_Game/SBThree/`)
 RL training pipeline using Stable-Baselines3 + sb3-contrib MaskablePPO.
@@ -248,7 +220,7 @@ d3 wall: every model scores 0 vs Peter depth-3 — that remains the open challen
 | `DuckChess_Game/Logic/observation_encoder.py` | Board → 19-channel tensor |
 | `DuckChess_Game/Logic/action_masker.py` | Legal-move mask for the 4096 action space |
 | `DuckChess_Game/Logic/move_pipeline.py` | Atomic two-phase turn orchestration |
-| `DuckChess_Game/UI/main.py` | Desktop game entry point (Pygame) — model loading, game loop |
+| `DuckChess_Game/Logic/pieces.py` | The `Piece` class (color, type, has_moved) used across the engine |
 | `web_ui/server.py` | FastAPI web backend — model discovery, sessions, save/load/delete, replay snapshots |
 | `web_ui/index.html` | Web UI frontend (board, model browser, 2-player, save/replay, timers) — all-in-one HTML/CSS/JS |
 | `DuckChess_Game/SBThree/mcts.py` | AlphaZero-style PUCT MCTS (piece+duck) — the inference engine |

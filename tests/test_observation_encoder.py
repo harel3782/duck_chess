@@ -1,9 +1,4 @@
 """Tests for ObservationEncoder — shape, channel layout, bounds safety."""
-import os
-os.environ['PYGAME_HIDE_SUPPORT_PROMPT'] = '1'
-import pygame
-pygame.init()
-
 import pytest
 import numpy as np
 from DuckChess_Game.Logic.observation_encoder import ObservationEncoder
