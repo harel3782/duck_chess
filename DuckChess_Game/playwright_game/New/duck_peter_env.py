@@ -145,8 +145,6 @@ class DuckPeterEnv(gym.Env):
         return masks
 
     def step(self, action):
-        # self.engine.bb_mgr.print_current_state()
-        # print(f"Phase before: {self.engine.phase}")
         time.sleep(2)  # Small delay for readability; adjust as needed for real-time interaction
         try:
             if not np.any(self.action_masks()):
@@ -263,19 +261,15 @@ class DuckPeterEnv(gym.Env):
         if piece_action == -1:
             print("[WARNING] Peter piece scraping failed entirely — skipping opponent turn.")
             return
-        # print(f"Pre piece: {self.engine.phase}")
         self._apply_action(piece_action)
         self.current_episode_actions.append(int(piece_action))
-        # print(f"Post piece: {self.engine.phase}")
 
         # --- Duck placement ---
         if getattr(self.engine, 'game_over', False):
             return
         if duck_action != -1:
-            # print(f"Pre duck: {self.engine.phase}")
             self._apply_action(duck_action)
             self.current_episode_actions.append(int(duck_action))
-            # print(f"Post duck: {self.engine.phase}")
         else:
             # Duck scraping failed: pick the first valid mask square so the phase
             # transitions correctly (leaving phase='move_duck' would stall the game).
@@ -284,10 +278,8 @@ class DuckPeterEnv(gym.Env):
             valid = np.where(masks)[0]
             if len(valid) > 0:
                 fallback = int(valid[0])
-                # print(f"Pre duck fallback: {self.engine.phase}")
                 self._apply_action(fallback)
                 self.current_episode_actions.append(fallback)
-                # print(f"Post duck fallback: {self.engine.phase}")
             else:
                 print("[ERROR] No valid duck squares found — cannot advance phase.")
 

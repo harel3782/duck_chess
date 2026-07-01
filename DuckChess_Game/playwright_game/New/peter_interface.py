@@ -118,8 +118,6 @@ class PeterSiteConnector:
             label = self.pixels_to_algebraic(x, y)
             board_map[label] = square_element
 
-        # print(f"[UI] Board Mapping Completed: Mapped {len(board_map)} square locators "
-        #       f"(flipped={self.flipped}).")
         return board_map
 
     # --- COORDINATE TRANSLATION HELPERS (orientation-independent) ------------
@@ -181,13 +179,11 @@ class PeterSiteConnector:
         p_dst = self.coords_to_algebraic(*end_coords)
 
         if phase == 'move_piece':
-            # print(f"[ACTION] Physically Moving Piece: {p_src} -> {p_dst}")
             if p_src in self.square_map and p_dst in self.square_map:
                 self.square_map[p_src].click(force=True)
                 self.square_map[p_dst].click(force=True)
 
         elif phase == 'move_duck':
-            # print(f"[ACTION] Physically Placing Duck: {p_dst}")
             if p_dst in self.square_map:
                 duck_locator = self.page.locator("image[href*='duck.svg']")
                 # If the duck is already deployed on the board, pick it up first
@@ -310,7 +306,6 @@ class PeterSiteConnector:
         if not checkbox.is_checked():
             checkbox.click()
 
-        # print("Waiting for engine to initialize (Nodes > 0)...")
         self.page.wait_for_function(
             """() => {
                 const elements = Array.from(document.querySelectorAll('div'));
