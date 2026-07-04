@@ -3,7 +3,7 @@ import pytest
 from DuckChess_Game.Logic.game_state_validator import GameStateValidator, ValidationReport
 from DuckChess_Game.Logic.bitboard_manager import BitboardManager
 from DuckChess_Game.Logic.board_manager import BoardManager
-from DuckChess_Game.UI.pieces import Piece
+from DuckChess_Game.Logic.pieces import Piece
 from DuckChess_Game.Logic.constants import PAWN, KNIGHT, BISHOP, ROOK, QUEEN, KING
 
 

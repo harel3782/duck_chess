@@ -2,7 +2,6 @@ import time
 from DuckChess_Game.Logic.constants import *
 from DuckChess_Game.Logic.notation_helper import NotationHelper
 from DuckChess_Game.Logic.move_executor import MoveExecutor
-from DuckChess_Game.UI.settings import AI_MOVE_DELAY
 
 class TurnManagerMixin:
 	"""Handles movement logic, state updates, and 50-move rule maintenance.

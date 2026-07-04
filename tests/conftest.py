@@ -64,7 +64,7 @@ def starting_bb():
 @pytest.fixture
 def starting_board():
     """Provide a 2D board array at starting position."""
-    from DuckChess_Game.UI.pieces import Piece
+    from DuckChess_Game.Logic.pieces import Piece
     from DuckChess_Game.Logic.constants import PAWN, KNIGHT, BISHOP, ROOK, QUEEN, KING
 
     board_grid = [[None] * 8 for _ in range(8)]

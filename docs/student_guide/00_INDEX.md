@@ -20,6 +20,15 @@ Jump to a specific file if you need to brush up on one area.**
 | [07_EXPERT_ITERATION.md](07_EXPERT_ITERATION.md) | Expert Iteration end-to-end: generate → train → eval → advance, data format, training losses |
 | [08_MODELS_AND_RESULTS.md](08_MODELS_AND_RESULTS.md) | All five ranked models, how they were produced, evaluation methodology, the depth-3 wall |
 
+### Hebrew (עברית, RTL) — for the lecturer defense
+
+| File | What it covers |
+|------|---------------|
+| [09_project_overview_he.html](09_project_overview_he.html) | סקירת הפרויקט בעברית — כל החלקים: חוקים, ארכיטקטורה, RL, שכבות, MCTS, ExIt, תוצאות |
+| [10_lecturer_qa_he.html](10_lecturer_qa_he.html) | שאלות ותשובות שהמרצה עשוי לשאול (RL, שכבות, MCTS ועוד), עם תשובות מלאות |
+
+> The two Hebrew files are **HTML** (not Markdown) so right-to-left alignment, mixed Hebrew-English text, tables, and code blocks all render correctly. Open them in a browser or VS Code's HTML preview.
+
 ---
 
 ## Quick orientation — how the three parts connect

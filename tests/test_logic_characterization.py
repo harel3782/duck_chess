@@ -15,7 +15,7 @@ import numpy as np
 import pytest
 
 from DuckChess_Game.SBThree.base.env_base import _HeadlessEngine
-from DuckChess_Game.UI.pieces import Piece
+from DuckChess_Game.Logic.pieces import Piece
 from DuckChess_Game.Logic.constants import KING, ROOK
 
 

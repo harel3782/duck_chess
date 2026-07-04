@@ -8,7 +8,7 @@ torch.distributions.Distribution.set_default_validate_args(False)
 from sb3_contrib import MaskablePPO
 from DuckChess_Game.SBThree.base.env_base import _HeadlessEngine
 from DuckChess_Game.SBThree.search import DuckSearch, clone_engine
-from DuckChess_Game.UI.pieces import Piece
+from DuckChess_Game.Logic.pieces import Piece
 from DuckChess_Game.Logic.constants import KING, QUEEN, ROOK, PAWN
 
 import sys

@@ -1,7 +1,7 @@
 """Tests for MoveGenerationMixin — legal moves, double pushes, duck blocking, castling, en passant."""
 import pytest
 from DuckChess_Game.Logic.constants import PAWN, KNIGHT, BISHOP, ROOK, QUEEN, KING
-from DuckChess_Game.UI.pieces import Piece
+from DuckChess_Game.Logic.pieces import Piece
 
 
 # ------------------------------------------------------------------ #

@@ -1,4 +1,4 @@
-from DuckChess_Game.UI.pieces import Piece
+from DuckChess_Game.Logic.pieces import Piece
 from DuckChess_Game.Logic.constants import *
 
 class BoardManager:

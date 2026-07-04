@@ -152,7 +152,7 @@ class TestShapedRewardCalculate:
 
     def test_material_reward_positive_on_capture(self, engine):
         from DuckChess_Game.Logic.constants import PAWN, ROOK
-        from DuckChess_Game.UI.pieces import Piece
+        from DuckChess_Game.Logic.pieces import Piece
 
         # White rook at (4,4) can capture black pawn at (4,5)
         engine.board[4][4] = Piece('w', ROOK)

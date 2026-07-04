@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<title>Duck Chess AI — סקירת הפרויקט (עברית)</title>
+<style>
+  :root { --fg:#1c1c1c; --muted:#555; --accent:#2b6cb0; --bg:#fff; --code-bg:#f4f5f7; --border:#dcdfe4; }
+  body {
+    font-family: "Segoe UI", "Arial Hebrew", Arial, sans-serif;
+    line-height: 1.85; color: var(--fg); background: var(--bg);
+    max-width: 920px; margin: 0 auto; padding: 32px 28px 80px;
+    direction: rtl; text-align: right;
+  }
+  h1 { font-size: 2em; border-bottom: 3px solid var(--accent); padding-bottom: 10px; }
+  h2 { font-size: 1.45em; color: var(--accent); margin-top: 1.9em; border-bottom: 1px solid var(--border); padding-bottom: 6px; }
+  h3 { font-size: 1.15em; margin-top: 1.4em; }
+  p, li { font-size: 1.04em; }
+  /* English / code stays left-to-right and reads naturally inside Hebrew text */
+  code, .ltr, .term { direction: ltr; unicode-bidi: isolate; }
+  code {
+    font-family: "Consolas", "Courier New", monospace; background: var(--code-bg);
+    padding: 1px 6px; border-radius: 4px; font-size: 0.92em; color: #b03060;
+  }
+  pre {
+    direction: ltr; text-align: left; unicode-bidi: isolate;
+    background: var(--code-bg); border: 1px solid var(--border); border-radius: 8px;
+    padding: 14px 16px; overflow-x: auto; font-size: 0.9em; line-height: 1.5;
+  }
+  pre code { background: none; color: #1c1c1c; padding: 0; }
+  table { border-collapse: collapse; width: 100%; margin: 1em 0; font-size: 0.98em; }
+  th, td { border: 1px solid var(--border); padding: 8px 12px; text-align: right; }
+  th { background: #eef3f9; }
+  td.num, th.num { text-align: center; direction: ltr; }
+  blockquote {
+    border-right: 4px solid var(--accent); background: #f7f9fc; margin: 1.2em 0;
+    padding: 8px 16px; color: var(--muted);
+  }
+  .note { background: #fff8e6; border: 1px solid #f0d98a; border-radius: 8px; padding: 10px 16px; margin: 1em 0; }
+  .toc { background: #f7f9fc; border: 1px solid var(--border); border-radius: 8px; padding: 8px 22px; }
+  a { color: var(--accent); }
+  hr { border: none; border-top: 1px solid var(--border); margin: 2em 0; }
+</style>
+</head>
+<body>
+
+<h1>Duck Chess AI — סקירת הפרויקט</h1>
+<p><em>מסמך הסבר בעברית עבור הצגת הפרויקט והגנה עליו מול מרצה. הטקסט בעברית מימין-לשמאל; מונחים טכניים באנגלית (כמו <span class="term">PPO</span>, <span class="term">MCTS</span>) נשארים משמאל-לימין כדי שייקראו נכון.</em></p>
+
+<div class="toc">
+<strong>תוכן עניינים</strong>
+<ol>
+  <li><a href="#intro">מה הפרויקט עושה</a></li>
+  <li><a href="#rules">חוקי שחמט הברווז (Duck Chess)</a></li>
+  <li><a href="#arch">ארכיטקטורה — שלושת החלקים</a></li>
+  <li><a href="#engine">מנוע המשחק</a></li>
+  <li><a href="#rl">למידת חיזוק (Reinforcement Learning)</a></li>
+  <li><a href="#net">רשת הנוירונים והשכבות (Layers)</a></li>
+  <li><a href="#obs">ייצוג המצב והפעולות</a></li>
+  <li><a href="#mcts">חיפוש MCTS</a></li>
+  <li><a href="#exit">Expert Iteration</a></li>
+  <li><a href="#results">תוצאות והמודלים</a></li>
+</ol>
+</div>
+
+<h2 id="intro">1. מה הפרויקט עושה</h2>
+<p>
+הפרויקט בונה סוכן בינה מלאכותית שמשחק <strong>שחמט-ברווז</strong> (<span class="term">Duck Chess</span>) —
+וריאנט של שחמט עם כלל "ברווז" נייטרלי. הסוכן מאומן באמצעות <strong>למידת חיזוק</strong>
+(<span class="term">Reinforcement Learning</span>) עם האלגוריתם <span class="term">MaskablePPO</span>,
+ובזמן המשחק הוא משחק בעזרת חיפוש עץ בסגנון <span class="term">AlphaZero</span> (<span class="term">MCTS</span>).
+</p>
+<p>הפרויקט מורכב משלושה חלקים:</p>
+<ul>
+  <li><strong>מנוע משחק</strong> ב-Python טהור שאוכף את חוקי שחמט-הברווז (<code>DuckChess_Game/Logic/</code>).</li>
+  <li><strong>שתי ממשקי משתמש</strong> — אפליקציית שולחן עבודה ב-<span class="term">Pygame</span> (<code>DuckChess_Game/UI/</code>),
+      ואפליקציית ווב ב-<span class="term">FastAPI</span> + HTML (<code>web_ui/</code>).</li>
+  <li><strong>צינור אימון (pipeline)</strong> של למידת חיזוק (<code>DuckChess_Game/SBThree/</code>).</li>
+</ul>
+
+<h2 id="rules">2. חוקי שחמט הברווז</h2>
+<p>שלושה כללים הופכים את המשחק ל<strong>לא</strong> שחמט רגיל — והמנוע אוכף את כולם:</p>
+<ol>
+  <li>
+    <strong>הברווז</strong> — אחרי כל מהלך רגיל השחקן גם מזיז ברווז נייטרלי. אי אפשר לאכול אותו,
+    הוא חוסם כל משבצת שהוא עומד עליה, ואסור לו להישאר במקומו. לכן כל תור הוא <strong>שני שלבים</strong>:
+    קודם מזיזים כלי, אחר כך מזיזים את הברווז.
+  </li>
+  <li>
+    <strong>ניצחון בלכידת מלך</strong> — אין שח/מט. מנצחים על-ידי <em>לכידת</em> מלך היריב
+    (<code>turn_manager.py</code>).
+  </li>
+  <li>
+    <strong>Fowling</strong> — שחקן ש<strong>אין לו מהלך חוקי — מנצח</strong> (ההפך מ-stalemate),
+    מטופל ב-<code>endgame_checker.py</code>. התיקו היחיד הוא חוק 50 המהלכים (100 חצאי-מהלכים).
+  </li>
+</ol>
+<div class="note">
+<strong>שימו לב:</strong> חוקי הסיום <em>הפוכים</em> משחמט רגיל. אינטואיציה משחמט קלאסי תטעה אתכם —
+לכידת מלך מנצחת, וחוסר מהלכים חוקיים <em>מנצח</em> ולא מפסיד.
+</div>
+
+<h2 id="arch">3. ארכיטקטורה — שלושת החלקים</h2>
+<pre><code>┌─────────────────────────────┐
+│       Game Engine           │  Python טהור. ללא ML.
+│  Logic/ (logic.py + mixins) │  אוכף חוקים, מייצר מהלכים,
+│                             │  חושף _get_obs() ו-action_masks()
+└──────────────┬──────────────┘
+               │  _HeadlessEngine עוטף אותו לאימון
+               ▼
+┌─────────────────────────────┐
+│     RL Environment          │  תואם Gymnasium.
+│  SBThree/base/env_base.py   │  מזין תצפיות למדיניות,
+│                             │  מבצע פעולות, מחשב תגמולים.
+└──────────────┬──────────────┘
+               │  SubprocVecEnv מקביל הרבה עותקים
+               ▼
+┌─────────────────────────────┐
+│     MaskablePPO             │  sb3-contrib. מאמן את הרשת.
+│   (policy + value head)     │  Policy → איזה מהלך לשחק.
+│                             │  Value  → כמה טוב המצב.
+└──────────────┬──────────────┘
+               │  בזמן משחק: policy+value מזינים את MCTS
+               ▼
+┌─────────────────────────────┐
+│     DuckMCTS (mcts.py)      │  חיפוש קדימה בסגנון AlphaZero.
+│   Expert Iteration loop     │  נתוני MCTS → אימון מחדש →
+│  (run_exit / train_exit)    │  חזרה. מודל האלוף נמצא כאן.
+└─────────────────────────────┘</code></pre>
+
+<p>
+כל מודול ב-Python בנוי בתבנית <strong>mixin composition</strong>: מחלקה מרכזית יורשת התנהגויות
+ממוקדות מכמה mixins. למשל <code>GameLogicMixin</code> יורש מ-<code>MoveGenerationMixin</code>,
+<code>TurnManagerMixin</code>, <code>EndgameCheckerMixin</code>, <code>RLMixin</code> ועוד.
+</p>
+
+<h2 id="engine">4. מנוע המשחק</h2>
+<h3>ייצוג כפול של הלוח</h3>
+<ul>
+  <li><strong>מערך דו-ממדי</strong> (<code>board_manager.py</code>) — לבהירות עבור הלוגיקה וה-UI.</li>
+  <li><strong>Bitboards</strong> של 64 ביט (<code>bitboard_manager.py</code>) — לייצור מהלכים מהיר.</li>
+  <li><code>game_state_validator.py</code> הוא בודק חסר-מצב שמוודא ששני הייצוגים נשארים מסונכרנים.</li>
+</ul>
+<h3>התור הדו-שלבי</h3>
+<p>
+<code>move_pipeline.py</code> מתזמר את התור הדו-שלבי כפעולה אטומית: מהלך לא חוקי מוביל ל<strong>אפס</strong>
+שינוי במצב המשחק. זה חשוב כדי שהסוכן אף פעם לא יראה מצב שבור.
+</p>
+
+<h2 id="rl">5. למידת חיזוק (Reinforcement Learning)</h2>
+<h3>למה RL ולא למידה מפוקחת?</h3>
+<p>
+אין דאטה-סט מתויג של "מהלכים טובים" לשחמט-ברווז — מאגרי שחמט רגילים לא תקפים (חוקים שונים)
+ומשחקים אנושיים נדירים. לכן הסוכן <strong>לומד מתוך משחק</strong>: הוא צופה במצב, בוחר פעולה,
+מקבל תגמול, ועובר למצב הבא. לאורך אלפי משחקים הוא לומד אילו פעולות מובילות ליותר תגמול.
+</p>
+
+<h3>מסגרת MDP (Markov Decision Process)</h3>
+<table>
+  <tr><th>מושג ב-MDP</th><th>המקבילה בשחמט-ברווז</th></tr>
+  <tr><td>מצב <span class="term">s</span></td><td>הלוח מקודד כטנזור <span class="term">19×8×8</span> מסוג float</td></tr>
+  <tr><td>פעולה <span class="term">a</span></td><td>מספר שלם בטווח <span class="term">[0, 4095]</span></td></tr>
+  <tr><td>תגמול <span class="term">r</span></td><td><span class="term">+1.0</span> ניצחון, <span class="term">−1.0</span> הפסד, <span class="term">0.0</span> אחרת (sparse terminal)</td></tr>
+  <tr><td>מעבר <span class="term">T(s,a)</span></td><td>דטרמיניסטי: <code>execute_move</code> / <code>place_duck</code> של המנוע</td></tr>
+  <tr><td>סיום אפיזודה</td><td>לכידת מלך, Fowling, או תיקו 50 מהלכים</td></tr>
+</table>
+
+<h3>למה PPO?</h3>
+<p>
+<strong>Proximal Policy Optimization</strong> שייך למשפחת <span class="term">policy gradient</span>:
+במקום ללמוד טבלת ערכים (שלא מתאימה ל-4096 פעולות ומרחב מצבים ענק), הוא מפרמטר ישירות את המדיניות
+כרשת נוירונים. המאפיין המרכזי שלו הוא ה-<strong>clipped surrogate objective</strong>:
+</p>
+<pre><code>L_CLIP = E[ min( r_t(θ) · A_t,  clip(r_t(θ), 1-ε, 1+ε) · A_t ) ]</code></pre>
+<ul>
+  <li><code>r_t(θ) = π_θ(a|s) / π_old(a|s)</code> — היחס בין המדיניות החדשה לישנה.</li>
+  <li><code>A_t</code> — ה-<strong>advantage</strong>: כמה הפעולה הזו טובה מהממוצע.</li>
+  <li><code>ε ≈ 0.2</code> — טווח ה-clip, שמונע מעדכון יחיד לשנות את המדיניות בצורה קיצונית (יציבות).</li>
+</ul>
+<p>
+<strong>למה לא DQN?</strong> DQN לומד <code>Q(s,a)</code> לכל פעולה. עם 4096 פעולות ומרחב מצבים רציף וגבוה-ממד,
+זה לא יציב ואיטי. שיטות policy gradient מטפלות במרחבי פעולה גדולים בצורה טבעית יותר.
+</p>
+
+<h3>למה MaskablePPO?</h3>
+<p>
+בכל מצב נתון, בערך 4000 מתוך 4096 הפעולות אינן חוקיות. <span class="term">MaskablePPO</span>
+מאפס את ה-logits של פעולות לא-חוקיות <em>לפני</em> ה-softmax, כך שהדגימה מכסה רק מהלכים חוקיים:
+</p>
+<pre><code>logits = self.action_net(latent_pi)   # ציונים גולמיים ל-4096 פעולות
+logits[~mask] = -inf                  # פעולות לא חוקיות → −∞
+probs = softmax(logits)               # מסתכם ל-1.0 על מהלכים חוקיים בלבד
+action = Categorical(probs).sample()</code></pre>
+<div class="note">
+זהו <strong>אינווריאנט של נכונות, לא אופטימיזציה</strong>. אם פעולה לא-חוקית הייתה עוברת,
+הסוכן היה יכול לבחור "מהלך" ששם שני כלים על משבצת אחת — אות האימון היה מתקלקל והמדיניות לא הייתה מתכנסת.
+</div>
+
+<h2 id="net">6. רשת הנוירונים והשכבות (Layers)</h2>
+<p>המודל משתמש ב-<span class="term">MlpPolicy</span> (Multi-Layer Perceptron) משותף:</p>
+<pre><code>קלט: טנזור 19×8×8
+  → FlattenExtractor  →  וקטור בגודל 1224   (19 × 8 × 8 = 1224)
+  → MLP משותף
+        features_extractor(x)           (רק שיטוח; ללא CNN)
+               │
+        ┌──────┴───────────────────┐
+        ▼                          ▼
+  mlp_extractor.forward_actor   mlp_extractor.forward_critic
+     (policy_net)                  (value_net)
+        │                          │
+        ▼                          ▼
+   action_net                  value_net
+ → 4096 logits               → סקלר יחיד V(s)</code></pre>
+<p><strong>שני ראשים (heads):</strong></p>
+<ul>
+  <li><strong>Policy head</strong> (<code>action_net</code>): מוציא 4096 logits → אחרי masking ו-softmax → הסתברויות מהלכים. <em>הראש שבוחר.</em></li>
+  <li><strong>Value head</strong> (<code>value_net</code>): מוציא סקלר → כמה המצב טוב לשחקן התורן. <em>הראש שמעריך.</em></li>
+</ul>
+<p>
+<strong>למה אין CNN?</strong> CNN היה הבחירה הטבעית ללוח דו-ממדי (כמו ב-AlphaZero), אבל כאן נבחר
+MLP שטוח כדי לשמור על אימון מהיר על CPU ולהימנע מתכנון גרעיני קונבולוציה ל-19 הערוצים. ה-MLP פשוט
+יותר ועדיין חזק מספיק כשמודרך על-ידי MCTS.
+</p>
+<div class="note">
+<strong>הלקח המרכזי של הפרויקט:</strong> ה-<strong>value head מעריך</strong>, ה-<strong>policy בוחר</strong>.
+בחירת מהלכים לפי value-argmax מקריסה את המשחק (0% מול Peter d2). רק <span class="term">PUCT MCTS</span>
+מעל value head <em>מזוקק</em> גורם לחיפוש קדימה לעזור.
+</div>
+
+<h2 id="obs">7. ייצוג המצב והפעולות</h2>
+<h3>טנזור התצפית — 19 ערוצים של 8×8</h3>
+<table>
+  <tr><th class="num">ערוצים</th><th>תוכן</th></tr>
+  <tr><td class="num">0–5</td><td>כלים לבנים (חייל, פרש, רץ, צריח, מלכה, מלך)</td></tr>
+  <tr><td class="num">6–11</td><td>כלים שחורים (אותו סדר)</td></tr>
+  <tr><td class="num">12</td><td>מיקום הברווז</td></tr>
+  <tr><td class="num">13</td><td>יעד הכאת-דרך (en passant)</td></tr>
+  <tr><td class="num">14</td><td>תור (1.0 ללבן, 0.0 לשחור)</td></tr>
+  <tr><td class="num">15–18</td><td>זכויות הצרחה (מלכותי/מלכתי × לבן/שחור)</td></tr>
+</table>
+
+<h3>מרחב הפעולות — 4096</h3>
+<p>
+המרחב הוא <span class="term">64×64</span> (ממשבצת → למשבצת). הקידוד:
+<code>(sr·8 + sc)·64 + (er·8 + ec)</code>. שלב הברווז משתמש <strong>באותו</strong> מרחב פעולות.
+</p>
+
+<h2 id="mcts">8. חיפוש MCTS</h2>
+<p>
+<code>mcts.py</code> מממש <span class="term">PUCT MCTS</span> בסגנון AlphaZero, <strong>מפורק לפי כלי+ברווז</strong>.
+התור הדו-שלבי נשמר כשתי רמות בעץ: צומת מהלך-כלי שילדיו הם צמתי מהלך-ברווז. כך כל צומת הוא חצי-מהלך יחיד,
+בדיוק כמו שהמדיניות אומנה.
+</p>
+<h3>נוסחת PUCT</h3>
+<pre><code>Q(s,a) + U(s,a),   כאשר
+U(s,a) = c_puct · P(s,a) · √(ΣN) / (1 + N(s,a))</code></pre>
+<ul>
+  <li><code>Q</code> — הערך הממוצע שנצבר (exploitation).</li>
+  <li><code>P</code> — ה-prior מהמדיניות (exploration מודרך).</li>
+  <li><code>N</code> — מספר הביקורים; <code>c_puct ≈ 1.5</code> מאזן בין השניים.</li>
+</ul>
+<h3>גיזום (pruning)</h3>
+<p>
+כדי שהחיפוש על הברווז יהיה בר-ביצוע: מהלכי כלים נגזמים ל-<strong>top-8</strong> לפי ה-prior,
+ומהלכי ברווז ל-<strong>top-6</strong>. עלים מוערכים על-ידי ה-value head (מזוקק), עם <code>tanh</code>.
+צמתים סופיים משתמשים בחוקים האמיתיים (לכידת מלך מנצחת, חוסר מהלכים = ניצחון, תיקו 50). רמת קושי "hard"
+מריצה <strong>300 סימולציות</strong> (easy=30, medium=100).
+</p>
+
+<h2 id="exit">9. Expert Iteration (ExIt)</h2>
+<p>הלולאה של AlphaZero, מבוצעת אופליין:</p>
+<ol>
+  <li><strong>Generate</strong> (<code>gen_mcts_data.py</code>) — משחקי self-play כש-MCTS בוחר את המהלכים, ושומרים
+      <code>(obs, π, z)</code>: התצפית, התפלגות הביקורים של MCTS, ותוצאת המשחק.</li>
+  <li><strong>Train</strong> (<code>train_exit.py</code>) — אימון משותף: ה-policy לומד את <code>π</code> (לא רק argmax),
+      ה-value לומד את התוצאה <code>z</code>.</li>
+  <li><strong>Eval &amp; Repeat</strong> (<code>run_exit.py</code>) — הרשת החזקה יותר מנחה MCTS טוב יותר → חוזרים.</li>
+</ol>
+<p>
+דגימת מהלכים מ-<code>π</code> בטמפרטורה גם רישום של צומת <em>הברווז</em> הם מה שמלמד מיקום ברווז חזק יותר
+ומונע התכנסות לפתיחה חוזרת ויחידה.
+</p>
+
+<h2 id="results">10. תוצאות והמודלים</h2>
+<p>המודלים המדורגים ב-<code>models/duck_ppo/ranked/</code> (אומת מול מנוע Peter, 20 משחקים לתא, MCTS sims=200):</p>
+<table>
+  <tr><th>מודל</th><th class="num">מול Peter d1</th><th class="num">מול Peter d2</th><th>הערות</th></tr>
+  <tr><td><code>1_champion.zip</code></td><td class="num">1.00</td><td class="num">1.00</td><td>ExIt iter1 — הטוב ביותר, מחווט ל-UI</td></tr>
+  <tr><td><code>2_allrounder.zip</code></td><td class="num">0.80</td><td class="num">0.67</td><td>policy של v2 + value head, מאוזן</td></tr>
+  <tr><td><code>3_aggressive.zip</code></td><td class="num">0.46</td><td class="num">1.00</td><td>מושלם מול d2, חלש מול king-rush</td></tr>
+  <tr><td><code>4_classic.zip</code></td><td class="num">~0.27</td><td class="num">~0.55</td><td>policy מקורי, ללא value head</td></tr>
+  <tr><td><code>5_safe.zip</code></td><td class="num">חלש</td><td class="num">חלש</td><td>ריצת antiexploit, פסיבי אך נקי מ-exploits</td></tr>
+</table>
+<div class="note">
+<strong>קיר ה-depth-3:</strong> כל מודל מקבל 0 מול Peter depth-3. זה האתגר הפתוח שנותר —
+חיפוש בזמן משחק לבדו לא מספיק לפצח אותו; נדרש אימון נוסף (ExIt).
+</div>
+
+<hr>
+<p style="color:var(--muted); font-size:0.92em;">
+מסמך נלווה: <a href="10_lecturer_qa_he.html">10_lecturer_qa_he.html</a> — שאלות ותשובות שהמרצה עשוי לשאול.
+המדריך המלא באנגלית: <a href="00_INDEX.md">00_INDEX.md</a>.
+</p>
+
+</body>
+</html>

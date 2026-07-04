@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<title>Duck Chess AI — שאלות ותשובות למרצה (עברית)</title>
+<style>
+  :root { --fg:#1c1c1c; --muted:#555; --accent:#2b6cb0; --q:#1a4971; --bg:#fff; --code-bg:#f4f5f7; --border:#dcdfe4; }
+  body {
+    font-family: "Segoe UI", "Arial Hebrew", Arial, sans-serif;
+    line-height: 1.85; color: var(--fg); background: var(--bg);
+    max-width: 920px; margin: 0 auto; padding: 32px 28px 80px;
+    direction: rtl; text-align: right;
+  }
+  h1 { font-size: 2em; border-bottom: 3px solid var(--accent); padding-bottom: 10px; }
+  h2 { font-size: 1.4em; color: var(--accent); margin-top: 2em; border-bottom: 1px solid var(--border); padding-bottom: 6px; }
+  /* English / code stays left-to-right and reads naturally inside Hebrew text */
+  code, .term { direction: ltr; unicode-bidi: isolate; }
+  code {
+    font-family: "Consolas", "Courier New", monospace; background: var(--code-bg);
+    padding: 1px 6px; border-radius: 4px; font-size: 0.92em; color: #b03060;
+  }
+  pre {
+    direction: ltr; text-align: left; unicode-bidi: isolate;
+    background: var(--code-bg); border: 1px solid var(--border); border-radius: 8px;
+    padding: 14px 16px; overflow-x: auto; font-size: 0.9em; line-height: 1.5;
+  }
+  pre code { background: none; color: #1c1c1c; padding: 0; }
+  table { border-collapse: collapse; width: 100%; margin: 1em 0; font-size: 0.97em; }
+  th, td { border: 1px solid var(--border); padding: 7px 11px; text-align: right; }
+  th { background: #eef3f9; }
+  td.num, th.num { text-align: center; direction: ltr; }
+  .qa { margin: 1.4em 0; padding: 4px 18px 12px; border-right: 4px solid var(--accent); background: #f7f9fc; border-radius: 0 8px 8px 0; }
+  .q { font-weight: 700; color: var(--q); font-size: 1.08em; margin: 10px 0 6px; }
+  .q::before { content: "ש: "; color: var(--accent); }
+  .a::before { content: "ת: "; color: var(--accent); font-weight: 700; }
+  .note { background: #fff8e6; border: 1px solid #f0d98a; border-radius: 8px; padding: 10px 16px; margin: 1em 0; }
+  .toc { background: #f7f9fc; border: 1px solid var(--border); border-radius: 8px; padding: 8px 22px; }
+  a { color: var(--accent); }
+</style>
+</head>
+<body>
+
+<h1>שאלות ותשובות למרצה — Duck Chess AI</h1>
+<p><em>
+אוסף שאלות שהמרצה עשוי לשאול בהגנה על הפרויקט, עם תשובות מלאות. מסודר לפי נושאים: חוקי המשחק, המנוע,
+יסודות RL, השכבות והרשת, ייצוג, MCTS, Expert Iteration ותוצאות. הטקסט בעברית RTL; מונחים וקוד באנגלית
+נשמרים LTR כדי שייקראו נכון.
+</em></p>
+
+<div class="toc">
+<strong>נושאים</strong>
+<ol>
+  <li><a href="#rules">חוקי שחמט-הברווז</a></li>
+  <li><a href="#engine">מנוע המשחק והארכיטקטורה</a></li>
+  <li><a href="#rl">יסודות למידת חיזוק</a></li>
+  <li><a href="#net">הרשת, השכבות ושני הראשים</a></li>
+  <li><a href="#obs">ייצוג המצב והפעולות</a></li>
+  <li><a href="#mcts">חיפוש MCTS</a></li>
+  <li><a href="#exit">Expert Iteration</a></li>
+  <li><a href="#results">תוצאות, הערכה וקיר ה-depth-3</a></li>
+  <li><a href="#tricky">שאלות מלכודת ועומק</a></li>
+</ol>
+</div>
+
+<!-- ================= 1. RULES ================= -->
+<h2 id="rules">1. חוקי שחמט-הברווז</h2>
+
+<div class="qa">
+<p class="q">מה ההבדל המהותי בין שחמט-ברווז לשחמט רגיל?</p>
+<p class="a">שלושה כללים: (1) <strong>הברווז</strong> — כלי נייטרלי שזז אחרי כל מהלך, חוסם משבצת, לא ניתן ללכידה, ואסור לו להישאר במקומו; לכן כל תור הוא שני שלבים. (2) <strong>ניצחון בלכידת מלך</strong> — אין שח/מט, מנצחים על-ידי אכילת המלך. (3) <strong>Fowling</strong> — מי שאין לו מהלך חוקי <em>מנצח</em>. התיקו היחיד הוא חוק 50 המהלכים.</p>
+</div>
+
+<div class="qa">
+<p class="q">למה אמרתם שחוקי הסיום "הפוכים", ולמה זה חשוב למימוש?</p>
+<p class="a">בשחמט רגיל חוסר מהלכים חוקיים הוא <em>פט (תיקו)</em>; כאן זה <em>ניצחון</em> (Fowling). וגם — שח/מט לא קיים, רק לכידת מלך בפועל. זה חשוב כי כל אינטואיציה מהשחמט הקלאסי תטעה. במימוש זה מרוכז ב-<code>endgame_checker.py</code> (Fowling + 50 מהלכים) וב-<code>turn_manager.py</code> (זיהוי לכידת מלך). זו גם הסיבה שב-MCTS עלה ללא מהלכים חוקיים מקבל ערך <code>+1.0</code> ולא <code>0</code>.</p>
+</div>
+
+<div class="qa">
+<p class="q">איך הברווז משפיע על מורכבות המשחק?</p>
+<p class="a">הברווז מכפיל את עומק ההחלטה — בכל תור צריך לבחור גם מהלך כלי (~25 אפשרויות) וגם מיקום ברווז (~55 אפשרויות), כלומר ~1400 צירופים לתור. זו הסיבה שב-MCTS פירקנו את התור לשתי רמות עץ נפרדות וגזמנו כל רמה ל-top-k, במקום לחפש על המכפלה.</p>
+</div>
+
+<!-- ================= 2. ENGINE ================= -->
+<h2 id="engine">2. מנוע המשחק והארכיטקטורה</h2>
+
+<div class="qa">
+<p class="q">למה יש ייצוג כפול של הלוח (מערך + bitboards)?</p>
+<p class="a">המערך הדו-ממדי (<code>board_manager.py</code>) ברור וקריא ללוגיקה ול-UI. ה-bitboards (64 ביט, <code>bitboard_manager.py</code>) מהירים בהרבה לייצור מהלכים — פעולות AND/OR/shift על מספרים שלמים במקום לולאות. <code>game_state_validator.py</code> מוודא ששני הייצוגים נשארים מסונכרנים.</p>
+</div>
+
+<div class="qa">
+<p class="q">מהי תבנית ה-mixin composition ולמה השתמשתם בה?</p>
+<p class="a">במקום מחלקה ענקית אחת, מחלקה מרכזית יורשת התנהגויות ממוקדות ממספר mixins. למשל <code>GameLogicMixin</code> יורש מ-<code>MoveGenerationMixin</code>, <code>HistoryManagerMixin</code>, <code>TurnManagerMixin</code>, <code>EndgameCheckerMixin</code> ו-<code>RLMixin</code>. זה מפריד אחריות (separation of concerns), שומר על קבצים קטנים, ומאפשר לבדוק כל היבט בנפרד.</p>
+</div>
+
+<div class="qa">
+<p class="q">איך מובטח שמהלך לא-חוקי לא ישבור את מצב המשחק?</p>
+<p class="a"><code>move_pipeline.py</code> מתזמר את התור הדו-שלבי כפעולה <strong>אטומית</strong>: אם מהלך לא חוקי, יש <strong>אפס</strong> שינוי במצב. בנוסף, בשכבת ה-RL, <code>action_masker.py</code> מבטיח שהמודל אף פעם לא בוחר פעולה לא-חוקית מלכתחילה.</p>
+</div>
+
+<!-- ================= 3. RL ================= -->
+<h2 id="rl">3. יסודות למידת חיזוק</h2>
+
+<div class="qa">
+<p class="q">למה בחרתם בלמידת חיזוק ולא בלמידה מפוקחת (supervised)?</p>
+<p class="a">אין דאטה-סט מתויג של מהלכים טובים בשחמט-ברווז — מאגרי שחמט רגילים לא תקפים (חוקים שונים) ומשחקים אנושיים נדירים. ב-RL הסוכן לומד מתוך משחק עצמי: צופה במצב, בוחר פעולה, מקבל תגמול בסוף המשחק, ולומד אילו פעולות מובילות לניצחון.</p>
+</div>
+
+<div class="qa">
+<p class="q">תארו את המשחק כ-MDP.</p>
+<p class="a">מצב <code>s</code> = טנזור 19×8×8; פעולה <code>a</code> = מספר ב-[0,4095]; תגמול <code>r</code> = +1/−1/0 (sparse terminal); מעבר <code>T(s,a)</code> דטרמיניסטי דרך המנוע; סיום = לכידת מלך / Fowling / תיקו 50. המטרה: למצוא מדיניות <code>π(a|s)</code> שממקסמת את התגמול המצרפי המהוון <code>Σ γ^t r_t</code>.</p>
+</div>
+
+<div class="qa">
+<p class="q">למה PPO ולא DQN / Q-learning?</p>
+<p class="a">DQN לומד <code>Q(s,a)</code> לכל פעולה — עם 4096 פעולות ומרחב מצבים רציף וגבוה-ממד זה לא יציב ואיטי. PPO הוא policy gradient: הוא מפרמטר את המדיניות ישירות כרשת, ומטפל במרחבי פעולה גדולים בצורה טבעית. PPO גם יציב יחסית בזכות ה-clip.</p>
+</div>
+
+<div class="qa">
+<p class="q">הסבירו את ה-clipped objective של PPO ולמה הוא נחוץ.</p>
+<p class="a">המטרה: <code>L_CLIP = E[ min( r_t·A_t, clip(r_t, 1-ε, 1+ε)·A_t ) ]</code> כאשר <code>r_t = π_new/π_old</code> ו-<code>A_t</code> ה-advantage. בלי ה-clip, עדכון גדול היה יכול לשנות את המדיניות בצורה דרסטית ולגרום לקריסה (catastrophic forgetting). ה-clip (עם <code>ε≈0.2</code>) מגביל כל עדכון יחיד, ושומר על יציבות האימון.</p>
+</div>
+
+<div class="qa">
+<p class="q">מהו ה-advantage, ואיך מחשבים אותו?</p>
+<p class="a">ה-advantage <code>A_t</code> מודד כמה פעולה הייתה טובה מהממוצע במצב נתון. בבסיס: <code>A_t = r_t + γ·V(s_{t+1}) − V(s_t)</code> (וריאנט GAE). ערך חיובי דוחף את ההסתברות של הפעולה למעלה, שלילי — למטה. ה-value head הוא שמספק את <code>V(s)</code>.</p>
+</div>
+
+<div class="qa">
+<p class="q">מהו ה-action masking ולמה הוא "אינווריאנט של נכונות"?</p>
+<p class="a">בכל מצב ~4000 מתוך 4096 הפעולות לא-חוקיות. <code>MaskablePPO</code> מאפס את ה-logits שלהן ל-<code>−inf</code> לפני ה-softmax, כך שהדגימה מכסה רק מהלכים חוקיים. זה לא אופטימיזציה אלא נכונות: אם פעולה לא-חוקית הייתה עוברת, הסוכן היה יכול "להזיז" כלי לא חוקי, אות האימון היה מתקלקל, והמדיניות לא הייתה מתכנסת. המנגנון נחשף דרך <code>action_masks()</code> שה-MaskablePPO קורא אוטומטית בכל צעד.</p>
+</div>
+
+<div class="qa">
+<p class="q">למה תגמול sparse ולא dense (shaped)?</p>
+<p class="a">תגמול צפוף <em>מנחה</em> אבל גם <em>מטעה</em>: אם מתגמלים על אכילת כלים, הסוכן לומד לרדוף אחרי אכילות גם כשזה אסטרטגית שגוי (להקריב מלכה בשביל חייל ואז להפסיד). תגמול sparse מכריח את הסוכן לגלות אסטרטגיה מהתוצאה בלבד, וזה מכליל טוב יותר. בנוסף, sparse הופך את ה-value head למעריך-הסתברות-ניצחון מכויל — קריטי ל-MCTS. שלבים מוקדמים השתמשו ב-<code>ShapedReward</code> רק כ-bootstrap.</p>
+</div>
+
+<div class="qa">
+<p class="q">איך <code>gamma</code> (discount) משפיע עם תגמול sparse?</p>
+<p class="a">עם <code>γ&lt;1</code> תגמול עתידי שווה פחות, כך שהסוכן מעדיף ניצחון <em>מהיר</em> — ניצחון ב-10 מהלכים עדיף על ניצחון ב-100. עם <code>γ=1</code> כל מסלולי הניצחון שווים, מה שעלול להוביל למשחק פסיבי. בפרויקט משתמשים ב-<code>γ≈0.99</code>.</p>
+</div>
+
+<div class="qa">
+<p class="q">מהו SubprocVecEnv ולמה הוא חשוב?</p>
+<p class="a">הוא מריץ מספר סביבות משחק בתהליכים נפרדים במקביל. זה קריטי לתפוקה — איסוף rollouts ממשחק אחד בכל פעם היה איטי פי כמה. כך אוספים יותר ניסיון ביחידת זמן ומאמנים מהר יותר.</p>
+</div>
+
+<!-- ================= 4. NET / LAYERS ================= -->
+<h2 id="net">4. הרשת, השכבות ושני הראשים</h2>
+
+<div class="qa">
+<p class="q">תארו את ארכיטקטורת הרשת שכבה-אחר-שכבה.</p>
+<p class="a">הקלט 19×8×8 עובר <code>FlattenExtractor</code> לוקטור בגודל <strong>1224</strong> (19·8·8). אחר כך MLP משותף (<code>mlp_extractor</code>) מתפצל לשני נתיבים: <code>forward_actor</code> → <code>action_net</code> שמוציא 4096 logits (ה-policy), ו-<code>forward_critic</code> → <code>value_net</code> שמוציא סקלר יחיד <code>V(s)</code> (ה-value). שני הראשים מאומנים יחד ב-PPO.</p>
+</div>
+
+<div class="qa">
+<p class="q">למה MLP ולא CNN, אם הלוח דו-ממדי?</p>
+<p class="a">CNN היה טבעי (כמו AlphaZero), אבל בחרנו MLP שטוח כדי לשמור על אימון מהיר על <strong>CPU</strong> (אין דרישת GPU) ולהימנע מתכנון גרעיני קונבולוציה ל-19 ערוצים ייחודיים. ה-MLP פשוט יותר ומספיק חזק כשהוא מודרך על-ידי MCTS בזמן משחק. זהו trade-off מודע בין פשטות/מהירות לבין כושר ייצוג מרחבי.</p>
+</div>
+
+<div class="qa">
+<p class="q">מה ההבדל התפקודי בין ה-policy head ל-value head?</p>
+<p class="a">ה-<strong>policy בוחר</strong> — הוא מוציא התפלגות על מהלכים. ה-<strong>value מעריך</strong> — הוא מוציא מספר אחד שאומר כמה המצב טוב לשחקן התורן. זה הלקח המרכזי של הפרויקט: כשניסינו לבחור מהלכים לפי value (value-argmax), המשחק קרס ל-0% מול Peter d2. רק כש-MCTS משתמש ב-policy כ-prior לבחירה וב-value רק להערכת עלים — החיפוש עוזר.</p>
+</div>
+
+<div class="qa">
+<p class="q">איך שני הראשים מאומנים יחד? מהי פונקציית ה-loss?</p>
+<p class="a">ב-PPO ה-loss הכולל הוא צירוף: <code>L_policy</code> (ה-clipped surrogate) + <code>vf_coef·L_value</code> (MSE בין <code>V(s)</code> לתשואה) − <code>ent_coef·entropy</code> (בונוס אנטרופיה לעידוד חקירה). ב-Expert Iteration ה-loss שונה: cross-entropy בין ה-policy ל-<code>π</code> של MCTS, ועוד MSE בין ה-value לתוצאה <code>z</code>.</p>
+</div>
+
+<!-- ================= 5. OBS / ACTIONS ================= -->
+<h2 id="obs">5. ייצוג המצב והפעולות</h2>
+
+<div class="qa">
+<p class="q">פרטו את 19 ערוצי התצפית.</p>
+<p class="a">ערוצים 0–5: כלים לבנים (חייל, פרש, רץ, צריח, מלכה, מלך). 6–11: כלים שחורים. 12: הברווז. 13: יעד en passant. 14: תור (1.0=לבן). 15–18: זכויות הצרחה (מלכותי/מלכתי × לבן/שחור). כל ערוץ הוא מטריצה 8×8 של 0/1.</p>
+</div>
+
+<div class="qa">
+<p class="q">למה ערוץ נפרד ל-"תור" אם זו תכונה אחת?</p>
+<p class="a">כי הרשת חייבת לדעת מי על התור כדי להעריך נכון — אותו לוח טוב ללבן ורע לשחור. מילוי ערוץ שלם 8×8 ב-1.0 או 0.0 הוא דרך פשוטה להזריק את המידע הזה לכל מיקום מרחבי, כך שהוא זמין באופן אחיד לרשת.</p>
+</div>
+
+<div class="qa">
+<p class="q">איך בנוי מרחב הפעולות בן 4096, ואיך מקודדים מהלך?</p>
+<p class="a">המרחב הוא 64×64 (משבצת מקור → משבצת יעד). הקידוד: <code>(sr·8+sc)·64 + (er·8+ec)</code>. שלב הברווז משתמש <strong>באותו</strong> מרחב פעולות — הברווז פשוט "זז" ממשבצתו הקודמת ליעד. ה-masking מבחין בין מהלכים חוקיים לפי השלב.</p>
+</div>
+
+<div class="qa">
+<p class="q">4096 פעולות לא מספיק לקידוד הקדמת חייל (promotion). איך מטופל?</p>
+<p class="a">הקידוד from→to לא מבדיל בין סוגי הכתרה. המנוע מטפל בהקדמה בלוגיקה (ברירת מחדל למלכה / לפי כללי המנוע), כך שמרחב הפעולות נשאר אחיד ב-4096. זה פישוט מודע שמספיק כי הכתרה למלכה כמעט תמיד הבחירה הנכונה.</p>
+</div>
+
+<!-- ================= 6. MCTS ================= -->
+<h2 id="mcts">6. חיפוש MCTS</h2>
+
+<div class="qa">
+<p class="q">למה צריך MCTS בכלל אם יש policy מאומן?</p>
+<p class="a">ה-policy משחק באופק 0-ply (בלי לחשוב קדימה). Peter עצמו הוא מנוע חיפוש, ו-depth-3 מעניש טקטית את חוסר ההסתכלות קדימה. MCTS נותן לסוכן הסתכלות n-ply <strong>כולל הברווז</strong>, ומשפר משמעותית מול d2 (מ-~90% ל-100%).</p>
+</div>
+
+<div class="qa">
+<p class="q">הסבירו את נוסחת ה-PUCT.</p>
+<p class="a">בוחרים את הפעולה שממקסמת <code>Q(s,a) + U(s,a)</code>, כאשר <code>U = c_puct · P(s,a) · √(ΣN) / (1 + N(s,a))</code>. <code>Q</code> הוא הערך הממוצע שנצבר (exploitation), <code>P</code> ה-prior מה-policy (מנחה exploration), <code>N</code> מספר הביקורים, ו-<code>c_puct≈1.5</code> מאזן. בהתחלה <code>U</code> שולט (חוקרים לפי ה-prior), ועם הצטברות ביקורים <code>Q</code> משתלט.</p>
+</div>
+
+<div class="qa">
+<p class="q">איך מטפלים בתור הדו-שלבי (כלי + ברווז) בעץ?</p>
+<p class="a">מפרקים את התור לשתי רמות: צומת מהלך-כלי שילדיו הם צמתי מהלך-ברווז. כל צומת הוא חצי-מהלך יחיד — בדיוק כמו שה-policy/value אומנו. כך הענפיות נשארת ~25 (כלי) או ~55 (ברווז) במקום ~1400. סימן הערך מתהפך רק כשהשחקן התורן משתנה (הוא <em>לא</em> משתנה בין צומת כלי לצומת הברווז שלו — אותו שחקן).</p>
+</div>
+
+<div class="qa">
+<p class="q">איך מצמצמים את הענפיות כדי שהחיפוש יהיה בר-ביצוע?</p>
+<p class="a">גיזום top-k לפי ה-prior: מהלכי כלים ל-<strong>top-8</strong>, מהלכי ברווז ל-<strong>top-6</strong>. בנוסף, תמיד שומרים לכידת-מלך זמינה (גם אם ה-policy נתן לה prior ~0) ומרצפים לה prior, כי זה מהלך מנצח שאסור להתעלם ממנו.</p>
+</div>
+
+<div class="qa">
+<p class="q">איך מעריכים עלה, ומה קורה בצומת סופי?</p>
+<p class="a">עלה רגיל מוערך על-ידי ה-<strong>value head המזוקק</strong>, עם <code>tanh</code>, מנקודת מבט השחקן התורן. צומת סופי משתמש בחוקים האמיתיים: לכידת מלך = ניצחון, חוסר מהלכים חוקיים = ניצחון (Fowling, ערך +1.0), תיקו 50 = 0.</p>
+</div>
+
+<div class="qa">
+<p class="q">כמה סימולציות מריצים, ומה ההשפעה?</p>
+<p class="a">רמת הקושי קובעת: easy=30, medium=100, hard=300 סימולציות. יותר סימולציות = חיפוש עמוק ואיכותי יותר אבל איטי יותר (~0.9 שניות/תור ב-200 סימולציות). הגדלת הסימולציות לבדה לא פיצחה את depth-3 (גם 1200 נתן 0).</p>
+</div>
+
+<div class="qa">
+<p class="q">למה value-argmax לבד נכשל אבל MCTS עם אותו value מצליח?</p>
+<p class="a">ב-value-argmax בוחרים את המהלך עם הערך הגבוה ביותר ישירות. במצבים שקטים כל המהלכים מקבלים ערך בטווח צר שה-value head לא מצליח לדרג, אז רעש-הערך מחליף את המהלכים המכוונים של ה-policy — והמשחק קורס ל-0%. ב-MCTS, ה-policy מנחה <em>אילו</em> מהלכים לחקור וה-value רק מנקד עלים על פני הרבה סימולציות, כך שכישורי הבחירה של ה-policy נשמרים והחיפוש מוסיף ערך.</p>
+</div>
+
+<!-- ================= 7. EXIT ================= -->
+<h2 id="exit">7. Expert Iteration</h2>
+
+<div class="qa">
+<p class="q">מהו Expert Iteration ואיך הוא עובד כאן?</p>
+<p class="a">זו לולאת AlphaZero אופליין בשלושה שלבים: (1) <strong>Generate</strong> — משחקי self-play כש-MCTS בוחר מהלכים, ושומרים <code>(obs, π, z)</code>; (2) <strong>Train</strong> — אימון משותף: ה-policy לומד את <code>π</code> (התפלגות הביקורים), ה-value לומד את <code>z</code> (התוצאה); (3) <strong>Eval &amp; Repeat</strong> — הרשת החזקה יותר מנחה MCTS טוב יותר, וחוזרים. הקבצים: <code>gen_mcts_data.py</code>, <code>train_exit.py</code>, <code>run_exit.py</code>.</p>
+</div>
+
+<div class="qa">
+<p class="q">למה ה-policy לומד את כל ההתפלגות <code>π</code> ולא רק את המהלך הטוב ביותר (argmax)?</p>
+<p class="a">התפלגות הביקורים נושאת יותר מידע מ-argmax בודד: היא מקודדת <em>כמה</em> מהלך עדיף על אחרים. לימוד ההתפלגות המלאה (cross-entropy) נותן אות עשיר יותר, מקל על ההכללה, ומונע התכנסות חדה ושברירית למהלך יחיד.</p>
+</div>
+
+<div class="qa">
+<p class="q">למה רושמים גם את צומת הברווז ב-ExIt?</p>
+<p class="a">כי מיקום ברווז חלש היה אחד מה-"exploits" של המודלים הישנים. רישום צומת הברווז (ולא רק צומת הכלי) מלמד את ה-policy מיקומי ברווז חזקים יותר. בנוסף, דגימת מהלכים מ-<code>π</code> בטמפרטורה מונעת התכנסות לפתיחה חוזרת ויחידה.</p>
+</div>
+
+<!-- ================= 8. RESULTS ================= -->
+<h2 id="results">8. תוצאות, הערכה וקיר ה-depth-3</h2>
+
+<div class="qa">
+<p class="q">איך מודדים את חוזק המודל, ולמה לא דרך self-play?</p>
+<p class="a">מודדים מול מנוע <strong>Peter</strong> (<code>eval_vs_peter.py</code>) — מקור-אמת חיצוני. מספרי self-play הגזימו בעבר את החוזק כי המודל יכול "לנצח את עצמו" בלי להיות חזק באמת. Peter בעומקים שונים (d1/d2/d3) נותן הערכה אובייקטיבית.</p>
+</div>
+
+<div class="qa">
+<p class="q">מהו ההבדל בין Peter d1, d2 ו-d3?</p>
+<p class="a">d1 = עומק 1 (king-rush אגרסיבי, דומה לאיך שבני אדם משחקים). d2 = עומק 2 (משחק פוזיציוני נכון). d3 = עומק 3 (חזק טקטית). מודל האלוף מקבל 1.00 מול d1 ו-d2, אבל 0 מול d3 — זה <strong>קיר ה-depth-3</strong>, האתגר הפתוח.</p>
+</div>
+
+<div class="qa">
+<p class="q">למה כל המודלים נכשלים מול depth-3, ומה הפתרון?</p>
+<p class="a">d3 מעניש את האופק הטקטי הקצר. הראינו שחיפוש בזמן-משחק לבדו לא מספיק (גם 1200 סימולציות = 0). הפתרון הוא <strong>אימון נוסף</strong> דרך Expert Iteration — שיפור הרשת עצמה כך ש-MCTS שמודרך על-ידה יהיה חזק יותר. זה כיוון העבודה הנוכחי.</p>
+</div>
+
+<div class="qa">
+<p class="q">מהם ה-"exploits" שהזכרתם, ולמה הם בעיה?</p>
+<p class="a">שלושה כשלים שמודלים ישנים פיתחו: (1) חזרה על פתיחה יחידה, (2) מיקום ברווז חלש, (3) קריסה בסיום. הם בעיה כי הם "מנצחים" יריב ספציפי בלי חוזק כללי — המודל מנצח את d2 דרך טריק צר במקום משחק טוב. ריצת <code>antiexploit_v2</code> והמעבר לתגמול sparse + pool של יריבים + פתיחות אקראיות נועדו לתקן זאת.</p>
+</div>
+
+<div class="qa">
+<p class="q">איזה מודל מחווט ל-UI ולמה?</p>
+<p class="a"><code>1_champion.zip</code> (ExIt iter1) — הטוב ביותר, 1.00 מול d1 ו-d2. שני ה-UI (שולחן עבודה וווב) טוענים את המודל המדורג הגבוה ביותר הקיים. במשחק, הוא מופעל עם <code>DuckMCTS</code> ב-300 סימולציות ברמת "hard".</p>
+</div>
+
+<!-- ================= 9. TRICKY ================= -->
+<h2 id="tricky">9. שאלות מלכודת ועומק</h2>
+
+<div class="qa">
+<p class="q">אם ה-value head כל-כך חשוב, למה לא פשוט לבחור מהלכים לפיו?</p>
+<p class="a">זו בדיוק המלכודת שנפלנו בה בהתחלה. value-argmax קרס ל-0% מול d2 כי במצבים שקטים ה-value לא מדרג היטב מהלכים קרובים בערכם. הכלל: <strong>value מעריך, policy בוחר</strong>. MCTS משלב את שניהם נכון.</p>
+</div>
+
+<div class="qa">
+<p class="q">למה לא להשתמש ב-Stockfish או מנוע שחמט קיים?</p>
+<p class="a">מנועי שחמט רגילים לא מבינים את הברווז — חוק שמשנה מהותית את ייצור המהלכים, חסימות, ותנאי הניצחון. היה צריך מנוע ייעודי. (קיים Fairy-Stockfish עם כלל duck כאפשרות עתידית ל-anchor הערכה, אבל לא כליבת המשחק.)</p>
+</div>
+
+<div class="qa">
+<p class="q">איך אתם יודעים שהאימון לא "רימה" (overfit ליריב)?</p>
+<p class="a">סימני אזהרה שעקבנו אחריהם: קריסת אנטרופיה + זינוק חד בשיעור ניצחון מול יריב <em>אחד</em> = אזעקת exploit. בנוסף, הערכה מול <strong>anchor set קבוע</strong> שלא היה בלולאת האימון (<code>eval_anchors.py</code>) חושפת נקודות עיוורות — למשל המודל הפסיד ל-bot "greedy" פשוט למרות שניצח את d2 החזק, כי greedy לא היה ב-pool האימון.</p>
+</div>
+
+<div class="qa">
+<p class="q">למה אימון על CPU ולא GPU?</p>
+<p class="a">ה-MLP קטן מספיק והסביבה (לוגיקת המשחק ב-Python) היא צוואר הבקבוק, לא הרשת. SubprocVecEnv מקביל סביבות על מספר ליבות CPU, וזה נותן תפוקה טובה בלי צורך ב-GPU. זו החלטה מודעת שמורידה את מחסום הכניסה להרצת הפרויקט.</p>
+</div>
+
+<div class="qa">
+<p class="q">מהי המגבלה המרכזית של הפרויקט כרגע?</p>
+<p class="a">קיר ה-depth-3: אף מודל לא מנצח את Peter d3. המסקנה היא שצריך עוד סבבי Expert Iteration כדי לחזק את הרשת עצמה, כי חיפוש בזמן-משחק מיצה את עצמו על ה-policy/value הנוכחיים. זו כנות מחקרית — אנחנו מדווחים את הקיר ולא מסתירים אותו.</p>
+</div>
+
+<hr style="border:none;border-top:1px solid var(--border);margin:2.5em 0;">
+<p style="color:var(--muted); font-size:0.92em;">
+מסמך נלווה: <a href="09_project_overview_he.html">09_project_overview_he.html</a> — סקירת הפרויקט בעברית.
+המדריך המלא והמעמיק באנגלית: <a href="00_INDEX.md">00_INDEX.md</a> (קבצים 01–08).
+</p>
+
+</body>
+</html>

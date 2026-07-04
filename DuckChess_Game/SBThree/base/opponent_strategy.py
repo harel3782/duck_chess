@@ -134,7 +134,7 @@ class LeagueOpponent(OpponentStrategy):
 	  - ``alpha_beta_prob``:    fraction of moves resolved by AlphaBeta
 	  - ``random_prob``:        fraction resolved by pure random choice
 	  - ``historical_fraction``: of the remaining budget, how much uses
-	                              the historical model (the rest uses latest)
+	                             the historical model (the rest uses latest)
 
 	Typical configurations
 	-----------------------
