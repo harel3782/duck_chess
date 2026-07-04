@@ -41,6 +41,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from DuckChess_Game.SBThree.base.env_base import _HeadlessEngine  # noqa: E402
+from DuckChess_Game.SBThree.mcts import DuckMCTS  # noqa: E402
 from DuckChess_Game.SBThree.search import DuckSearch  # noqa: E402
 from sb3_contrib import MaskablePPO  # noqa: E402
 
@@ -166,6 +167,10 @@ def get_model(model_id: str):
 _searcher_cache: dict[tuple[str, int], DuckSearch] = {}
 _searcher_lock = threading.Lock()
 
+# MCTS searchers wrapping a checkpoint, cached by (model_id, sims).
+_mcts_cache: dict[tuple[str, int], DuckMCTS] = {}
+_mcts_lock = threading.Lock()
+
 # Persistent pool for time-bounded searches. Using a long-lived executor (instead
 # of a `with` block) means future.result(timeout=...) truly bounds the request:
 # a timed-out search is abandoned and its thread finishes in the background.
@@ -187,17 +192,29 @@ def get_searcher(model_id: str, depth: int) -> DuckSearch:
     return _searcher_cache[key]
 
 
+def get_mcts(model_id: str, sims: int) -> DuckMCTS:
+    """Return a cached DuckMCTS wrapping the given checkpoint at `sims`."""
+    model, choice = get_model(model_id)
+    key = (choice["id"], sims)
+    with _mcts_lock:
+        if key not in _mcts_cache:
+            _mcts_cache[key] = DuckMCTS(model, sims=sims, tactical_override=True)
+    return _mcts_cache[key]
+
+
 # ---------------------------------------------------------------------------
 # In-memory game sessions
 # ---------------------------------------------------------------------------
 class Session:
-    def __init__(self, engine, player_color, model_id, model_label, search_depth=None):
+    def __init__(self, engine, player_color, model_id, model_label,
+                 search_depth=None, mcts_sims=None):
         self.engine = engine
         self.player_color = player_color          # 'w' or 'b'
         self.model_color = "b" if player_color == "w" else "w"
         self.model_id = model_id
         self.model_label = model_label
         self.search_depth = search_depth          # None -> raw policy; 1|2 -> DuckSearch
+        self.mcts_sims = mcts_sims                # None -> off; 30|100|300 -> DuckMCTS
         self.halfmoves: list[dict] = []           # {'color','text'}
         self.pending = None                       # (frm, to) between the two phases
         self.lock = threading.Lock()
@@ -427,6 +444,37 @@ def play_model_turn(sess):
     model, _ = get_model(sess.model_id)
     last = None
 
+    # MCTS path: DuckMCTS plays one full turn (piece + duck). Timeout scales
+    # with sim count — 300 sims (~0.9s/turn) needs more headroom than depth-2 AB.
+    if sess.mcts_sims:
+        mcts = get_mcts(sess.model_id, sess.mcts_sims)
+        timeout = max(10, sess.mcts_sims / 30)
+        try:
+            future = _search_executor.submit(mcts.choose_turn, e, True)  # DEBUG
+            piece_a, duck_a = future.result(timeout=timeout)
+        except FuturesTimeoutError:
+            print(f"[Duck Chess] MCTS sims={sess.mcts_sims} timed out — falling back to raw policy")
+            sess.mcts_sims = None
+        except Exception as exc:
+            print(f"[Duck Chess] MCTS error: {exc} — falling back to raw policy")
+            sess.mcts_sims = None
+        else:
+            if piece_a is None:                        # fowling — the mover already won
+                return last
+            p_from, p_to = e._decode_move(piece_a)
+            e.execute_move(p_from, p_to, animated=False)
+            if getattr(e, "game_over", False):         # king captured -> instant win
+                sess.halfmoves.append({"color": sess.model_color, "text": f"{sq(p_from)}{sq(p_to)}#"})
+                return {"from": list(p_from), "to": list(p_to), "duck": None}
+            if duck_a is not None:
+                _, d_to = e._decode_move(duck_a)
+                e.place_duck(d_to, animated=False)
+                sess.halfmoves.append(
+                    {"color": sess.model_color, "text": f"{sq(p_from)}{sq(p_to)} {DUCK}{sq(d_to)}"}
+                )
+                return {"from": list(p_from), "to": list(p_to), "duck": list(d_to)}
+            return last
+
     # Alpha-beta lookahead path: DuckSearch plays one full turn (piece + duck),
     # under a hard 10s timeout. On timeout/error we degrade THIS game to the raw
     # policy (the model.predict loop below) for the rest of the game.
@@ -506,7 +554,8 @@ app = FastAPI(title="Duck Chess Web")
 class NewGameReq(BaseModel):
     model: str | None = None      # None -> local 2-player (human vs human)
     color: str = "white"          # 'white' | 'black'
-    search_depth: int | None = None   # None -> raw policy; 1|2 -> DuckSearch lookahead
+    search_depth: int | None = None   # None -> off; 1|2 -> DuckSearch (alpha-beta)
+    mcts_sims: int | None = None      # None -> off; 30|100|300 -> DuckMCTS
 
 
 class SelectReq(BaseModel):
@@ -573,6 +622,10 @@ def new_game(req: NewGameReq):
         raise HTTPException(400, "color must be 'white' or 'black'.")
     if req.search_depth is not None and req.search_depth not in (1, 2):
         raise HTTPException(400, "search_depth must be 1 or 2.")
+    if req.mcts_sims is not None and req.mcts_sims not in (30, 100, 300, 600, 1200):
+        raise HTTPException(400, "mcts_sims must be 30, 100, 300, 600, or 1200.")
+    if req.search_depth is not None and req.mcts_sims is not None:
+        raise HTTPException(400, "search_depth and mcts_sims are mutually exclusive — choose one search mode.")
     player_color = "w" if req.color == "white" else "b"
     engine = _HeadlessEngine()
 
@@ -581,7 +634,7 @@ def new_game(req: NewGameReq):
     else:
         _, choice = get_model(req.model)      # validates / preloads the model
         sess = Session(engine, player_color, choice["id"], choice["label"],
-                       search_depth=req.search_depth)
+                       search_depth=req.search_depth, mcts_sims=req.mcts_sims)
 
     gid = uuid.uuid4().hex[:12]
     SESSIONS[gid] = sess
