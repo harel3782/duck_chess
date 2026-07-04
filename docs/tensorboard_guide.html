@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Duck Chess: TensorBoard Guide</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    :root {
+      --bg: #121418; --panel: #16191f; --panel2: #1c2030; --line: #252b36;
+      --gold: #daa520; --text: #f5f5f5; --muted: #8a8f9a;
+      --accent-blue: #6aa8e0; --accent-green: #4ade80; --accent-red: #d87070;
+    }
+    html, body {
+      height: 100%; background: var(--bg); color: var(--text);
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; line-height: 1.6;
+    }
+    body { display: flex; flex-direction: column; }
+    header {
+      background: var(--panel); border-bottom: 1px solid var(--line);
+      padding: 24px 32px; box-shadow: 0 2px 8px rgba(0,0,0,0.3); position: sticky; top: 0; z-index: 10;
+    }
+    .header-content { max-width: 1100px; margin: 0 auto; }
+    .logo { font-size: 28px; font-weight: 800; color: var(--gold); margin-bottom: 8px; letter-spacing: .5px; }
+    .logo-sub { font-size: 14px; color: var(--muted); font-weight: 400; }
+    nav { max-width: 1100px; margin: 14px auto 0; display: flex; flex-wrap: wrap; gap: 8px; }
+    nav a {
+      font-size: 13px; color: var(--muted); text-decoration: none; padding: 5px 12px;
+      border: 1px solid var(--line); border-radius: 20px; transition: all .2s;
+    }
+    nav a:hover { color: var(--gold); border-color: var(--gold); }
+    main { flex: 1; padding: 40px 32px; }
+    .container { max-width: 1100px; margin: 0 auto; }
+    section { margin-bottom: 56px; scroll-margin-top: 140px; }
+    section > h2 {
+      font-size: 26px; font-weight: 700; margin-bottom: 10px; color: var(--gold);
+      padding-bottom: 12px; border-bottom: 2px solid var(--line);
+    }
+    .section-lead { color: var(--muted); font-size: 14px; margin: 12px 0 24px; }
+    h3 { font-size: 18px; font-weight: 700; margin: 28px 0 12px; color: var(--text); }
+    p { margin-bottom: 14px; font-size: 15px; line-height: 1.7; }
+    .code-block {
+      background: #0e1018; border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px;
+      margin: 10px 0; overflow-x: auto; font-family: 'Courier New', monospace; font-size: 13px;
+      line-height: 1.6; color: #a8d8ea;
+    }
+    .code-block code { display: block; white-space: pre; }
+    .code-inline {
+      background: #0e1018; padding: 2px 6px; border-radius: 4px;
+      font-family: 'Courier New', monospace; font-size: 13px; color: var(--accent-blue);
+    }
+    .metric-card {
+      background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+      padding: 20px 22px; margin-bottom: 18px; transition: border-color .2s;
+    }
+    .metric-card:hover { border-color: var(--gold); }
+    .metric-head { display: flex; align-items: baseline; flex-wrap: wrap; gap: 10px; margin-bottom: 8px; }
+    .metric-name { font-family: 'Courier New', monospace; font-size: 16px; font-weight: 700; color: var(--gold); }
+    .metric-card p { font-size: 14px; margin-bottom: 10px; color: var(--text); }
+    .metric-card p:last-child { margin-bottom: 0; }
+    .val { font-size: 13px; color: var(--muted); }
+    .val b { color: var(--accent-green); }
+    .badge { font-size: 11px; padding: 3px 9px; border-radius: 6px; font-weight: 600; white-space: nowrap; }
+    .badge-blue { background: rgba(106,168,224,.15); color: var(--accent-blue); }
+    .badge-green { background: rgba(74,222,128,.15); color: var(--accent-green); }
+    .badge-red { background: rgba(216,112,112,.15); color: var(--accent-red); }
+    .badge-gold { background: rgba(218,165,32,.15); color: var(--gold); }
+    .table-wrapper { overflow-x: auto; margin: 16px 0 24px; border: 1px solid var(--line); border-radius: 12px; }
+    table { width: 100%; border-collapse: collapse; background: var(--panel); }
+    th { background: var(--panel2); padding: 13px; text-align: left; font-weight: 700; font-size: 13px; color: var(--gold); border-bottom: 2px solid var(--line); }
+    td { padding: 11px 13px; border-bottom: 1px solid var(--line); font-size: 13px; vertical-align: top; }
+    td code { font-family: 'Courier New', monospace; color: var(--accent-blue); font-size: 12px; }
+    tr:last-child td { border-bottom: none; }
+    tr:hover { background: var(--panel2); }
+    .callout {
+      background: var(--panel); border: 1px solid var(--line); border-left: 4px solid var(--gold);
+      border-radius: 8px; padding: 16px 20px; margin: 20px 0; font-size: 14px;
+    }
+    .callout.warn { border-left-color: var(--accent-red); }
+    .callout.info { border-left-color: var(--accent-blue); }
+    .callout .tag { font-weight: 700; color: var(--gold); }
+    .callout.warn .tag { color: var(--accent-red); }
+    .callout.info .tag { color: var(--accent-blue); }
+    .health { display: inline-block; font-size: 12px; font-weight: 700; padding: 2px 8px; border-radius: 5px; }
+    .h-good { background: rgba(74,222,128,.15); color: var(--accent-green); }
+    .h-watch { background: rgba(218,165,32,.15); color: var(--gold); }
+    .h-bad { background: rgba(216,112,112,.15); color: var(--accent-red); }
+    footer { text-align: center; padding: 30px; color: var(--muted); font-size: 13px; border-top: 1px solid var(--line); }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="header-content">
+      <div class="logo">📈 Duck Chess — TensorBoard Guide</div>
+      <div class="logo-sub">What every graph means, and the healthy value ranges to look for during MaskablePPO training</div>
+    </div>
+    <nav>
+      <a href="#launch">Launch</a>
+      <a href="#rollout">rollout/</a>
+      <a href="#train">train/</a>
+      <a href="#time">time/</a>
+      <a href="#reading">How to read it</a>
+      <a href="#runs">Runs in this repo</a>
+    </nav>
+  </header>
+
+  <main>
+    <div class="container">
+
+      <section id="launch">
+        <h2>Launching TensorBoard</h2>
+        <p class="section-lead">Training (MaskablePPO from sb3-contrib) writes event files to <code class="code-inline">tensorboard_logs/</code>, one subfolder per run. Point TensorBoard at the parent folder to compare runs side by side.</p>
+        <div class="code-block"><code>tensorboard --logdir tensorboard_logs/
+# then open http://localhost:6006</code></div>
+        <p>Scalars are grouped by a <code class="code-inline">prefix/</code>: <span class="badge badge-blue">rollout/</span> = what happened in the games, <span class="badge badge-gold">train/</span> = what the optimizer did, <span class="badge badge-green">time/</span> = throughput. The X axis is <code class="code-inline">total_timesteps</code> (environment steps seen so far).</p>
+      </section>
+
+      <!-- ROLLOUT -->
+      <section id="rollout">
+        <h2><span class="badge badge-blue">rollout/</span> &nbsp;Game-outcome metrics</h2>
+        <p class="section-lead">These are the metrics that tell you whether the agent is actually getting <em>better at Duck Chess</em>. Watch these first.</p>
+
+        <div class="metric-card">
+          <div class="metric-head"><span class="metric-name">rollout/ep_rew_mean</span><span class="badge badge-green">most important</span></div>
+          <p>Mean reward per finished episode, averaged over a rolling window (100 episodes). This is the single best "is it learning?" signal — it should trend <b>up</b>.</p>
+          <p class="val">Values depend on the reward scheme. <b>Sparse terminal reward</b> (league / v2 / antiexploit stages): roughly <b>−1 → +1</b>, where +1 = win by king-capture, −1 = loss, 0 = the 50-move draw. <b>Dense-shaped reward</b> (older <code>train_real</code>/<code>train_strong</code> runs): unbounded, can read in the tens — only the <em>trend</em> is comparable, not the absolute number across schemes.</p>
+        </div>
+
+        <div class="metric-card">
+          <div class="metric-head"><span class="metric-name">rollout/ep_len_mean</span></div>
+          <p>Mean number of steps (half-moves) per episode. In Duck Chess each turn is two phases, so length tracks how long games last before a king capture, fowling, or the 100-half-move draw cap.</p>
+          <p class="val">Typical: <b>tens up to ~100+</b>. A collapse toward very short episodes early = the agent is hanging its king fast; a flat line pinned near the draw cap = games stalling out. Rising then stabilising is normal as play gets more competent.</p>
+        </div>
+
+        <div class="metric-card">
+          <div class="metric-head"><span class="metric-name">rollout/ep_rew_mean vs. eval scores</span><span class="badge badge-blue">note</span></div>
+          <p>Self-play reward reflects performance against the training opponents, not a fixed benchmark. Treat rising <code>ep_rew_mean</code> as a training signal and confirm strength separately with <code>eval_vs_peter</code>.</p>
+        </div>
+      </section>
+
+      <!-- TRAIN -->
+      <section id="train">
+        <h2><span class="badge badge-gold">train/</span> &nbsp;Optimizer / loss metrics</h2>
+        <p class="section-lead">These are the standard PPO diagnostics. You don't optimise them directly — you read them to check the update is <em>stable</em> and neither exploding nor stalling.</p>
+
+        <div class="metric-card">
+          <div class="metric-head"><span class="metric-name">train/entropy_loss</span></div>
+          <p>Negative mean policy entropy. Entropy = how random/exploratory the policy is. It starts high (very negative loss, near <code>−ln(#legal actions)</code>) and should <b>drift toward 0</b> as the policy commits to good moves.</p>
+          <p class="val"><span class="health h-good">healthy</span> a slow rise toward 0. &nbsp; <span class="health h-bad">bad</span> collapses to ~0 almost immediately = premature convergence / no exploration.</p>
+        </div>
+
+        <div class="metric-card">
+          <div class="metric-head"><span class="metric-name">train/policy_gradient_loss</span></div>
+          <p>The clipped PPO surrogate (policy) loss. It's a surrogate objective, so its sign/magnitude is not "goodness" — watch that it stays small and doesn't diverge.</p>
+          <p class="val">Typically small, hovering near <b>0</b> (e.g. −0.05 … +0.02). Wild swings signal instability.</p>
+        </div>
+
+        <div class="metric-card">
+          <div class="metric-head"><span class="metric-name">train/value_loss</span></div>
+          <p>MSE of the value head predicting the return. In ExIt this is the head that matters for MCTS. Should <b>decrease and level off</b>.</p>
+          <p class="val">Scale follows the reward scale. For sparse ±1 reward, expect it to settle <b>&lt; ~0.25</b>. Rising steadily = value head can't fit the returns (too-high LR, or targets too noisy).</p>
+        </div>
+
+        <div class="metric-card">
+          <div class="metric-head"><span class="metric-name">train/explained_variance</span><span class="badge badge-green">key health</span></div>
+          <p>How much of the return variance the value head explains. <b>1.0</b> = perfect, <b>0</b> = no better than predicting the mean, <b>negative</b> = worse than the mean (broken).</p>
+          <p class="val"><span class="health h-good">good &gt; 0.5</span> &nbsp; <span class="health h-watch">ok 0–0.5</span> &nbsp; <span class="health h-bad">bad &lt; 0</span>. Early training near 0 is normal; it should climb.</p>
+        </div>
+
+        <div class="metric-card">
+          <div class="metric-head"><span class="metric-name">train/approx_kl</span></div>
+          <p>Approx. KL divergence between the policy before and after each update — how far each step moves the policy.</p>
+          <p class="val">Target band roughly <b>0.003 – 0.03</b>. If it spikes &gt; ~0.05 the updates are too aggressive (lower LR or clip range). Near 0 = barely learning.</p>
+        </div>
+
+        <div class="metric-card">
+          <div class="metric-head"><span class="metric-name">train/clip_fraction</span></div>
+          <p>Fraction of samples where the PPO ratio hit the clip boundary. Indicates how often the policy wanted to move further than <code>clip_range</code> allows.</p>
+          <p class="val">Healthy typically <b>0.05 – 0.2</b>. Persistently high (&gt; ~0.3) = updates too large.</p>
+        </div>
+
+        <div class="metric-card">
+          <div class="metric-head"><span class="metric-name">train/clip_range</span> &nbsp;·&nbsp; <span class="metric-name">train/learning_rate</span></div>
+          <p>The current PPO clip range and LR. Flat unless you use a schedule; plotted so you can see decay if one is set.</p>
+          <p class="val">Common defaults: clip_range <b>0.2</b>, learning_rate <b>~3e-4</b> (may decay toward 0).</p>
+        </div>
+
+        <div class="metric-card">
+          <div class="metric-head"><span class="metric-name">train/loss</span> &nbsp;·&nbsp; <span class="metric-name">train/n_updates</span> &nbsp;·&nbsp; <span class="metric-name">train/std</span></div>
+          <p><code>loss</code> = total combined loss (policy + value·vf_coef + entropy·ent_coef). <code>n_updates</code> = cumulative gradient updates (a monotonic counter). <code>std</code> appears for continuous actions only — <em>not</em> expected here since Duck Chess uses a discrete 4096 action space.</p>
+        </div>
+      </section>
+
+      <!-- TIME -->
+      <section id="time">
+        <h2><span class="badge badge-green">time/</span> &nbsp;Throughput metrics</h2>
+        <p class="section-lead">Not about learning — about how fast the run is going. Useful for estimating when a build finishes.</p>
+        <div class="table-wrapper">
+          <table>
+            <thead><tr><th>Metric</th><th>Meaning</th><th>Typical</th></tr></thead>
+            <tbody>
+              <tr><td><code>time/fps</code></td><td>Environment steps per second across all parallel envs</td><td>Hundreds to a few thousand on CPU with <code>SubprocVecEnv</code></td></tr>
+              <tr><td><code>time/iterations</code></td><td>PPO rollout+update cycles completed</td><td>Monotonic counter</td></tr>
+              <tr><td><code>time/time_elapsed</code></td><td>Wall-clock seconds since the run started</td><td>Monotonic</td></tr>
+              <tr><td><code>time/total_timesteps</code></td><td>Total env steps seen — this is the X axis for every other graph</td><td>Monotonic; target is set by <code>total_timesteps</code> in the training script</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- READING -->
+      <section id="reading">
+        <h2>How to read a run in 30 seconds</h2>
+        <div class="table-wrapper">
+          <table>
+            <thead><tr><th>Look at</th><th>Want to see</th><th>Red flag</th></tr></thead>
+            <tbody>
+              <tr><td><code>rollout/ep_rew_mean</code></td><td>Trending up, stabilising positive</td><td>Flat at the floor, or noisy with no upward drift</td></tr>
+              <tr><td><code>train/explained_variance</code></td><td>Climbing past 0.5</td><td>Stuck near 0 or going negative</td></tr>
+              <tr><td><code>train/entropy_loss</code></td><td>Slow rise toward 0</td><td>Slams to 0 early (no exploration)</td></tr>
+              <tr><td><code>train/approx_kl</code></td><td>Steady in 0.003–0.03</td><td>Spiking &gt; 0.05 (unstable) or ~0 (stalled)</td></tr>
+              <tr><td><code>train/value_loss</code></td><td>Falling then flat</td><td>Rising over time</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="callout info"><span class="tag">Note:</span> TensorBoard curves describe the training process, not a final benchmark score. Evaluate a checkpoint separately with <code class="code-inline">python -m DuckChess_Game.SBThree.eval_vs_peter</code>.</div>
+      </section>
+
+      <!-- RUNS -->
+      <section id="runs">
+        <h2>Runs present in <code style="font-size:20px">tensorboard_logs/</code></h2>
+        <p class="section-lead">Each subfolder is a separate run; TensorBoard shows them as toggleable series so you can overlay them.</p>
+        <div class="table-wrapper">
+          <table>
+            <thead><tr><th>Folder</th><th>Corresponds to</th></tr></thead>
+            <tbody>
+              <tr><td><code>Stage1_Combined</code> … <code>Stage9_Combined</code>, <code>Stage10_V3</code></td><td>The staged league curriculum</td></tr>
+              <tr><td><code>Stage11_Alpha</code>, <code>Stage11_Sparse</code></td><td>Stage-11 variants (alpha vs sparse reward)</td></tr>
+              <tr><td><code>Stage12_Final</code>, <code>stage13</code>, <code>Stage13_ShockTherapy</code>, <code>Stage14_Recovery</code></td><td>Later corrective stages</td></tr>
+              <tr><td><code>peter_local</code></td><td>Training directly against the Peter engine</td></tr>
+              <tr><td><code>strong</code>, <code>real</code></td><td>The 12h <code>train_strong</code> and 14h <code>train_real</code> corrective runs</td></tr>
+              <tr><td><code>v2</code></td><td>The v2 opponent-pool policy run</td></tr>
+              <tr><td><code>antiexploit</code></td><td>The current antiexploit_v2 corrective line</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="callout info"><span class="tag">Tip:</span> To compare only the current line against a baseline, use <code class="code-inline">tensorboard --logdir_spec v2:tensorboard_logs/v2,ax:tensorboard_logs/antiexploit</code> so each gets a clean legend name.</div>
+      </section>
+
+    </div>
+  </main>
+
+  <footer>Duck Chess AI · TensorBoard reference · MaskablePPO (sb3-contrib) scalar metrics</footer>
+</body>
+</html>
