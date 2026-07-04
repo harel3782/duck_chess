@@ -622,8 +622,8 @@ def new_game(req: NewGameReq):
         raise HTTPException(400, "color must be 'white' or 'black'.")
     if req.search_depth is not None and req.search_depth not in (1, 2):
         raise HTTPException(400, "search_depth must be 1 or 2.")
-    if req.mcts_sims is not None and req.mcts_sims not in (30, 100, 300):
-        raise HTTPException(400, "mcts_sims must be 30, 100, or 300.")
+    if req.mcts_sims is not None and req.mcts_sims not in (30, 100, 300, 600, 1200):
+        raise HTTPException(400, "mcts_sims must be 30, 100, 300, 600, or 1200.")
     if req.search_depth is not None and req.mcts_sims is not None:
         raise HTTPException(400, "search_depth and mcts_sims are mutually exclusive — choose one search mode.")
     player_color = "w" if req.color == "white" else "b"

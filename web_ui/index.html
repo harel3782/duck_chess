@@ -413,6 +413,8 @@
             <option value="mcts30">MCTS — Fast (30 sims)</option>
             <option value="mcts100">MCTS — Medium (100 sims)</option>
             <option value="mcts300">MCTS — Strong (300 sims, slower)</option>
+            <option value="mcts600">MCTS — Very Strong (600 sims, ~20s)</option>
+            <option value="mcts1200">MCTS — Maximum (1200 sims, ~40s)</option>
           </select>
         </div>
       </div>
@@ -718,6 +720,8 @@
       else if (mode === 'mcts30') mcts_sims = 30;
       else if (mode === 'mcts100') mcts_sims = 100;
       else if (mode === 'mcts300') mcts_sims = 300;
+      else if (mode === 'mcts600') mcts_sims = 600;
+      else if (mode === 'mcts1200') mcts_sims = 1200;
       const reqBody = {color: curColor, model: is2Player ? null : curModel, search_depth, mcts_sims};
       const state = await api('/api/new-game', reqBody);
       gameId = state.gameId;
@@ -922,7 +926,11 @@
   }
 
   async function doPlaceDuck(r,c){
-    busy=true; awaitingDuck=false; validDuck=[]; renderBoard();
+    busy=true; awaitingDuck=false; validDuck=[];
+    // Show the player's duck at its new square immediately — don't wait for the
+    // model's reply (the /api/place-duck call blocks for the whole engine turn).
+    if(G) G.duck = [r, c];
+    renderBoard();
     const vsModel = !is2Player;
     if(vsModel){ setThinking('Model is thinking…'); thinkingStart = Date.now(); }
     try{
