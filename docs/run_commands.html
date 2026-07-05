@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Duck Chess: Run &amp; Training Commands</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    :root {
+      --bg: #121418; --panel: #16191f; --panel2: #1c2030; --line: #252b36;
+      --gold: #daa520; --text: #f5f5f5; --muted: #8a8f9a;
+      --accent-blue: #6aa8e0; --accent-green: #4ade80; --accent-red: #d87070;
+    }
+    html, body {
+      height: 100%; background: var(--bg); color: var(--text);
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; line-height: 1.6;
+    }
+    body { display: flex; flex-direction: column; }
+    header {
+      background: var(--panel); border-bottom: 1px solid var(--line);
+      padding: 24px 32px; box-shadow: 0 2px 8px rgba(0,0,0,0.3); position: sticky; top: 0; z-index: 10;
+    }
+    .header-content { max-width: 1100px; margin: 0 auto; }
+    .logo { font-size: 28px; font-weight: 800; color: var(--gold); margin-bottom: 8px; letter-spacing: .5px; }
+    .logo-sub { font-size: 14px; color: var(--muted); font-weight: 400; }
+    nav { max-width: 1100px; margin: 14px auto 0; display: flex; flex-wrap: wrap; gap: 8px; }
+    nav a {
+      font-size: 13px; color: var(--muted); text-decoration: none; padding: 5px 12px;
+      border: 1px solid var(--line); border-radius: 20px; transition: all .2s;
+    }
+    nav a:hover { color: var(--gold); border-color: var(--gold); }
+    main { flex: 1; padding: 40px 32px; }
+    .container { max-width: 1100px; margin: 0 auto; }
+    section { margin-bottom: 56px; scroll-margin-top: 140px; }
+    section > h2 {
+      font-size: 26px; font-weight: 700; margin-bottom: 10px; color: var(--gold);
+      padding-bottom: 12px; border-bottom: 2px solid var(--line);
+    }
+    .section-lead { color: var(--muted); font-size: 14px; margin: 12px 0 24px; }
+    h3 { font-size: 19px; font-weight: 700; margin: 30px 0 14px; color: var(--text); }
+    p { margin-bottom: 14px; font-size: 15px; line-height: 1.7; }
+    .code-block {
+      background: #0e1018; border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px;
+      margin: 10px 0 6px; overflow-x: auto; font-family: 'Courier New', monospace; font-size: 13px;
+      line-height: 1.6; color: #a8d8ea; position: relative;
+    }
+    .code-block code { display: block; white-space: pre; }
+    .code-inline {
+      background: #0e1018; padding: 2px 6px; border-radius: 4px;
+      font-family: 'Courier New', monospace; font-size: 13px; color: var(--accent-blue);
+    }
+    .cmd { margin-bottom: 22px; }
+    .cmd-desc { font-size: 14px; color: var(--muted); margin: 0 0 2px; }
+    .cmd-desc strong { color: var(--text); }
+    .badge { font-size: 11px; padding: 3px 9px; border-radius: 6px; font-weight: 600; white-space: nowrap; margin-left: 8px; vertical-align: middle; }
+    .badge-blue { background: rgba(106,168,224,.15); color: var(--accent-blue); }
+    .badge-green { background: rgba(74,222,128,.15); color: var(--accent-green); }
+    .badge-red { background: rgba(216,112,112,.15); color: var(--accent-red); }
+    .badge-gold { background: rgba(218,165,32,.15); color: var(--gold); }
+    .table-wrapper { overflow-x: auto; margin: 16px 0 24px; border: 1px solid var(--line); border-radius: 12px; }
+    table { width: 100%; border-collapse: collapse; background: var(--panel); }
+    th { background: var(--panel2); padding: 14px; text-align: left; font-weight: 700; font-size: 13px; color: var(--gold); border-bottom: 2px solid var(--line); }
+    td { padding: 12px 14px; border-bottom: 1px solid var(--line); font-size: 13px; }
+    td code { font-family: 'Courier New', monospace; color: var(--accent-blue); font-size: 12px; }
+    tr:last-child td { border-bottom: none; }
+    tr:hover { background: var(--panel2); }
+    .callout {
+      background: var(--panel); border: 1px solid var(--line); border-left: 4px solid var(--gold);
+      border-radius: 8px; padding: 16px 20px; margin: 20px 0; font-size: 14px;
+    }
+    .callout.warn { border-left-color: var(--accent-red); }
+    .callout.info { border-left-color: var(--accent-blue); }
+    .callout .tag { font-weight: 700; color: var(--gold); }
+    .callout.warn .tag { color: var(--accent-red); }
+    .callout.info .tag { color: var(--accent-blue); }
+    footer { text-align: center; padding: 30px; color: var(--muted); font-size: 13px; border-top: 1px solid var(--line); }
+    .prompt::before { content: "$ "; color: #556; }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="header-content">
+      <div class="logo">🦆 Duck Chess — Run &amp; Training Commands</div>
+      <div class="logo-sub">Every way to run the project: web UI, training pipelines, evaluation, and testing</div>
+    </div>
+    <nav>
+      <a href="#setup">Setup</a>
+      <a href="#ui">Web UI</a>
+      <a href="#train-current">Training (current)</a>
+      <a href="#train-legacy">Training (legacy)</a>
+      <a href="#eval">Evaluation</a>
+      <a href="#test">Testing</a>
+      <a href="#monitor">Monitoring</a>
+    </nav>
+  </header>
+
+  <main>
+    <div class="container">
+
+      <div class="callout info">
+        <span class="tag">Rule of thumb:</span> Run all commands from the <strong>project root</strong>.
+        SBThree scripts must be launched as modules with <code class="code-inline">-m</code> so package imports resolve.
+        On Windows use the venv interpreter: <code class="code-inline">.venv\Scripts\python.exe</code> (shown as <code class="code-inline">python</code> below).
+      </div>
+
+      <!-- ───────────── SETUP ───────────── -->
+      <section id="setup">
+        <h2>1 · Environment setup</h2>
+        <p class="section-lead">Python 3.12 with a local <code class="code-inline">.venv/</code>. A GPU is not required — Torch runs on CPU. The engine is pure Python (no pygame).</p>
+
+        <div class="cmd">
+          <p class="cmd-desc"><strong>Create / activate the virtual environment</strong> (PowerShell)</p>
+          <div class="code-block"><code>python -m venv .venv
+.venv\Scripts\Activate.ps1</code></div>
+        </div>
+
+        <div class="cmd">
+          <p class="cmd-desc"><strong>Install all pinned dependencies</strong> — closes the known <code class="code-inline">httpx</code>/<code class="code-inline">playwright</code> gap so web-UI &amp; perf tests can collect</p>
+          <div class="code-block"><code>pip install -r requirements.txt</code></div>
+        </div>
+
+        <div class="cmd">
+          <p class="cmd-desc"><strong>Install Playwright browsers</strong> — only needed for the e2e / visual-regression test layer</p>
+          <div class="code-block"><code>playwright install</code></div>
+        </div>
+      </section>
+
+      <!-- ───────────── WEB UI ───────────── -->
+      <section id="ui">
+        <h2>2 · Web UI <span class="badge badge-green">the only front-end</span></h2>
+        <p class="section-lead">FastAPI backend + single-file HTML/JS frontend under <code class="code-inline">web_ui/</code>, on port <strong>7890</strong>. Loads MaskablePPO checkpoints on CPU; the opponent list is auto-discovered from <code class="code-inline">models/duck_ppo/**/*.zip</code>. Supports human-vs-AI, local 2-player, save/load, and replay.</p>
+
+        <div class="cmd">
+          <p class="cmd-desc"><strong>Start the server (recommended)</strong> — then open <code class="code-inline">http://127.0.0.1:7890</code></p>
+          <div class="code-block"><code>python -m uvicorn web_ui.server:app --port 7890</code></div>
+        </div>
+
+        <div class="cmd">
+          <p class="cmd-desc"><strong>Alternative launch</strong> — runs directly; interactive API docs live at <code class="code-inline">/docs</code></p>
+          <div class="code-block"><code>python web_ui/server.py</code></div>
+        </div>
+
+        <div class="cmd">
+          <p class="cmd-desc"><strong>Auto-reload during development</strong> — restarts on source edits</p>
+          <div class="code-block"><code>python -m uvicorn web_ui.server:app --port 7890 --reload</code></div>
+        </div>
+
+        <h3>How a turn works over the API</h3>
+        <p>A Duck Chess turn is two phases, mirrored by the API: <code class="code-inline">POST /api/move-piece</code> then <code class="code-inline">POST /api/place-duck</code>, after which the model plays its full turn automatically.</p>
+        <div class="table-wrapper">
+          <table>
+            <thead><tr><th>Endpoint</th><th>Purpose</th></tr></thead>
+            <tbody>
+              <tr><td><code>GET /api/models</code></td><td>List auto-discovered opponent checkpoints</td></tr>
+              <tr><td><code>POST /api/new-game</code></td><td>Start a game (<code>model: null</code> ⇒ local 2-player)</td></tr>
+              <tr><td><code>POST /api/legal-moves</code></td><td>Legal moves for the current phase</td></tr>
+              <tr><td><code>POST /api/move-piece</code></td><td>Phase 1 — move a piece</td></tr>
+              <tr><td><code>POST /api/place-duck</code></td><td>Phase 2 — place the duck (AI then replies)</td></tr>
+              <tr><td><code>POST /api/resign</code> · <code>/api/undo-move</code> · <code>/api/save-game</code></td><td>Resign, undo, save</td></tr>
+              <tr><td><code>GET /api/saved-games</code> · <code>/api/load-game/{file}</code></td><td>Browse &amp; load replays</td></tr>
+              <tr><td><code>POST /api/delete-game</code></td><td>Delete a saved game</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="callout info"><span class="tag">Note:</span> Web saves are JSON under <code class="code-inline">saved_replays/web/</code> (created on demand, git-ignored). Each half-move stores a <code class="code-inline">{board, duck}</code> snapshot so the duck moves during replay review. See <code class="code-inline">docs/WEB_UI_SETUP.md</code>.</div>
+      </section>
+
+      <!-- ───────────── TRAINING CURRENT ───────────── -->
+      <section id="train-current">
+        <h2>3 · RL training — current line of work <span class="badge badge-gold">antiexploit_v2 → ExIt</span></h2>
+        <p class="section-lead">The active pipeline lives on branch <code class="code-inline">antiexploit_v2</code>. Read <code class="code-inline">PLAN_V2.md</code> for the full rationale. It is a two-phase flow: a corrective policy run, then an Expert-Iteration loop.</p>
+
+        <h3>Phase A — corrective policy run</h3>
+        <div class="cmd">
+          <p class="cmd-desc"><strong>train_antiexploit_v2</strong> — fixes opening repetition, weak duck placement, and endgame collapse</p>
+          <div class="code-block"><code>python -m DuckChess_Game.SBThree.train_antiexploit_v2</code></div>
+        </div>
+
+        <h3>Phase B — Expert Iteration (ExIt) loop</h3>
+        <p>MCTS self-play → retrain policy+value → eval → repeat.</p>
+        <div class="cmd">
+          <p class="cmd-desc"><strong>run_exit</strong> — the orchestrator that drives the whole gen→train→eval loop</p>
+          <div class="code-block"><code>python -m DuckChess_Game.SBThree.run_exit</code></div>
+        </div>
+        <div class="cmd">
+          <p class="cmd-desc"><strong>gen_mcts_data</strong> — MCTS self-play data generator producing <code class="code-inline">(obs, π, z)</code> npz files (used by run_exit)</p>
+          <div class="code-block"><code>python -m DuckChess_Game.SBThree.gen_mcts_data</code></div>
+        </div>
+        <div class="cmd">
+          <p class="cmd-desc"><strong>train_exit</strong> — a single joint policy+value training step</p>
+          <div class="code-block"><code>python -m DuckChess_Game.SBThree.train_exit</code></div>
+        </div>
+
+        <h3>Unattended full build</h3>
+        <div class="cmd">
+          <p class="cmd-desc"><strong>run_full_build.ps1</strong> — runs the whole build (Phase A then ExIt), writes its PID to <code class="code-inline">logs/fullbuild.pid</code>, logs progress to <code class="code-inline">logs/antiexploit_v2_progress.csv</code></p>
+          <div class="code-block"><code>./scripts/run_full_build.ps1</code></div>
+        </div>
+      </section>
+
+      <!-- ───────────── TRAINING LEGACY ───────────── -->
+      <section id="train-legacy">
+        <h2>4 · RL training — earlier stages &amp; corrective runs <span class="badge badge-blue">historical</span></h2>
+        <p class="section-lead">Still present, mostly kept for reference. These built the curriculum that led to the current models.</p>
+        <div class="table-wrapper">
+          <table>
+            <thead><tr><th>Command</th><th>What it does</th></tr></thead>
+            <tbody>
+              <tr><td><code>python -m DuckChess_Game.SBThree.train_peter_v2</code></td><td>v2: opponent-pool + random starts + sparse reward</td></tr>
+              <tr><td><code>python -m DuckChess_Game.SBThree.train_peter_headless</code></td><td>Headless, step-tracked, resumable Peter training</td></tr>
+              <tr><td><code>python DuckChess_Game/SBThree/train.py train</code></td><td>Legacy league self-play</td></tr>
+              <tr><td><code>python DuckChess_Game/SBThree/train.py train-peter</code></td><td>Legacy vs Peter, with GUI (4 envs)</td></tr>
+              <tr><td><code>python -m DuckChess_Game.SBThree.train_stage12</code></td><td>Stage-12 league</td></tr>
+              <tr><td><code>python -m DuckChess_Game.SBThree.train_stage13</code></td><td>Stage-13 (Peter d2 + stage-12 league)</td></tr>
+              <tr><td><code>python -m DuckChess_Game.SBThree.train_strong</code></td><td>12h corrective (Peter + strong self-play)</td></tr>
+              <tr><td><code>python -m DuckChess_Game.SBThree.train_real</code></td><td>14h dense-reward vs Peter depth-3</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="callout info"><span class="tag">Headless flags:</span> <code class="code-inline">train_peter_headless.py</code> also supports <code class="code-inline">--checkpoint</code>, <code class="code-inline">--auto-resume</code>, and <code class="code-inline">--show-progress</code>. See <code class="code-inline">docs/HEADLESS_TRAINING.md</code>.</div>
+      </section>
+
+      <!-- ───────────── EVAL ───────────── -->
+      <section id="eval">
+        <h2>5 · Evaluation</h2>
+        <p class="section-lead">Scripts for evaluating a checkpoint against the Peter engine and other benchmarks.</p>
+        <div class="table-wrapper">
+          <table>
+            <thead><tr><th>Command</th><th>What it measures</th></tr></thead>
+            <tbody>
+              <tr><td><code>python -m DuckChess_Game.SBThree.eval_vs_peter</code></td><td>W/L/D vs the Peter engine</td></tr>
+              <tr><td><code>python -m DuckChess_Game.SBThree.eval_antiexploit --model &lt;ckpt&gt;</code></td><td>Measures the 3 exploits directly</td></tr>
+              <tr><td><code>python -m DuckChess_Game.SBThree.eval_search --engine mcts --sims 200</code></td><td>Evaluate <em>with</em> MCTS search</td></tr>
+              <tr><td><code>python -m DuckChess_Game.SBThree.eval_anchors</code></td><td>Strength vs a fixed anchor set → Elo</td></tr>
+              <tr><td><code>python -m DuckChess_Game.SBThree.eval_peter_save_replays</code></td><td>Evaluate while recording replays</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- ───────────── TESTING ───────────── -->
+      <section id="test">
+        <h2>6 · Testing</h2>
+        <p class="section-lead"><code class="code-inline">pytest.ini</code> sets <code class="code-inline">testpaths=tests</code>. The engine + RL core is fast and headless.</p>
+        <div class="cmd">
+          <p class="cmd-desc"><strong>Run the canonical suite</strong></p>
+          <div class="code-block"><code>pytest</code></div>
+        </div>
+        <div class="cmd">
+          <p class="cmd-desc"><strong>Run a single module</strong> (verbose)</p>
+          <div class="code-block"><code>pytest tests/test_rules_checker.py -v</code></div>
+        </div>
+        <div class="cmd">
+          <p class="cmd-desc"><strong>Coverage report</strong> for the game engine → HTML</p>
+          <div class="code-block"><code>pytest --cov=DuckChess_Game.Logic --cov-report=html</code></div>
+        </div>
+        <div class="callout warn"><span class="tag">Known status:</span> <code class="code-inline">tests/</code> collects ~400 tests; 3 web/perf files error at collection when <code class="code-inline">httpx</code> is missing (run <code class="code-inline">pip install -r requirements.txt</code>). The e2e &amp; visual-regression tests need <code class="code-inline">playwright install</code>. Full breakdown in <code class="code-inline">docs/TESTING.md</code>.</div>
+      </section>
+
+      <!-- ───────────── MONITOR ───────────── -->
+      <section id="monitor">
+        <h2>7 · Monitoring training</h2>
+        <div class="cmd">
+          <p class="cmd-desc"><strong>Launch TensorBoard</strong> — then open <code class="code-inline">http://localhost:6006</code> (see the TensorBoard guide for what each graph means)</p>
+          <div class="code-block"><code>tensorboard --logdir tensorboard_logs/</code></div>
+        </div>
+        <div class="cmd">
+          <p class="cmd-desc"><strong>Tail the active build's progress CSV</strong> (PowerShell)</p>
+          <div class="code-block"><code>Get-Content logs/antiexploit_v2_progress.csv -Tail 10 -Wait</code></div>
+        </div>
+      </section>
+
+    </div>
+  </main>
+
+  <footer>Duck Chess AI · run &amp; training reference · generated from CLAUDE.md</footer>
+</body>
+</html>
