@@ -1,34 +1,24 @@
-# Duck Chess — web UI container image.
-#
-# Base pinned to Python 3.12 on purpose: the MaskablePPO checkpoints were saved
-# with this project's .venv (py3.12 / torch 2.11). Loading them under a different
-# Python/torch ABI hard-crashes (segfault, exit 139), so DO NOT bump this without
-# re-saving the models.
+# Duck Chess — Hugging Face Spaces (Docker SDK)
+# Free CPU tier: 2 vCPUs, 16 GB RAM — plenty for torch + MaskablePPO.
+# HF Spaces requires the app to listen on port 7860.
+
 FROM python:3.12-slim
-
-# Faster, cleaner container Python; flush logs straight to the Railway log stream.
-ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1
-
-# Headless pygame: there is no display/audio device in the container. pygame is
-# imported at server startup via the game engine, so force the dummy SDL drivers.
-ENV PYGAME_DISPLAY=:99 \
-    SDL_VIDEODRIVER=dummy \
-    SDL_AUDIODRIVER=dummy
 
 WORKDIR /app
 
-# Install deps first so the layer caches across code-only changes.
-COPY requirements.txt .
+# Install Python dependencies (torch is large; build layer is cached by Docker)
+COPY requirements-render.txt requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
-# App source.
+# Copy the full application (model in models/duck_ppo/ranked/ is included)
 COPY . .
 
-# Web game saves are written here on demand (git-ignored); create it up front.
-RUN mkdir -p saved_replays/web
+# PORT=7860 is the HF Spaces default. HOST/DUCK_NO_REEXEC are for server.py.
+ENV PORT=7860 \
+    HOST=0.0.0.0 \
+    DUCK_NO_REEXEC=1
 
-EXPOSE 7890
+EXPOSE 7860
 
-# server.py reads HOST/PORT from the environment (Railway injects $PORT).
+# server.py __main__ calls ensure_models_downloaded() then starts uvicorn.
 CMD ["python", "web_ui/server.py"]

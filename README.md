@@ -1,3 +1,13 @@
+---
+title: Duck Chess AI
+emoji: 🦆
+colorFrom: yellow
+colorTo: green
+sdk: docker
+app_port: 7860
+pinned: false
+---
+
 # Duck Chess AI 🦆
 
 A complete **Duck Chess** engine, a FastAPI web front-end, and a reinforcement-learning agent
@@ -13,6 +23,7 @@ project.
 ## Table of Contents
 
 - [What makes Duck Chess different](#what-makes-duck-chess-different)
+- [Key results & lessons learned](#key-results--lessons-learned)
 - [Features](#features)
 - [Quick start](#quick-start)
 - [Repository layout](#repository-layout)
@@ -42,6 +53,21 @@ everywhere — in the UI input handling, and as the two-stage action space the R
 
 ---
 
+## Key results & lessons learned
+
+The short version of the project's actual findings — full detail in
+[docs/training_log.md](docs/training_log.md) and [PLAN_V2.md](PLAN_V2.md).
+
+| Finding | What happened |
+|---|---|
+| **Self-play strength ≠ real strength** | The Stage 10/12 self-play league dominated internally but lost **0/20** to the Peter engine at depth-2. This is why every later stage is measured against an independent engine, not self-play — see [Peter](#peter-the-ground-truth-opponent) below. |
+| **The king-rush exploit** | Models converged on a cheap ~4-move king-rush that beat shallow opponents but lost to Peter depth-3 and to a human. Caused by three things acting together: a **fixed opponent**, a **fixed starting position**, and **dense shaped reward**. |
+| **v2 — fixing the root cause, not the symptom** | Removing all three causes at once (an opponent pool, random starting positions, sparse terminal reward) produced the first non-exploiting model: **95% (19/1) vs Peter depth-2**, trained from scratch. |
+| **"A value head evaluates; the policy chooses"** | Using the value head to directly pick moves (alpha-beta with value-argmax) collapsed performance from 95% to **0%**. AlphaZero-style MCTS — policy guides *where* to search, value only *scores* what's found — restored it to **100% (12/0)**. |
+| **Open problem: the depth-3 wall** | No model has beaten Peter depth-3 yet, with or without search (0% even at 1,200 MCTS simulations). Expert Iteration (MCTS self-play → retrain on it → repeat) is the current attempt to crack it. |
+
+---
+
 ## Features
 
 - **Pure-Python engine** — legal move generation, castling, en passant, promotion, and duck
@@ -52,12 +78,26 @@ everywhere — in the UI input handling, and as the two-stage action space the R
 - **Reinforcement-learning pipeline** — a custom Gymnasium environment, strict legal-action masking,
   a staged curriculum trained with `sb3-contrib`'s MaskablePPO, and an **AlphaZero-style PUCT MCTS**
   (`mcts.py`) for inference-time search.
-- **A real engine opponent ("Peter")** — training and evaluation against a local alpha-beta chess
-  engine, so model strength is measured against ground truth, not just self-play.
+- **A real engine opponent ("Peter")** — training and evaluation against Peter, so model strength is
+  measured against ground truth, not just self-play. See below.
 - **A headless test suite** — fast, no-display `pytest` coverage of the engine, the RL interface, and
   the opponents (see [TESTING.md](docs/TESTING.md)).
 - **Formal test docs** — a Software Test Plan (STP) and Software Test Design (STD) under
   [`docs/`](docs).
+
+### Peter — the ground-truth opponent
+
+**Peter** is an existing Duck Chess engine found online and integrated into this project (via
+[`peter_local.py`](DuckChess_Game/SBThree/peter_local.py)) — it is **not** built in-house. It's kept
+separate from the project's own in-house alpha-beta opponent,
+[`AlphaBetaOpponent`](DuckChess_Game/SBThree/base/opponent_strategy.py), which is used only as one of
+several league opponents during training. (`DuckChess_Game/Logic/ai.py` is a different, simpler
+random-move fallback used only by the desktop UI when no model is loaded — it does not run search.)
+
+Peter matters because it's *independent*: self-play results repeatedly looked strong while the
+underlying model was actually weak (see [Key results](#key-results--lessons-learned) above), so every
+serious strength claim in this project is measured against Peter — not against the model's own
+history — via [`eval_vs_peter.py`](DuckChess_Game/SBThree/eval_vs_peter.py).
 
 ---
 
