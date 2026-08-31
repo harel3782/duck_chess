@@ -41,9 +41,10 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from DuckChess_Game.SBThree.base.env_base import _HeadlessEngine  # noqa: E402
-from DuckChess_Game.SBThree.mcts import DuckMCTS  # noqa: E402
-from DuckChess_Game.SBThree.search import DuckSearch  # noqa: E402
-from sb3_contrib import MaskablePPO  # noqa: E402
+# DuckMCTS, DuckSearch, and MaskablePPO are imported lazily inside the functions
+# that use them (get_model / get_searcher / get_mcts). This avoids pulling torch
+# (~350 MB) at startup, so 2-player mode and the server itself stay lightweight.
+# The TYPE_CHECKING block lets type checkers see the types without a runtime import.
 
 WEB_DIR = Path(__file__).resolve().parent
 MODELS_DIR = ROOT / "models" / "duck_ppo"
@@ -144,13 +145,18 @@ def get_default_choice() -> dict | None:
     return choices[0]
 
 
-_model_cache: dict[str, MaskablePPO] = {}
+_model_cache: dict = {}   # str -> MaskablePPO (type kept loose; MaskablePPO is lazily imported)
 _model_lock = threading.Lock()
 
 
 def get_model(model_id: str):
     """Return (model, choice_dict), loading + caching lazily. Unknown ids fall back
-    to the configured default model (get_default_choice)."""
+    to the configured default model (get_default_choice).
+
+    MaskablePPO (and thus torch) is imported here on first call so the server
+    starts with minimal memory; 2-player games never touch torch at all.
+    """
+    from sb3_contrib import MaskablePPO  # lazy — keeps torch out of startup RSS  # noqa: E402
     choices = get_model_choices()
     choice = next((m for m in choices if m["id"] == model_id), None)
     if choice is None:
@@ -164,11 +170,11 @@ def get_model(model_id: str):
 
 
 # Alpha-beta searchers wrapping a checkpoint, cached by (model_id, depth).
-_searcher_cache: dict[tuple[str, int], DuckSearch] = {}
+_searcher_cache: dict = {}   # (str, int) -> DuckSearch
 _searcher_lock = threading.Lock()
 
 # MCTS searchers wrapping a checkpoint, cached by (model_id, sims).
-_mcts_cache: dict[tuple[str, int], DuckMCTS] = {}
+_mcts_cache: dict = {}       # (str, int) -> DuckMCTS
 _mcts_lock = threading.Lock()
 
 # Persistent pool for time-bounded searches. Using a long-lived executor (instead
@@ -177,13 +183,14 @@ _mcts_lock = threading.Lock()
 _search_executor = ThreadPoolExecutor(max_workers=2)
 
 
-def get_searcher(model_id: str, depth: int) -> DuckSearch:
+def get_searcher(model_id: str, depth: int):
     """Return a cached DuckSearch wrapping the given checkpoint at `depth`.
 
     Reuses the MaskablePPO from get_model() (so the underlying net is shared
     with the raw-policy path) and forces leaf_eval="material" — model-free and
     robust on every checkpoint, avoiding value-head saturation on dense-reward
     models."""
+    from DuckChess_Game.SBThree.search import DuckSearch  # lazy — torch already loaded by get_model()  # noqa: E402
     model, choice = get_model(model_id)
     key = (choice["id"], depth)
     with _searcher_lock:
@@ -192,8 +199,9 @@ def get_searcher(model_id: str, depth: int) -> DuckSearch:
     return _searcher_cache[key]
 
 
-def get_mcts(model_id: str, sims: int) -> DuckMCTS:
+def get_mcts(model_id: str, sims: int):
     """Return a cached DuckMCTS wrapping the given checkpoint at `sims`."""
+    from DuckChess_Game.SBThree.mcts import DuckMCTS  # lazy — torch already loaded by get_model()  # noqa: E402
     model, choice = get_model(model_id)
     key = (choice["id"], sims)
     with _mcts_lock:
