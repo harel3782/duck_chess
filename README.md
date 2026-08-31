@@ -3,7 +3,7 @@ title: Duck Chess AI
 emoji: 🦆
 colorFrom: yellow
 colorTo: green
-sdk: docker
+sdk: gradio
 app_port: 7860
 pinned: false
 ---
