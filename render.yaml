@@ -1,0 +1,25 @@
+services:
+  - type: web
+    name: duck-chess
+    runtime: python
+    plan: starter          # 512 MB RAM / 0.5 CPU — upgrade if models OOM
+    buildCommand: pip install -r requirements-render.txt
+    startCommand: python web_ui/server.py
+    # Health check — FastAPI returns 200 on /docs
+    healthCheckPath: /docs
+
+    envVars:
+      # ── Optional: supply a public URL to a zip of your model checkpoints. ──
+      # The zip should contain the .zip files directly (no extra nesting), e.g.:
+      #   duck_ppo_models.zip
+      #     └── 1_champion.zip
+      #     └── 2_allrounder.zip
+      # On first boot, server.py downloads & extracts into models/duck_ppo/.
+      # Leave blank to run in 2-player (human vs human) mode only.
+      - key: MODEL_ZIP_URL
+        sync: false        # you fill this in the Render dashboard
+
+      # Tells server.py not to re-exec itself under a local .venv (there is
+      # none on Render — the check would pass anyway, but this is explicit).
+      - key: DUCK_NO_REEXEC
+        value: "1"
